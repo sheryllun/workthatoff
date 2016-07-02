@@ -9,8 +9,20 @@
   "author": "Sheryl Lun",
   "license": "ISC",
   "dependencies": {
+    "babel-preset-react": "^6.11.1",
+    "babelify": "^7.3.0",
+    "bootstrap": "^3.3.6",
+    "browserify": "^13.0.1",
+    "flux": "^2.1.1",
     "gulp": "^3.9.1",
+    "gulp-concat": "^2.6.0",
     "gulp-connect": "^4.1.0",
-    "gulp-open": "^2.0.0"
+    "gulp-eslint": "^3.0.0",
+    "gulp-open": "^2.0.0",
+    "jquery": "^3.0.0",
+    "react": "^15.2.0",
+    "react-dom": "^15.2.0",
+    "react-router": "^2.5.2",
+    "vinyl-source-stream": "^1.1.0"
   }
 }
