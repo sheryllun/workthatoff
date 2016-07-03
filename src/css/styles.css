@@ -1,0 +1,47 @@
+body {
+  background-color: pink;
+  font-size: 10px;
+}
+
+.header {
+  background-color: white;
+  padding: 2em;
+  margin-top: 5em;
+}
+
+.header h1 {
+  display: inline-block;
+  font-size: 4em;
+}
+
+.header p {
+  display: inline-block;
+  font-size: 1.4em;
+  margin-left: 1em;
+}
+
+.main-form {
+  margin-top: 2em;
+  padding: 0;
+  background-color: white;
+}
+
+.form-head {
+  background: #ccc;
+  font-size: 1.6em;
+  font-weight: bold;
+  padding: 1em;
+}
+
+.questions {
+  padding: 1em;
+  font-size: 1.4em;
+}
+
+.about-you {
+  border: 3px solid white;
+}
+
+.about-you .questions {
+  height: 100px;
+}
