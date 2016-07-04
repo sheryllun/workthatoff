@@ -10,6 +10,7 @@ body {
 }
 
 .header h1 {
+  font-family: 'Dosis', sans-serif;
   display: inline-block;
   font-size: 4em;
 }
@@ -21,27 +22,61 @@ body {
 }
 
 .main-form {
+  position: relative;
   margin-top: 2em;
   padding: 0;
-  background-color: white;
 }
 
 .form-head {
-  background: #ccc;
-  font-size: 1.6em;
-  font-weight: bold;
-  padding: 1em;
+  font-family: 'Dosis', sans-serif;
+  background: #bbb;
+  font-size: 2em;
+  font-weight: 300;
+  padding: 1em 2em;
+  position: absolute;
+  left: 0;
+  top: 27px;
+  color: white;
+  width: 100%;
+  z-index: 10;
+}
+
+.form-head:before {
+  content: '';
+  border: 8px solid;
+  border-top-color: transparent;
+  border-right-color: #9f9f9f;
+  border-bottom-color: #9f9f9f;
+  border-left-color: transparent;
+  position: absolute;
+  top: -16px;
+  left: 0;
 }
 
 .questions {
-  padding: 1em;
+  background: white;
+  padding: 8em 1em 0;
   font-size: 1.4em;
+  height: 300px;
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 16px;
+  bottom: 18px;
+  box-shadow: 2px 2px 3px #c59898;
 }
 
-.about-you {
-  border: 3px solid white;
+label {
+  width: 65px;
+  text-align: right;
+  margin-right: 10px;
 }
 
-.about-you .questions {
-  height: 100px;
+.glyphicon-star-empty {
+  font-size: 1.2em;
+  vertical-align: text-top;
 }
+
+.about-you .questions input[type="text"] {
+  width: 75px;
+  }

@@ -30381,7 +30381,7 @@ var AboutYou = React.createClass({
       React.createElement(
         "div",
         { className: "form-head" },
-        React.createElement("span", { className: "glyphicon glyphicon-user" }),
+        React.createElement("span", { className: "glyphicon glyphicon-star-empty" }),
         "  About You"
       ),
       React.createElement(
@@ -30395,7 +30395,7 @@ var AboutYou = React.createClass({
             { htmlFor: "age" },
             "Age: "
           ),
-          React.createElement("input", { name: "age" })
+          React.createElement("input", { name: "age", type: "text" })
         ),
         React.createElement(
           "div",
@@ -30418,7 +30418,7 @@ var AboutYou = React.createClass({
             { htmlFor: "weight" },
             "Weight: "
           ),
-          React.createElement("input", { name: "weight" }),
+          React.createElement("input", { name: "weight", type: "text" }),
           React.createElement("input", { type: "radio", value: "1", name: "unit" }),
           " lb",
           React.createElement("input", { type: "radio", value: "2", name: "unit" }),
