@@ -13,18 +13,25 @@ var AboutYou = React.createClass({
         <div className="questions">
           <div className="age">
             <label htmlFor="age">Age: </label>
-            <input name="age" type="text" />
+            <input name="age" type="number" />
           </div>
           <div className="gender">
             <label htmlFor="gender">Gender: </label>
-            <input type="radio" value="1" name="gender" /> Male
-            <input type="radio" value="2" name="gender" /> Female
+            <input type="radio" value="1" name="gender" />Male
+            <input type="radio" value="2" name="gender" />Female
           </div>
           <div className="weight">
             <label htmlFor="weight">Weight: </label>
-            <input name="weight" type="text" />
-            <input type="radio" value="1" name="unit" /> lb
-            <input type="radio" value="2" name="unit" /> kg
+            <input name="weight" type="number" />
+            <input type="radio" value="1" name="wt-unit" />Pounds
+            <input type="radio" value="2" name="wt-unit" />Kilos
+          </div>
+          <div className="height">
+            <label htmlFor="height">Height: </label>
+            <input name="height-ft" type="number" placeholder="ft" />
+            <input name="height-in" type="number" placeholder="in" />
+            <input type="radio" value="1" name="ht-unit" />Feet
+            <input type="radio" value="2" name="ht-unit" />Meters
           </div>
         </div>
       </div>

@@ -30366,7 +30366,37 @@ var App = React.createClass({
 
 module.exports = App;
 
-},{"./form/formMain":173,"./header":174,"react":170}],172:[function(require,module,exports){
+},{"./form/formMain":174,"./header":175,"react":170}],172:[function(require,module,exports){
+"use strict";
+
+var React = require('react');
+
+var AboutFood = React.createClass({
+  displayName: "AboutFood",
+
+  render: function () {
+    return React.createElement(
+      "div",
+      { className: "about-food" },
+      React.createElement(
+        "div",
+        { className: "form-head" },
+        React.createElement("span", { className: "glyphicon glyphicon-star-empty" }),
+        "  About What You Ate"
+      ),
+      React.createElement(
+        "p",
+        null,
+        "Add"
+      ),
+      React.createElement("input", { name: "food-item", type: "text" })
+    );
+  }
+});
+
+module.exports = AboutFood;
+
+},{"react":170}],173:[function(require,module,exports){
 "use strict";
 
 var React = require('react');
@@ -30395,7 +30425,7 @@ var AboutYou = React.createClass({
             { htmlFor: "age" },
             "Age: "
           ),
-          React.createElement("input", { name: "age", type: "text" })
+          React.createElement("input", { name: "age", type: "number" })
         ),
         React.createElement(
           "div",
@@ -30406,9 +30436,9 @@ var AboutYou = React.createClass({
             "Gender: "
           ),
           React.createElement("input", { type: "radio", value: "1", name: "gender" }),
-          " Male",
+          "Male",
           React.createElement("input", { type: "radio", value: "2", name: "gender" }),
-          " Female"
+          "Female"
         ),
         React.createElement(
           "div",
@@ -30418,11 +30448,26 @@ var AboutYou = React.createClass({
             { htmlFor: "weight" },
             "Weight: "
           ),
-          React.createElement("input", { name: "weight", type: "text" }),
-          React.createElement("input", { type: "radio", value: "1", name: "unit" }),
-          " lb",
-          React.createElement("input", { type: "radio", value: "2", name: "unit" }),
-          " kg"
+          React.createElement("input", { name: "weight", type: "number" }),
+          React.createElement("input", { type: "radio", value: "1", name: "wt-unit" }),
+          "Pounds",
+          React.createElement("input", { type: "radio", value: "2", name: "wt-unit" }),
+          "Kilos"
+        ),
+        React.createElement(
+          "div",
+          { className: "height" },
+          React.createElement(
+            "label",
+            { htmlFor: "height" },
+            "Height: "
+          ),
+          React.createElement("input", { name: "height-ft", type: "number", placeholder: "ft" }),
+          React.createElement("input", { name: "height-in", type: "number", placeholder: "in" }),
+          React.createElement("input", { type: "radio", value: "1", name: "ht-unit" }),
+          "Feet",
+          React.createElement("input", { type: "radio", value: "2", name: "ht-unit" }),
+          "Meters"
         )
       )
     );
@@ -30431,11 +30476,12 @@ var AboutYou = React.createClass({
 
 module.exports = AboutYou;
 
-},{"react":170}],173:[function(require,module,exports){
+},{"react":170}],174:[function(require,module,exports){
 "use strict";
 
 var React = require('react');
 var AboutYou = require('./aboutYou');
+var AboutFood = require('./aboutFood');
 
 var Form = React.createClass({
   displayName: 'Form',
@@ -30447,7 +30493,8 @@ var Form = React.createClass({
       React.createElement(
         'div',
         { className: 'main-form col-xs-12 col-sm-8 col-sm-push-2' },
-        React.createElement(AboutYou, null)
+        React.createElement(AboutYou, null),
+        React.createElement(AboutFood, null)
       )
     );
   }
@@ -30455,7 +30502,7 @@ var Form = React.createClass({
 
 module.exports = Form;
 
-},{"./aboutYou":172,"react":170}],174:[function(require,module,exports){
+},{"./aboutFood":172,"./aboutYou":173,"react":170}],175:[function(require,module,exports){
 "use strict";
 
 var React = require('react');
@@ -30487,7 +30534,7 @@ var Header = React.createClass({
 
 module.exports = Header;
 
-},{"react":170}],175:[function(require,module,exports){
+},{"react":170}],176:[function(require,module,exports){
 $ = jQuery = require('jquery'); //requiring jquery in the global namespace for bootstrap
 var React = require('react');
 var ReactDOM = require('react-dom');
@@ -30495,4 +30542,4 @@ var App = require('./components/app');
 
 ReactDOM.render(React.createElement(App, null), document.getElementById('app'));
 
-},{"./components/app":171,"jquery":2,"react":170,"react-dom":3}]},{},[175]);
+},{"./components/app":171,"jquery":2,"react":170,"react-dom":3}]},{},[176]);
