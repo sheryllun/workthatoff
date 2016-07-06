@@ -69,13 +69,17 @@ body {
   background: white;
   padding: 8em 1em 0;
   font-size: 1.4em;
-  height: 300px;
+  min-height: 300px;
   position: absolute;
   top: 0;
   right: 0;
   left: 16px;
   bottom: 18px;
   box-shadow: 2px 2px 3px #c59898;
+}
+
+.questions div {
+  margin-bottom: 10px;
 }
 
 label {
@@ -89,6 +93,18 @@ label {
   vertical-align: text-top;
 }
 
-.about-you .questions input[type="text"] {
+.about-you {
+  display: block;
+  position: relative;
+}
+
+.about-you .questions input[type="number"] {
   width: 75px;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  padding: 5px;
   }
+
+input[type="radio"] {
+  margin: 4px 8px;
+}
