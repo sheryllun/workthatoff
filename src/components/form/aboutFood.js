@@ -7,7 +7,7 @@ var AboutFood = React.createClass({
     return (
       <div className="about-food">
         <div className="form-head">
-          <span className="glyphicon glyphicon-star-empty"></span>
+          <span className="glyphicon glyphicon-cutlery"></span>
           &nbsp; About What You Ate
         </div>
           <div className="questions">
@@ -16,6 +16,7 @@ var AboutFood = React.createClass({
             <input name="food-item" type="text" />
           </div>
           <hr />
+          <button className="btn btn-default back">Back</button>
           <button className="btn btn-default next">Calculate!</button>
         </div>
       </div>

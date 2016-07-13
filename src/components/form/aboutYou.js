@@ -28,8 +28,8 @@ var AboutYou = React.createClass({
           </div>
           <div className="height">
             <label htmlFor="height">Height: </label>
-            <input name="height-ft" type="number" placeholder="ft" />
-            <input name="height-in" type="number" placeholder="in" />
+            <input name="height" type="number" placeholder="ft" />
+            <input name="height" type="number" placeholder="in" />
             <input type="radio" value="1" name="ht-unit" />Feet
             <input type="radio" value="2" name="ht-unit" />Meters
           </div>
