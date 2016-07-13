@@ -30381,7 +30381,7 @@ var AboutFood = React.createClass({
       React.createElement(
         "div",
         { className: "form-head" },
-        React.createElement("span", { className: "glyphicon glyphicon-star-empty" }),
+        React.createElement("span", { className: "glyphicon glyphicon-cutlery" }),
         "  About What You Ate"
       ),
       React.createElement(
@@ -30398,6 +30398,11 @@ var AboutFood = React.createClass({
           React.createElement("input", { name: "food-item", type: "text" })
         ),
         React.createElement("hr", null),
+        React.createElement(
+          "button",
+          { className: "btn btn-default back" },
+          "Back"
+        ),
         React.createElement(
           "button",
           { className: "btn btn-default next" },

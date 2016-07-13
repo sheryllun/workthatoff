@@ -46,7 +46,7 @@ body {
 
 .form-head {
   font-family: 'Dosis', sans-serif;
-  background: #bbb;
+  background: #87ecef;
   font-size: 2em;
   font-weight: 300;
   padding: 1em 2em;
@@ -66,8 +66,8 @@ body {
   content: '';
   border: 8px solid;
   border-top-color: transparent;
-  border-right-color: #9f9f9f;
-  border-bottom-color: #9f9f9f;
+  border-right-color: #66afb1;
+  border-bottom-color: #66afb1;
   border-left-color: transparent;
   position: absolute;
   top: -16px;
@@ -117,7 +117,7 @@ label {
   height: 370px;
 }
 
-.about-you .questions input[type="number"] {
+.about-you .questions input[type="number"], input[type="text"] {
   width: 75px;
   border: 1px solid #ccc;
   border-radius: 3px;
@@ -126,6 +126,10 @@ label {
 
 input[type="radio"] {
   margin: 4px 8px;
+}
+
+input[type="text"] {
+  width: 80%;
 }
 
 button.next {
