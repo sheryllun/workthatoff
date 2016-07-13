@@ -30385,11 +30385,25 @@ var AboutFood = React.createClass({
         "  About What You Ate"
       ),
       React.createElement(
-        "p",
-        null,
-        "Add"
-      ),
-      React.createElement("input", { name: "food-item", type: "text" })
+        "div",
+        { className: "questions" },
+        React.createElement(
+          "div",
+          { className: "holder" },
+          React.createElement(
+            "p",
+            null,
+            "Start typing to search for a food.  Add up to 5 items."
+          ),
+          React.createElement("input", { name: "food-item", type: "text" })
+        ),
+        React.createElement("hr", null),
+        React.createElement(
+          "button",
+          { className: "btn btn-default next" },
+          "Calculate!"
+        )
+      )
     );
   }
 });
@@ -30468,6 +30482,12 @@ var AboutYou = React.createClass({
           "Feet",
           React.createElement("input", { type: "radio", value: "2", name: "ht-unit" }),
           "Meters"
+        ),
+        React.createElement("hr", null),
+        React.createElement(
+          "button",
+          { className: "btn btn-default next" },
+          "Next"
         )
       )
     );
