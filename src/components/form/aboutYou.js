@@ -33,6 +33,8 @@ var AboutYou = React.createClass({
             <input type="radio" value="1" name="ht-unit" />Feet
             <input type="radio" value="2" name="ht-unit" />Meters
           </div>
+          <hr />
+          <button className="btn btn-default next">Next</button>
         </div>
       </div>
       );

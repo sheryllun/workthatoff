@@ -3,6 +3,11 @@ body {
   font-size: 10px;
 }
 
+.container-fluid {
+  background: url('../images/hbgwhite.png') no-repeat fixed left bottom;
+  background-size: 25%;
+}
+
 .header {
   background-color: white;
   padding: 2em;
@@ -41,6 +46,10 @@ body {
   z-index: 10;
 }
 
+.about-food .form-head {
+  background: #bc9fde;
+}
+
 .form-head:before {
   content: '';
   border: 8px solid;
@@ -53,11 +62,16 @@ body {
   left: 0;
 }
 
+.about-food .form-head:before {
+  border-right-color: #8f79a9;
+  border-bottom-color: #8f79a9;
+}
+
 .questions {
   background: white;
-  padding: 8em 1em 0;
+  padding: 8em 0 0;
   font-size: 1.4em;
-  min-height: 300px;
+  min-height: 350px;
   position: absolute;
   top: 0;
   right: 0;
@@ -68,6 +82,10 @@ body {
 
 .questions div {
   margin-bottom: 10px;
+}
+
+.holder {
+  padding: 0 1em;
 }
 
 label {
@@ -81,9 +99,10 @@ label {
   vertical-align: text-top;
 }
 
-.about-you {
+.about-you, .about-food {
   display: block;
   position: relative;
+  height: 370px;
 }
 
 .about-you .questions input[type="number"] {
@@ -95,4 +114,9 @@ label {
 
 input[type="radio"] {
   margin: 4px 8px;
+}
+
+button.next {
+  float: right;
+  margin-right: 1em;
 }

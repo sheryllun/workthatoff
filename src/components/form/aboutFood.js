@@ -10,8 +10,14 @@ var AboutFood = React.createClass({
           <span className="glyphicon glyphicon-star-empty"></span>
           &nbsp; About What You Ate
         </div>
-        <p>Add</p>
-        <input name="food-item" type="text" />
+          <div className="questions">
+          <div className="holder">
+            <p>Start typing to search for a food.  Add up to 5 items.</p>
+            <input name="food-item" type="text" />
+          </div>
+          <hr />
+          <button className="btn btn-default next">Calculate!</button>
+        </div>
       </div>
       );
   }

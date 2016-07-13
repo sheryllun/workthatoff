@@ -8,6 +8,7 @@ var source = require('vinyl-source-stream');
 var babelify = require('babelify');
 var concat = require('gulp-concat');
 var lint = require('gulp-eslint');
+var imagemin = require('gulp-imagemin');
 
 var config = {
 	port: 9005,
@@ -20,6 +21,7 @@ var config = {
 			'node_modules/bootstrap/dist/css/bootstrap-theme.min.css',
 			'src/css/*.css'
 		],
+		images: './src/img/*',
 		fonts: 'node_modules/bootstrap/dist/fonts/*',
 		dist: './dist',
 		mainJs: './src/main.js'
@@ -38,6 +40,12 @@ gulp.task('connect', function() {
 gulp.task('open', ['connect'], function() {
 	gulp.src('dist/index.html')
 		.pipe(open({ uri: config.devBaseUrl + ':' + config.port + '/'}));
+});
+
+gulp.task('imagemin', function() {
+  gulp.src(config.paths.images)
+    .pipe(imagemin())
+    .pipe(gulp.dest(config.paths.dist + '/images'));
 });
 
 gulp.task('html', function() {
@@ -80,4 +88,4 @@ gulp.task('watch', function() {
 	gulp.watch(config.paths.css, ['css']);
 });
 
-gulp.task('default', ['html', 'js', 'css', 'fonts', 'lint', 'open', 'watch']);
+gulp.task('default', ['html', 'imagemin', 'js', 'css', 'fonts', 'lint', 'open', 'watch']);
