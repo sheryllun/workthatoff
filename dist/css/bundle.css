@@ -79,7 +79,7 @@ body {
   border-bottom-color: #8f79a9;
 }
 
-.questions {
+.questions, .results {
   background: white;
   padding: 8em 0 0;
   font-size: 1.4em;
@@ -111,7 +111,7 @@ label {
   vertical-align: text-top;
 }
 
-.about-you, .about-food {
+.about-you, .about-food, .results-main {
   display: block;
   position: relative;
   height: 370px;

@@ -11,15 +11,15 @@ var AboutFood = React.createClass({
           &nbsp; About What You Ate
         </div>
           <div className="questions">
-          <div className="holder">
-            <p>Start typing to search for a food.  Add up to 5 items.</p>
-            <input name="food-item" type="text" />
+            <div className="holder">
+              <p>Start typing to search for a food.  Add up to 5 items.</p>
+              <input name="food-item" type="text" />
+            </div>
+            <hr />
+            <button className="btn btn-default back">Back</button>
+            <button className="btn btn-default next">Calculate!</button>
           </div>
-          <hr />
-          <button className="btn btn-default back">Back</button>
-          <button className="btn btn-default next">Calculate!</button>
         </div>
-      </div>
       );
   }
 });
