@@ -30350,6 +30350,7 @@ module.exports = require('./lib/React');
 var React = require('react');
 var Header = require('./header');
 var Form = require('./form/formMain');
+var Results = require('./results');
 
 var App = React.createClass({
   displayName: 'App',
@@ -30359,14 +30360,15 @@ var App = React.createClass({
       'div',
       { className: 'main container-fluid' },
       React.createElement(Header, null),
-      React.createElement(Form, null)
+      React.createElement(Form, null),
+      React.createElement(Results, { results: this.props.results })
     );
   }
 });
 
 module.exports = App;
 
-},{"./form/formMain":174,"./header":175,"react":170}],172:[function(require,module,exports){
+},{"./form/formMain":174,"./header":175,"./results":176,"react":170}],172:[function(require,module,exports){
 "use strict";
 
 var React = require('react');
@@ -30481,8 +30483,8 @@ var AboutYou = React.createClass({
             { htmlFor: "height" },
             "Height: "
           ),
-          React.createElement("input", { name: "height-ft", type: "number", placeholder: "ft" }),
-          React.createElement("input", { name: "height-in", type: "number", placeholder: "in" }),
+          React.createElement("input", { name: "height", type: "number", placeholder: "ft" }),
+          React.createElement("input", { name: "height", type: "number", placeholder: "in" }),
           React.createElement("input", { type: "radio", value: "1", name: "ht-unit" }),
           "Feet",
           React.createElement("input", { type: "radio", value: "2", name: "ht-unit" }),
@@ -30560,11 +30562,72 @@ var Header = React.createClass({
 module.exports = Header;
 
 },{"react":170}],176:[function(require,module,exports){
+"use strict";
+
+var React = require('react');
+
+var ResultsRow = React.createClass({
+  displayName: "ResultsRow",
+
+  render: function () {
+    return React.createElement(
+      "li",
+      null,
+      this.props.item.time,
+      " minutes of ",
+      this.props.item.activity
+    );
+  }
+});
+
+var Results = React.createClass({
+  displayName: "Results",
+
+  render: function () {
+    var rows = [];
+    this.props.results.forEach(function (item) {
+      rows.push(React.createElement(ResultsRow, { item: item, key: item.activity }));
+    });
+    return React.createElement(
+      "div",
+      { className: "row" },
+      React.createElement(
+        "div",
+        { className: "col-xs-12 col-sm-8 col-sm-push-2" },
+        React.createElement(
+          "div",
+          { className: "results-main" },
+          React.createElement(
+            "div",
+            { className: "form-head" },
+            React.createElement("span", { className: "glyphicon glyphicon-cutlery" }),
+            "  Results"
+          ),
+          React.createElement(
+            "div",
+            { className: "results" },
+            React.createElement(
+              "ul",
+              null,
+              rows
+            )
+          )
+        )
+      )
+    );
+  }
+});
+
+module.exports = Results;
+
+},{"react":170}],177:[function(require,module,exports){
 $ = jQuery = require('jquery'); //requiring jquery in the global namespace for bootstrap
 var React = require('react');
 var ReactDOM = require('react-dom');
 var App = require('./components/app');
 
-ReactDOM.render(React.createElement(App, null), document.getElementById('app'));
+var RESULTS = [{ activity: "Walking, 2.5 mi/hr", time: 120 }, { activity: "Snowboarding", time: 10 }, { activity: "Dancing, Latin", time: 50 }];
 
-},{"./components/app":171,"jquery":2,"react":170,"react-dom":3}]},{},[176]);
+ReactDOM.render(React.createElement(App, { results: RESULTS }), document.getElementById('app'));
+
+},{"./components/app":171,"jquery":2,"react":170,"react-dom":3}]},{},[177]);
