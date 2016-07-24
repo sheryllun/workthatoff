@@ -18,13 +18,14 @@ var Results = React.createClass({
     });
     return (
       <div className="row">
-        <div className="col-xs-12 col-sm-8 col-sm-push-2">
+        <div className="results-main-col col-xs-12 col-sm-8 col-sm-push-2">
           <div className="results-main">
             <div className="form-head">
-              <span className="glyphicon glyphicon-cutlery"></span>
+              <span className="glyphicon glyphicon-heart-empty"></span>
               &nbsp; Results
             </div>
             <div className="results">
+              To burn off xxx calories, you'll have to do:
               <ul>{rows}</ul>
             </div>
           </div>

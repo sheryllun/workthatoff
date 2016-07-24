@@ -30355,12 +30355,40 @@ var Results = require('./results');
 var App = React.createClass({
   displayName: 'App',
 
+  getInitialState: function () {
+    return {
+      heightUnit: '1',
+      lengthLarge: 'ft',
+      lengthSmall: 'in',
+      weightUnit: '1',
+      aboutAnswers: {
+        age: '',
+        gender: '',
+        weight: '',
+        height: ''
+      }
+    };
+  },
+  onHeightChange: function (e) {
+    var selected = e.currentTarget.value;
+    if (selected === "1") {
+      this.setState({ lengthLarge: 'ft', lengthSmall: 'in' });
+    } else {
+      this.setState({ lengthLarge: 'm', lengthSmall: 'cm' });
+    }
+    this.setState({ heightUnit: selected });
+  },
   render: function () {
     return React.createElement(
       'div',
       { className: 'main container-fluid' },
       React.createElement(Header, null),
-      React.createElement(Form, null),
+      React.createElement(Form, {
+        heightUnit: this.state.heightUnit,
+        lengthLarge: this.state.lengthLarge,
+        lengthSmall: this.state.lengthSmall,
+        heightChange: this.onHeightChange
+      }),
       React.createElement(Results, { results: this.props.results })
     );
   }
@@ -30425,6 +30453,7 @@ var React = require('react');
 var AboutYou = React.createClass({
   displayName: "AboutYou",
 
+
   render: function () {
     return React.createElement(
       "div",
@@ -30470,9 +30499,9 @@ var AboutYou = React.createClass({
             "Weight: "
           ),
           React.createElement("input", { name: "weight", type: "number" }),
-          React.createElement("input", { type: "radio", value: "1", name: "wt-unit" }),
+          React.createElement("input", { type: "radio", value: "1", name: "wtUnit" }),
           "Pounds",
-          React.createElement("input", { type: "radio", value: "2", name: "wt-unit" }),
+          React.createElement("input", { type: "radio", value: "2", name: "wtUnit" }),
           "Kilos"
         ),
         React.createElement(
@@ -30483,11 +30512,11 @@ var AboutYou = React.createClass({
             { htmlFor: "height" },
             "Height: "
           ),
-          React.createElement("input", { name: "height", type: "number", placeholder: "ft" }),
-          React.createElement("input", { name: "height", type: "number", placeholder: "in" }),
-          React.createElement("input", { type: "radio", value: "1", name: "ht-unit" }),
+          React.createElement("input", { name: "height", type: "number", placeholder: this.props.lengthLarge }),
+          React.createElement("input", { name: "height", type: "number", placeholder: this.props.lengthSmall }),
+          React.createElement("input", { type: "radio", value: "1", name: "htUnit", checked: this.props.heightUnit === "1", onChange: this.props.heightChange }),
           "Feet",
-          React.createElement("input", { type: "radio", value: "2", name: "ht-unit" }),
+          React.createElement("input", { type: "radio", value: "2", name: "htUnit", checked: this.props.heightUnit === "2", onChange: this.props.heightChange }),
           "Meters"
         ),
         React.createElement("hr", null),
@@ -30520,7 +30549,12 @@ var Form = React.createClass({
       React.createElement(
         'div',
         { className: 'main-form col-xs-12 col-sm-8 col-sm-push-2' },
-        React.createElement(AboutYou, null),
+        React.createElement(AboutYou, {
+          heightUnit: this.props.heightUnit,
+          heightChange: this.props.heightChange,
+          lengthLarge: this.props.lengthLarge,
+          lengthSmall: this.props.lengthSmall
+        }),
         React.createElement(AboutFood, null)
       )
     );
@@ -30593,19 +30627,20 @@ var Results = React.createClass({
       { className: "row" },
       React.createElement(
         "div",
-        { className: "col-xs-12 col-sm-8 col-sm-push-2" },
+        { className: "results-main-col col-xs-12 col-sm-8 col-sm-push-2" },
         React.createElement(
           "div",
           { className: "results-main" },
           React.createElement(
             "div",
             { className: "form-head" },
-            React.createElement("span", { className: "glyphicon glyphicon-cutlery" }),
+            React.createElement("span", { className: "glyphicon glyphicon-heart-empty" }),
             "  Results"
           ),
           React.createElement(
             "div",
             { className: "results" },
+            "To burn off xxx calories, you'll have to do:",
             React.createElement(
               "ul",
               null,

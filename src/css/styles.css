@@ -26,7 +26,7 @@ body {
   margin-left: 1em;
 }
 
-.main-form {
+.main-form, .results-main-col {
   position: relative;
   margin-top: 2em;
   padding: 0;
@@ -50,6 +50,10 @@ body {
   background: #bc9fde;
 }
 
+.results-main .form-head {
+  background: #8df57d;
+}
+
 .form-head:before {
   content: '';
   border: 8px solid;
@@ -65,6 +69,11 @@ body {
 .about-food .form-head:before {
   border-right-color: #8f79a9;
   border-bottom-color: #8f79a9;
+}
+
+.results-main .form-head:before {
+  border-right-color: #6ebf61;
+  border-bottom-color: #6ebf61;
 }
 
 .questions, .results {

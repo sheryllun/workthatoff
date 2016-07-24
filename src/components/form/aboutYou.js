@@ -3,6 +3,7 @@
 var React = require('react');
 
 var AboutYou = React.createClass({
+
   render: function() {
     return (
       <div className="about-you">
@@ -23,15 +24,15 @@ var AboutYou = React.createClass({
           <div className="weight">
             <label htmlFor="weight">Weight: </label>
             <input name="weight" type="number" />
-            <input type="radio" value="1" name="wt-unit" />Pounds
-            <input type="radio" value="2" name="wt-unit" />Kilos
+            <input type="radio" value="1" name="wtUnit" />Pounds
+            <input type="radio" value="2" name="wtUnit" />Kilos
           </div>
           <div className="height">
             <label htmlFor="height">Height: </label>
-            <input name="height" type="number" placeholder="ft" />
-            <input name="height" type="number" placeholder="in" />
-            <input type="radio" value="1" name="ht-unit" />Feet
-            <input type="radio" value="2" name="ht-unit" />Meters
+            <input name="height" type="number" placeholder={this.props.lengthLarge} />
+            <input name="height" type="number" placeholder={this.props.lengthSmall} />
+            <input type="radio" value="1" name="htUnit" checked={this.props.heightUnit === "1"} onChange={this.props.heightChange} />Feet
+            <input type="radio" value="2" name="htUnit" checked={this.props.heightUnit === "2"} onChange={this.props.heightChange} />Meters
           </div>
           <hr />
           <button className="btn btn-default next">Next</button>
