@@ -16,7 +16,8 @@ var App = React.createClass({
         age: '',
         gender: '',
         weight: '',
-        height: ''
+        heightLarge: '',
+        heightSmall: ''
       }
     };
   },
@@ -29,6 +30,12 @@ var App = React.createClass({
     }
     this.setState({heightUnit: selected});
   },
+  setAboutState: function(e) {
+    var field = e.target.name;
+    var value = e.target.value;
+    this.state.aboutAnswers[field] = value;
+    return this.setState({aboutAnswers: this.state.aboutAnswers});
+  },
   render: function() {
     return (
       <div className="main container-fluid">
@@ -38,6 +45,8 @@ var App = React.createClass({
           lengthLarge={this.state.lengthLarge}
           lengthSmall={this.state.lengthSmall}
           heightChange={this.onHeightChange}
+          aboutAnswers={this.state.aboutAnswers}
+          setAboutState={this.setAboutState}
         />
         <Results results={this.props.results} />
       </div>

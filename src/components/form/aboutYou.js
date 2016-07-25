@@ -1,6 +1,8 @@
 "use strict";
 
 var React = require('react');
+var Input = require('../common/textinput');
+var Radio = require('../common/radioset');
 
 var AboutYou = React.createClass({
 
@@ -12,30 +14,67 @@ var AboutYou = React.createClass({
           &nbsp; About You
         </div>
         <div className="questions">
-          <div className="age">
-            <label htmlFor="age">Age: </label>
-            <input name="age" type="number" />
-          </div>
+          <Input
+            name="age"
+            label="Age:"
+            type="number"
+            min="1"
+            value={this.props.aboutAnswers.age}
+            onChange={this.props.setAboutState} />
+
           <div className="gender">
             <label htmlFor="gender">Gender: </label>
-            <input type="radio" value="1" name="gender" />Male
-            <input type="radio" value="2" name="gender" />Female
+            <Radio
+              group="gender"
+              value1="1"
+              label1="Male"
+              value2="2"
+              label2="female" />
           </div>
-          <div className="weight">
-            <label htmlFor="weight">Weight: </label>
-            <input name="weight" type="number" />
-            <input type="radio" value="1" name="wtUnit" />Pounds
-            <input type="radio" value="2" name="wtUnit" />Kilos
+
+          <div className="weightDiv">
+            <Input
+              name="weight"
+              label="Weight:"
+              type="number"
+              min="1"
+              value={this.props.aboutAnswers.weight}
+              onChange={this.props.setAboutState} />
+
+              <Radio
+                group="wtUnit"
+                value1="1"
+                label1="Pounds"
+                value2="2"
+                label2="Kilos" />
           </div>
-          <div className="height">
-            <label htmlFor="height">Height: </label>
-            <input name="height" type="number" placeholder={this.props.lengthLarge} />
-            <input name="height" type="number" placeholder={this.props.lengthSmall} />
-            <input type="radio" value="1" name="htUnit" checked={this.props.heightUnit === "1"} onChange={this.props.heightChange} />Feet
-            <input type="radio" value="2" name="htUnit" checked={this.props.heightUnit === "2"} onChange={this.props.heightChange} />Meters
+          <div className="heightDiv">
+            <Input
+              name="heightLarge"
+              label="Height:"
+              type="number"
+              min="1"
+              placeholder={this.props.lengthLarge}
+              value={this.props.aboutAnswers.heightLarge}
+              onChange={this.props.setAboutState} />
+            <Input
+              name="heightSmall"
+              type="number"
+              min="0"
+              placeholder={this.props.lengthSmall}
+              value={this.props.aboutAnswers.heightSmall}
+              onChange={this.props.setAboutState} />
+
+              <Radio
+                group="htUnit"
+                checked={this.props.heightUnit}
+                value1="1"
+                label1="Feet"
+                value2="2"
+                label2="Meters" />
           </div>
           <hr />
-          <button className="btn btn-default next">Next</button>
+          <button className="btn btn-default next" >Next</button>
         </div>
       </div>
       );

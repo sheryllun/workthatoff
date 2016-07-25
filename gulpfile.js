@@ -9,6 +9,7 @@ var babelify = require('babelify');
 var concat = require('gulp-concat');
 var lint = require('gulp-eslint');
 var imagemin = require('gulp-imagemin');
+var cache = require('gulp-cache');
 
 var config = {
 	port: 9005,
@@ -44,7 +45,7 @@ gulp.task('open', ['connect'], function() {
 
 gulp.task('imagemin', function() {
   gulp.src(config.paths.images)
-    .pipe(imagemin())
+    .pipe(cache(imagemin()))
     .pipe(gulp.dest(config.paths.dist + '/images'));
 });
 
