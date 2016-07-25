@@ -30365,7 +30365,8 @@ var App = React.createClass({
         age: '',
         gender: '',
         weight: '',
-        height: ''
+        heightLarge: '',
+        heightSmall: ''
       }
     };
   },
@@ -30378,6 +30379,12 @@ var App = React.createClass({
     }
     this.setState({ heightUnit: selected });
   },
+  setAboutState: function (e) {
+    var field = e.target.name;
+    var value = e.target.value;
+    this.state.aboutAnswers[field] = value;
+    return this.setState({ aboutAnswers: this.state.aboutAnswers });
+  },
   render: function () {
     return React.createElement(
       'div',
@@ -30387,7 +30394,9 @@ var App = React.createClass({
         heightUnit: this.state.heightUnit,
         lengthLarge: this.state.lengthLarge,
         lengthSmall: this.state.lengthSmall,
-        heightChange: this.onHeightChange
+        heightChange: this.onHeightChange,
+        aboutAnswers: this.state.aboutAnswers,
+        setAboutState: this.setAboutState
       }),
       React.createElement(Results, { results: this.props.results })
     );
@@ -30396,7 +30405,93 @@ var App = React.createClass({
 
 module.exports = App;
 
-},{"./form/formMain":174,"./header":175,"./results":176,"react":170}],172:[function(require,module,exports){
+},{"./form/formMain":176,"./header":177,"./results":178,"react":170}],172:[function(require,module,exports){
+"use strict";
+
+var React = require('react');
+
+var Radio = React.createClass({
+  displayName: "Radio",
+
+  render: function () {
+    return React.createElement(
+      "fieldset",
+      null,
+      React.createElement("input", { type: "radio",
+        name: this.props.group,
+        value: this.props.value1,
+        checked: this.props.checked }),
+      React.createElement(
+        "label",
+        { htmlFor: this.props.group },
+        this.props.label1
+      ),
+      React.createElement("input", { type: "radio",
+        name: this.props.group,
+        value: this.props.value2,
+        checked: this.props.checked }),
+      React.createElement(
+        "label",
+        { htmlFor: this.props.group },
+        this.props.label2
+      )
+    );
+  }
+});
+
+module.exports = Radio;
+
+},{"react":170}],173:[function(require,module,exports){
+"use strict";
+
+var React = require('react');
+
+var Input = React.createClass({
+  displayName: 'Input',
+
+  propTypes: {
+    name: React.PropTypes.string.isRequired,
+    label: React.PropTypes.string,
+    type: React.PropTypes.string.isRequired,
+    min: React.PropTypes.string.isRequired,
+    onChange: React.PropTypes.func.isRequired,
+    value: React.PropTypes.string,
+    error: React.PropTypes.string,
+    placeholder: React.PropTypes.string
+  },
+  render: function () {
+    var wrapperClass = '';
+    if (this.props.error && this.props.error.length > 0) {
+      wrapperClass = 'has-error';
+    }
+    return React.createElement(
+      'div',
+      { className: this.props.name },
+      React.createElement(
+        'label',
+        { htmlFor: this.props.name },
+        this.props.label
+      ),
+      React.createElement('input', {
+        className: wrapperClass,
+        name: this.props.name,
+        type: this.props.type,
+        min: this.props.min,
+        value: this.props.value,
+        placeholder: this.props.placeholder,
+        onChange: this.props.onChange }),
+      React.createElement(
+        'div',
+        { className: 'input' },
+        this.props.error
+      )
+    );
+  }
+});
+
+module.exports = Input;
+
+},{"react":170}],174:[function(require,module,exports){
 "use strict";
 
 var React = require('react');
@@ -30445,85 +30540,100 @@ var AboutFood = React.createClass({
 
 module.exports = AboutFood;
 
-},{"react":170}],173:[function(require,module,exports){
+},{"react":170}],175:[function(require,module,exports){
 "use strict";
 
 var React = require('react');
+var Input = require('../common/textinput');
+var Radio = require('../common/radioset');
 
 var AboutYou = React.createClass({
-  displayName: "AboutYou",
+  displayName: 'AboutYou',
 
 
   render: function () {
     return React.createElement(
-      "div",
-      { className: "about-you" },
+      'div',
+      { className: 'about-you' },
       React.createElement(
-        "div",
-        { className: "form-head" },
-        React.createElement("span", { className: "glyphicon glyphicon-star-empty" }),
-        "  About You"
+        'div',
+        { className: 'form-head' },
+        React.createElement('span', { className: 'glyphicon glyphicon-star-empty' }),
+        '  About You'
       ),
       React.createElement(
-        "div",
-        { className: "questions" },
+        'div',
+        { className: 'questions' },
+        React.createElement(Input, {
+          name: 'age',
+          label: 'Age:',
+          type: 'number',
+          min: '1',
+          value: this.props.aboutAnswers.age,
+          onChange: this.props.setAboutState }),
         React.createElement(
-          "div",
-          { className: "age" },
+          'div',
+          { className: 'gender' },
           React.createElement(
-            "label",
-            { htmlFor: "age" },
-            "Age: "
+            'label',
+            { htmlFor: 'gender' },
+            'Gender: '
           ),
-          React.createElement("input", { name: "age", type: "number" })
+          React.createElement(Radio, {
+            group: 'gender',
+            value1: '1',
+            label1: 'Male',
+            value2: '2',
+            label2: 'female' })
         ),
         React.createElement(
-          "div",
-          { className: "gender" },
-          React.createElement(
-            "label",
-            { htmlFor: "gender" },
-            "Gender: "
-          ),
-          React.createElement("input", { type: "radio", value: "1", name: "gender" }),
-          "Male",
-          React.createElement("input", { type: "radio", value: "2", name: "gender" }),
-          "Female"
+          'div',
+          { className: 'weightDiv' },
+          React.createElement(Input, {
+            name: 'weight',
+            label: 'Weight:',
+            type: 'number',
+            min: '1',
+            value: this.props.aboutAnswers.weight,
+            onChange: this.props.setAboutState }),
+          React.createElement(Radio, {
+            group: 'wtUnit',
+            value1: '1',
+            label1: 'Pounds',
+            value2: '2',
+            label2: 'Kilos' })
         ),
         React.createElement(
-          "div",
-          { className: "weight" },
-          React.createElement(
-            "label",
-            { htmlFor: "weight" },
-            "Weight: "
-          ),
-          React.createElement("input", { name: "weight", type: "number" }),
-          React.createElement("input", { type: "radio", value: "1", name: "wtUnit" }),
-          "Pounds",
-          React.createElement("input", { type: "radio", value: "2", name: "wtUnit" }),
-          "Kilos"
+          'div',
+          { className: 'heightDiv' },
+          React.createElement(Input, {
+            name: 'heightLarge',
+            label: 'Height:',
+            type: 'number',
+            min: '1',
+            placeholder: this.props.lengthLarge,
+            value: this.props.aboutAnswers.heightLarge,
+            onChange: this.props.setAboutState }),
+          React.createElement(Input, {
+            name: 'heightSmall',
+            type: 'number',
+            min: '0',
+            placeholder: this.props.lengthSmall,
+            value: this.props.aboutAnswers.heightSmall,
+            onChange: this.props.setAboutState }),
+          React.createElement(Radio, {
+            group: 'htUnit',
+            checked: this.props.heightUnit,
+            value1: '1',
+            label1: 'Feet',
+            value2: '2',
+            label2: 'Meters' })
         ),
+        React.createElement('hr', null),
         React.createElement(
-          "div",
-          { className: "height" },
-          React.createElement(
-            "label",
-            { htmlFor: "height" },
-            "Height: "
-          ),
-          React.createElement("input", { name: "height", type: "number", placeholder: this.props.lengthLarge }),
-          React.createElement("input", { name: "height", type: "number", placeholder: this.props.lengthSmall }),
-          React.createElement("input", { type: "radio", value: "1", name: "htUnit", checked: this.props.heightUnit === "1", onChange: this.props.heightChange }),
-          "Feet",
-          React.createElement("input", { type: "radio", value: "2", name: "htUnit", checked: this.props.heightUnit === "2", onChange: this.props.heightChange }),
-          "Meters"
-        ),
-        React.createElement("hr", null),
-        React.createElement(
-          "button",
-          { className: "btn btn-default next" },
-          "Next"
+          'button',
+          { className: 'btn btn-default next' },
+          'Next'
         )
       )
     );
@@ -30532,7 +30642,7 @@ var AboutYou = React.createClass({
 
 module.exports = AboutYou;
 
-},{"react":170}],174:[function(require,module,exports){
+},{"../common/radioset":172,"../common/textinput":173,"react":170}],176:[function(require,module,exports){
 "use strict";
 
 var React = require('react');
@@ -30553,7 +30663,9 @@ var Form = React.createClass({
           heightUnit: this.props.heightUnit,
           heightChange: this.props.heightChange,
           lengthLarge: this.props.lengthLarge,
-          lengthSmall: this.props.lengthSmall
+          lengthSmall: this.props.lengthSmall,
+          aboutAnswers: this.props.aboutAnswers,
+          setAboutState: this.props.setAboutState
         }),
         React.createElement(AboutFood, null)
       )
@@ -30563,7 +30675,7 @@ var Form = React.createClass({
 
 module.exports = Form;
 
-},{"./aboutFood":172,"./aboutYou":173,"react":170}],175:[function(require,module,exports){
+},{"./aboutFood":174,"./aboutYou":175,"react":170}],177:[function(require,module,exports){
 "use strict";
 
 var React = require('react');
@@ -30595,7 +30707,7 @@ var Header = React.createClass({
 
 module.exports = Header;
 
-},{"react":170}],176:[function(require,module,exports){
+},{"react":170}],178:[function(require,module,exports){
 "use strict";
 
 var React = require('react');
@@ -30655,7 +30767,7 @@ var Results = React.createClass({
 
 module.exports = Results;
 
-},{"react":170}],177:[function(require,module,exports){
+},{"react":170}],179:[function(require,module,exports){
 $ = jQuery = require('jquery'); //requiring jquery in the global namespace for bootstrap
 var React = require('react');
 var ReactDOM = require('react-dom');
@@ -30665,4 +30777,4 @@ var RESULTS = [{ activity: "Walking, 2.5 mi/hr", time: 120 }, { activity: "Snowb
 
 ReactDOM.render(React.createElement(App, { results: RESULTS }), document.getElementById('app'));
 
-},{"./components/app":171,"jquery":2,"react":170,"react-dom":3}]},{},[177]);
+},{"./components/app":171,"jquery":2,"react":170,"react-dom":3}]},{},[179]);
