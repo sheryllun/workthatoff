@@ -29,7 +29,7 @@ var AboutYou = React.createClass({
               value1="1"
               label1="Male"
               value2="2"
-              label2="female" />
+              label2="Female" />
           </div>
 
           <div className="weightDiv">
@@ -67,7 +67,9 @@ var AboutYou = React.createClass({
 
               <Radio
                 group="htUnit"
-                checked={this.props.heightUnit}
+                checked1={this.props.heightUnit === "1"}
+                checked2={this.props.heightUnit === "2"}
+                onChange={this.props.heightChange}
                 value1="1"
                 label1="Feet"
                 value2="2"

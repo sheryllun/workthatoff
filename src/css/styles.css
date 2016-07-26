@@ -103,6 +103,14 @@ label {
   margin-right: 10px;
 }
 
+.gender fieldset label, .weightDiv fieldset label, .heightDiv fieldset label {
+  text-align: left;
+  font-weight: normal;
+  width: auto;
+}
+
+fieldset { display: inline;}
+
 .glyphicon-star-empty {
   font-size: 1.2em;
   vertical-align: text-top;
@@ -114,15 +122,35 @@ label {
   height: 370px;
 }
 
+.about-you {
+  height: 390px;
+}
+
 .about-you .questions input[type="number"], input[type="text"] {
   width: 75px;
   border: 1px solid #ccc;
   border-radius: 3px;
   padding: 5px;
-  }
+}
+
+.weight { display: inline; }
+
+.heightLarge, .heightSmall {
+  display: inline-block;
+}
+
+.heightSmall > label {
+  display: none;
+}
+
+/* Error messages class */
+.input {
+  display: inline;
+}
 
 input[type="radio"] {
   margin: 4px 8px;
+  display: inline-block;
 }
 
 input[type="text"] {
