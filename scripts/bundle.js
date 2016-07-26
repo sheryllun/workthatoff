@@ -30413,6 +30413,17 @@ var React = require('react');
 var Radio = React.createClass({
   displayName: "Radio",
 
+  propTypes: {
+    group: React.PropTypes.string.isRequired,
+    value1: React.PropTypes.string.isRequired,
+    value2: React.PropTypes.string.isRequired,
+    label1: React.PropTypes.string,
+    label2: React.PropTypes.string,
+    onChange: React.PropTypes.func,
+    error: React.PropTypes.string,
+    checked1: React.PropTypes.bool,
+    checked2: React.PropTypes.bool
+  },
   render: function () {
     return React.createElement(
       "fieldset",
@@ -30420,7 +30431,8 @@ var Radio = React.createClass({
       React.createElement("input", { type: "radio",
         name: this.props.group,
         value: this.props.value1,
-        checked: this.props.checked }),
+        onChange: this.props.onChange,
+        checked: this.props.checked1 }),
       React.createElement(
         "label",
         { htmlFor: this.props.group },
@@ -30429,11 +30441,17 @@ var Radio = React.createClass({
       React.createElement("input", { type: "radio",
         name: this.props.group,
         value: this.props.value2,
-        checked: this.props.checked }),
+        onChange: this.props.onChange,
+        checked: this.props.checked2 }),
       React.createElement(
         "label",
         { htmlFor: this.props.group },
         this.props.label2
+      ),
+      React.createElement(
+        "div",
+        { className: "input" },
+        this.props.error
       )
     );
   }
@@ -30584,7 +30602,7 @@ var AboutYou = React.createClass({
             value1: '1',
             label1: 'Male',
             value2: '2',
-            label2: 'female' })
+            label2: 'Female' })
         ),
         React.createElement(
           'div',
@@ -30623,7 +30641,9 @@ var AboutYou = React.createClass({
             onChange: this.props.setAboutState }),
           React.createElement(Radio, {
             group: 'htUnit',
-            checked: this.props.heightUnit,
+            checked1: this.props.heightUnit === "1",
+            checked2: this.props.heightUnit === "2",
+            onChange: this.props.heightChange,
             value1: '1',
             label1: 'Feet',
             value2: '2',
