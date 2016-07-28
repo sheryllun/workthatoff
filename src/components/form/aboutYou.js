@@ -5,7 +5,6 @@ var Input = require('../common/textinput');
 var Radio = require('../common/radioset');
 
 var AboutYou = React.createClass({
-
   render: function() {
     return (
       <div className="about-you">
@@ -29,7 +28,8 @@ var AboutYou = React.createClass({
               value1="1"
               label1="Male"
               value2="2"
-              label2="Female" />
+              label2="Female"
+              onChange={this.props.setAboutState} />
           </div>
 
           <div className="weightDiv">
@@ -42,11 +42,14 @@ var AboutYou = React.createClass({
               onChange={this.props.setAboutState} />
 
               <Radio
-                group="wtUnit"
+                group="weightUnit"
                 value1="1"
                 label1="Pounds"
                 value2="2"
-                label2="Kilos" />
+                label2="Kilos"
+                checked1={this.props.aboutAnswers.weightUnit === "1"}
+                checked2={this.props.aboutAnswers.weightUnit === "2"}
+                onChange={this.props.setAboutState} />
           </div>
           <div className="heightDiv">
             <Input
@@ -66,9 +69,9 @@ var AboutYou = React.createClass({
               onChange={this.props.setAboutState} />
 
               <Radio
-                group="htUnit"
-                checked1={this.props.heightUnit === "1"}
-                checked2={this.props.heightUnit === "2"}
+                group="heightUnit"
+                checked1={this.props.aboutAnswers.heightUnit === "1"}
+                checked2={this.props.aboutAnswers.heightUnit === "2"}
                 onChange={this.props.heightChange}
                 value1="1"
                 label1="Feet"

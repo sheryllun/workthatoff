@@ -30357,11 +30357,11 @@ var App = React.createClass({
 
   getInitialState: function () {
     return {
-      heightUnit: '1',
       lengthLarge: 'ft',
       lengthSmall: 'in',
-      weightUnit: '1',
       aboutAnswers: {
+        heightUnit: '1',
+        weightUnit: '1',
         age: '',
         gender: '',
         weight: '',
@@ -30377,7 +30377,7 @@ var App = React.createClass({
     } else {
       this.setState({ lengthLarge: 'm', lengthSmall: 'cm' });
     }
-    this.setState({ heightUnit: selected });
+    this.setAboutState(e);
   },
   setAboutState: function (e) {
     var field = e.target.name;
@@ -30391,7 +30391,6 @@ var App = React.createClass({
       { className: 'main container-fluid' },
       React.createElement(Header, null),
       React.createElement(Form, {
-        heightUnit: this.state.heightUnit,
         lengthLarge: this.state.lengthLarge,
         lengthSmall: this.state.lengthSmall,
         heightChange: this.onHeightChange,
@@ -30568,7 +30567,6 @@ var Radio = require('../common/radioset');
 var AboutYou = React.createClass({
   displayName: 'AboutYou',
 
-
   render: function () {
     return React.createElement(
       'div',
@@ -30602,7 +30600,8 @@ var AboutYou = React.createClass({
             value1: '1',
             label1: 'Male',
             value2: '2',
-            label2: 'Female' })
+            label2: 'Female',
+            onChange: this.props.setAboutState })
         ),
         React.createElement(
           'div',
@@ -30615,11 +30614,14 @@ var AboutYou = React.createClass({
             value: this.props.aboutAnswers.weight,
             onChange: this.props.setAboutState }),
           React.createElement(Radio, {
-            group: 'wtUnit',
+            group: 'weightUnit',
             value1: '1',
             label1: 'Pounds',
             value2: '2',
-            label2: 'Kilos' })
+            label2: 'Kilos',
+            checked1: this.props.aboutAnswers.weightUnit === "1",
+            checked2: this.props.aboutAnswers.weightUnit === "2",
+            onChange: this.props.setAboutState })
         ),
         React.createElement(
           'div',
@@ -30640,9 +30642,9 @@ var AboutYou = React.createClass({
             value: this.props.aboutAnswers.heightSmall,
             onChange: this.props.setAboutState }),
           React.createElement(Radio, {
-            group: 'htUnit',
-            checked1: this.props.heightUnit === "1",
-            checked2: this.props.heightUnit === "2",
+            group: 'heightUnit',
+            checked1: this.props.aboutAnswers.heightUnit === "1",
+            checked2: this.props.aboutAnswers.heightUnit === "2",
             onChange: this.props.heightChange,
             value1: '1',
             label1: 'Feet',
@@ -30680,7 +30682,6 @@ var Form = React.createClass({
         'div',
         { className: 'main-form col-xs-12 col-sm-8 col-sm-push-2' },
         React.createElement(AboutYou, {
-          heightUnit: this.props.heightUnit,
           heightChange: this.props.heightChange,
           lengthLarge: this.props.lengthLarge,
           lengthSmall: this.props.lengthSmall,

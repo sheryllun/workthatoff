@@ -8,11 +8,11 @@ var Results = require('./results');
 var App = React.createClass({
   getInitialState: function() {
     return {
-      heightUnit: '1',
       lengthLarge: 'ft',
       lengthSmall: 'in',
-      weightUnit: '1',
       aboutAnswers: {
+        heightUnit: '1',
+        weightUnit: '1',
         age: '',
         gender: '',
         weight: '',
@@ -28,7 +28,7 @@ var App = React.createClass({
     } else {
       this.setState({lengthLarge: 'm', lengthSmall: 'cm'});
     }
-    this.setState({heightUnit: selected});
+    this.setAboutState(e);
   },
   setAboutState: function(e) {
     var field = e.target.name;
@@ -41,7 +41,6 @@ var App = React.createClass({
       <div className="main container-fluid">
         <Header />
         <Form
-          heightUnit={this.state.heightUnit}
           lengthLarge={this.state.lengthLarge}
           lengthSmall={this.state.lengthSmall}
           heightChange={this.onHeightChange}
