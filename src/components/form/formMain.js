@@ -15,6 +15,8 @@ var Form = React.createClass({
             lengthSmall={this.props.lengthSmall}
             aboutAnswers={this.props.aboutAnswers}
             setAboutState={this.props.setAboutState}
+            goNext={this.props.goNext}
+            errors={this.props.errors}
           />
           <AboutFood />
         </div>

@@ -19,7 +19,8 @@ var AboutYou = React.createClass({
             type="number"
             min="1"
             value={this.props.aboutAnswers.age}
-            onChange={this.props.setAboutState} />
+            onChange={this.props.setAboutState}
+            error={this.props.errors.age} />
 
           <div className="gender">
             <label htmlFor="gender">Gender: </label>
@@ -29,7 +30,8 @@ var AboutYou = React.createClass({
               label1="Male"
               value2="2"
               label2="Female"
-              onChange={this.props.setAboutState} />
+              onChange={this.props.setAboutState}
+              error={this.props.errors.gender} />
           </div>
 
           <div className="weightDiv">
@@ -39,7 +41,8 @@ var AboutYou = React.createClass({
               type="number"
               min="1"
               value={this.props.aboutAnswers.weight}
-              onChange={this.props.setAboutState} />
+              onChange={this.props.setAboutState}
+              error={this.props.errors.weight} />
 
               <Radio
                 group="weightUnit"
@@ -59,14 +62,16 @@ var AboutYou = React.createClass({
               min="1"
               placeholder={this.props.lengthLarge}
               value={this.props.aboutAnswers.heightLarge}
-              onChange={this.props.setAboutState} />
+              onChange={this.props.setAboutState}
+              error={this.props.errors.heightLarge} />
             <Input
               name="heightSmall"
               type="number"
               min="0"
               placeholder={this.props.lengthSmall}
               value={this.props.aboutAnswers.heightSmall}
-              onChange={this.props.setAboutState} />
+              onChange={this.props.setAboutState}
+              error={this.props.errors.heightSmall}/>
 
               <Radio
                 group="heightUnit"
@@ -79,7 +84,7 @@ var AboutYou = React.createClass({
                 label2="Meters" />
           </div>
           <hr />
-          <button className="btn btn-default next" >Next</button>
+          <button className="btn btn-default next" name="aboutAnswers" onClick={this.props.goNext} >Next</button>
         </div>
       </div>
       );

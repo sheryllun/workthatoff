@@ -18,7 +18,8 @@ var App = React.createClass({
         weight: '',
         heightLarge: '',
         heightSmall: ''
-      }
+      },
+      errors: {}
     };
   },
   onHeightChange: function(e) {
@@ -36,6 +37,30 @@ var App = React.createClass({
     this.state.aboutAnswers[field] = value;
     return this.setState({aboutAnswers: this.state.aboutAnswers});
   },
+
+  validateSection: function(section) {
+    var valid = true;
+    var formSection = this.state[section];
+    this.state.errors = {};
+    for(var item in formSection) {
+      if(formSection[item].length <= 0) {
+        this.state.errors[item] = "Please enter a response";
+        valid = false;
+      }
+    }
+    this.setState({errors: this.state.errors});
+    return valid;
+  },
+
+  goNext: function(e) {
+    var sectionToValidate = e.target.name;
+    var valid = this.validateSection(sectionToValidate);
+    if(!valid) {
+      return;
+    }
+    console.log("to the next section");
+  },
+
   render: function() {
     return (
       <div className="main container-fluid">
@@ -46,6 +71,8 @@ var App = React.createClass({
           heightChange={this.onHeightChange}
           aboutAnswers={this.state.aboutAnswers}
           setAboutState={this.setAboutState}
+          goNext={this.goNext}
+          errors={this.state.errors}
         />
         <Results results={this.props.results} />
       </div>

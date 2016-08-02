@@ -30367,7 +30367,8 @@ var App = React.createClass({
         weight: '',
         heightLarge: '',
         heightSmall: ''
-      }
+      },
+      errors: {}
     };
   },
   onHeightChange: function (e) {
@@ -30385,6 +30386,30 @@ var App = React.createClass({
     this.state.aboutAnswers[field] = value;
     return this.setState({ aboutAnswers: this.state.aboutAnswers });
   },
+
+  validateSection: function (section) {
+    var valid = true;
+    var formSection = this.state[section];
+    this.state.errors = {};
+    for (var item in formSection) {
+      if (formSection[item].length <= 0) {
+        this.state.errors[item] = "Please enter a response";
+        valid = false;
+      }
+    }
+    this.setState({ errors: this.state.errors });
+    return valid;
+  },
+
+  goNext: function (e) {
+    var sectionToValidate = e.target.name;
+    var valid = this.validateSection(sectionToValidate);
+    if (!valid) {
+      return;
+    }
+    console.log("to the next section");
+  },
+
   render: function () {
     return React.createElement(
       'div',
@@ -30395,7 +30420,9 @@ var App = React.createClass({
         lengthSmall: this.state.lengthSmall,
         heightChange: this.onHeightChange,
         aboutAnswers: this.state.aboutAnswers,
-        setAboutState: this.setAboutState
+        setAboutState: this.setAboutState,
+        goNext: this.goNext,
+        errors: this.state.errors
       }),
       React.createElement(Results, { results: this.props.results })
     );
@@ -30586,7 +30613,8 @@ var AboutYou = React.createClass({
           type: 'number',
           min: '1',
           value: this.props.aboutAnswers.age,
-          onChange: this.props.setAboutState }),
+          onChange: this.props.setAboutState,
+          error: this.props.errors.age }),
         React.createElement(
           'div',
           { className: 'gender' },
@@ -30601,7 +30629,8 @@ var AboutYou = React.createClass({
             label1: 'Male',
             value2: '2',
             label2: 'Female',
-            onChange: this.props.setAboutState })
+            onChange: this.props.setAboutState,
+            error: this.props.errors.gender })
         ),
         React.createElement(
           'div',
@@ -30612,7 +30641,8 @@ var AboutYou = React.createClass({
             type: 'number',
             min: '1',
             value: this.props.aboutAnswers.weight,
-            onChange: this.props.setAboutState }),
+            onChange: this.props.setAboutState,
+            error: this.props.errors.weight }),
           React.createElement(Radio, {
             group: 'weightUnit',
             value1: '1',
@@ -30633,14 +30663,16 @@ var AboutYou = React.createClass({
             min: '1',
             placeholder: this.props.lengthLarge,
             value: this.props.aboutAnswers.heightLarge,
-            onChange: this.props.setAboutState }),
+            onChange: this.props.setAboutState,
+            error: this.props.errors.heightLarge }),
           React.createElement(Input, {
             name: 'heightSmall',
             type: 'number',
             min: '0',
             placeholder: this.props.lengthSmall,
             value: this.props.aboutAnswers.heightSmall,
-            onChange: this.props.setAboutState }),
+            onChange: this.props.setAboutState,
+            error: this.props.errors.heightSmall }),
           React.createElement(Radio, {
             group: 'heightUnit',
             checked1: this.props.aboutAnswers.heightUnit === "1",
@@ -30654,7 +30686,7 @@ var AboutYou = React.createClass({
         React.createElement('hr', null),
         React.createElement(
           'button',
-          { className: 'btn btn-default next' },
+          { className: 'btn btn-default next', name: 'aboutAnswers', onClick: this.props.goNext },
           'Next'
         )
       )
@@ -30686,7 +30718,9 @@ var Form = React.createClass({
           lengthLarge: this.props.lengthLarge,
           lengthSmall: this.props.lengthSmall,
           aboutAnswers: this.props.aboutAnswers,
-          setAboutState: this.props.setAboutState
+          setAboutState: this.props.setAboutState,
+          goNext: this.props.goNext,
+          errors: this.props.errors
         }),
         React.createElement(AboutFood, null)
       )
