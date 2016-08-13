@@ -8,8 +8,6 @@ var Results = require('./results');
 var App = React.createClass({
   getInitialState: function() {
     return {
-      lengthLarge: 'ft',
-      lengthSmall: 'in',
       aboutAnswers: {
         heightUnit: '1',
         weightUnit: '1',
@@ -21,15 +19,6 @@ var App = React.createClass({
       },
       errors: {}
     };
-  },
-  onHeightChange: function(e) {
-    var selected = e.currentTarget.value;
-    if(selected === "1") {
-      this.setState({lengthLarge: 'ft', lengthSmall: 'in'});
-    } else {
-      this.setState({lengthLarge: 'm', lengthSmall: 'cm'});
-    }
-    this.setAboutState(e);
   },
   setAboutState: function(e) {
     var field = e.target.name;
@@ -44,7 +33,7 @@ var App = React.createClass({
     this.state.errors = {};
     for(var item in formSection) {
       if(formSection[item].length <= 0) {
-        this.state.errors[item] = "Please enter a response";
+        this.state.errors[item] = "Required";
         valid = false;
       }
     }
@@ -53,12 +42,12 @@ var App = React.createClass({
   },
 
   goNext: function(e) {
-    var sectionToValidate = e.target.name;
-    var valid = this.validateSection(sectionToValidate);
+    var sectionName = e.target.name;
+    var valid = this.validateSection(sectionName);
     if(!valid) {
       return;
     }
-    console.log("to the next section");
+    //show food card
   },
 
   render: function() {
@@ -66,8 +55,9 @@ var App = React.createClass({
       <div className="main container-fluid">
         <Header />
         <Form
-          lengthLarge={this.state.lengthLarge}
-          lengthSmall={this.state.lengthSmall}
+          max={this.state.aboutAnswers.heightUnit === "1" ? "12" : "100"}
+          lengthLarge={this.state.aboutAnswers.heightUnit === "1" ? "ft" : "m"}
+          lengthSmall={this.state.aboutAnswers.heightUnit === "1" ? "in" : "cm"}
           heightChange={this.onHeightChange}
           aboutAnswers={this.state.aboutAnswers}
           setAboutState={this.setAboutState}

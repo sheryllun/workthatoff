@@ -8,6 +8,7 @@ var Input = React.createClass({
     label: React.PropTypes.string,
     type: React.PropTypes.string.isRequired,
     min: React.PropTypes.string.isRequired,
+    max: React.PropTypes.string,
     onChange: React.PropTypes.func.isRequired,
     value: React.PropTypes.string,
     error: React.PropTypes.string,
@@ -26,10 +27,11 @@ var Input = React.createClass({
           name={this.props.name}
           type={this.props.type}
           min={this.props.min}
+          max={this.props.max}
           value={this.props.value}
           placeholder={this.props.placeholder}
           onChange={this.props.onChange} />
-          <div className="input">{this.props.error}</div>
+          <div className="error">{this.props.error}</div>
       </div>
       );
   }

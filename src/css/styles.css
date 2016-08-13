@@ -26,11 +26,24 @@ body {
   margin-left: 1em;
 }
 
+.error {
+  display: inline;
+  color: red;
+  font-size:  .7em;
+  font-style: italic;
+}
+
+input[type="number"].has-error {
+  border-color:  red;
+}
+
 .main-form, .results-main-col {
   position: relative;
   margin-top: 2em;
   padding: 0;
 }
+
+.btn-default { background-image: none; }
 
 .form-head {
   font-family: 'Dosis', sans-serif;
@@ -123,14 +136,15 @@ fieldset { display: inline;}
 }
 
 .about-you {
-  height: 390px;
+  height: 410px;
 }
 
-.about-you .questions input[type="number"], input[type="text"] {
+input[type="number"], input[type="text"] {
   width: 75px;
   border: 1px solid #ccc;
   border-radius: 3px;
   padding: 5px;
+  margin: 0 5px;
 }
 
 .weight { display: inline; }

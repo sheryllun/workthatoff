@@ -68,6 +68,7 @@ var AboutYou = React.createClass({
               name="heightSmall"
               type="number"
               min="0"
+              max={this.props.max}
               placeholder={this.props.lengthSmall}
               value={this.props.aboutAnswers.heightSmall}
               onChange={this.props.setAboutState}
@@ -77,7 +78,7 @@ var AboutYou = React.createClass({
                 group="heightUnit"
                 checked1={this.props.aboutAnswers.heightUnit === "1"}
                 checked2={this.props.aboutAnswers.heightUnit === "2"}
-                onChange={this.props.heightChange}
+                onChange={this.props.setAboutState}
                 value1="1"
                 label1="Feet"
                 value2="2"

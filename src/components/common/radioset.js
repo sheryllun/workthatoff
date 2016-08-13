@@ -29,7 +29,7 @@ var Radio = React.createClass({
               onChange={this.props.onChange}
               checked={this.props.checked2} />
           <label htmlFor={this.props.group}>{this.props.label2}</label>
-          <div className="input">{this.props.error}</div>
+          <div className="error">{this.props.error}</div>
         </fieldset>
       );
   }
