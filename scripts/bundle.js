@@ -30357,8 +30357,6 @@ var App = React.createClass({
 
   getInitialState: function () {
     return {
-      lengthLarge: 'ft',
-      lengthSmall: 'in',
       aboutAnswers: {
         heightUnit: '1',
         weightUnit: '1',
@@ -30370,15 +30368,6 @@ var App = React.createClass({
       },
       errors: {}
     };
-  },
-  onHeightChange: function (e) {
-    var selected = e.currentTarget.value;
-    if (selected === "1") {
-      this.setState({ lengthLarge: 'ft', lengthSmall: 'in' });
-    } else {
-      this.setState({ lengthLarge: 'm', lengthSmall: 'cm' });
-    }
-    this.setAboutState(e);
   },
   setAboutState: function (e) {
     var field = e.target.name;
@@ -30393,7 +30382,7 @@ var App = React.createClass({
     this.state.errors = {};
     for (var item in formSection) {
       if (formSection[item].length <= 0) {
-        this.state.errors[item] = "Please enter a response";
+        this.state.errors[item] = "Required";
         valid = false;
       }
     }
@@ -30402,12 +30391,12 @@ var App = React.createClass({
   },
 
   goNext: function (e) {
-    var sectionToValidate = e.target.name;
-    var valid = this.validateSection(sectionToValidate);
+    var sectionName = e.target.name;
+    var valid = this.validateSection(sectionName);
     if (!valid) {
       return;
     }
-    console.log("to the next section");
+    //show food card
   },
 
   render: function () {
@@ -30416,8 +30405,9 @@ var App = React.createClass({
       { className: 'main container-fluid' },
       React.createElement(Header, null),
       React.createElement(Form, {
-        lengthLarge: this.state.lengthLarge,
-        lengthSmall: this.state.lengthSmall,
+        max: this.state.aboutAnswers.heightUnit === "1" ? "12" : "100",
+        lengthLarge: this.state.aboutAnswers.heightUnit === "1" ? "ft" : "m",
+        lengthSmall: this.state.aboutAnswers.heightUnit === "1" ? "in" : "cm",
         heightChange: this.onHeightChange,
         aboutAnswers: this.state.aboutAnswers,
         setAboutState: this.setAboutState,
@@ -30476,7 +30466,7 @@ var Radio = React.createClass({
       ),
       React.createElement(
         "div",
-        { className: "input" },
+        { className: "error" },
         this.props.error
       )
     );
@@ -30498,6 +30488,7 @@ var Input = React.createClass({
     label: React.PropTypes.string,
     type: React.PropTypes.string.isRequired,
     min: React.PropTypes.string.isRequired,
+    max: React.PropTypes.string,
     onChange: React.PropTypes.func.isRequired,
     value: React.PropTypes.string,
     error: React.PropTypes.string,
@@ -30521,12 +30512,13 @@ var Input = React.createClass({
         name: this.props.name,
         type: this.props.type,
         min: this.props.min,
+        max: this.props.max,
         value: this.props.value,
         placeholder: this.props.placeholder,
         onChange: this.props.onChange }),
       React.createElement(
         'div',
-        { className: 'input' },
+        { className: 'error' },
         this.props.error
       )
     );
@@ -30669,6 +30661,7 @@ var AboutYou = React.createClass({
             name: 'heightSmall',
             type: 'number',
             min: '0',
+            max: this.props.max,
             placeholder: this.props.lengthSmall,
             value: this.props.aboutAnswers.heightSmall,
             onChange: this.props.setAboutState,
@@ -30677,7 +30670,7 @@ var AboutYou = React.createClass({
             group: 'heightUnit',
             checked1: this.props.aboutAnswers.heightUnit === "1",
             checked2: this.props.aboutAnswers.heightUnit === "2",
-            onChange: this.props.heightChange,
+            onChange: this.props.setAboutState,
             value1: '1',
             label1: 'Feet',
             value2: '2',
@@ -30714,7 +30707,7 @@ var Form = React.createClass({
         'div',
         { className: 'main-form col-xs-12 col-sm-8 col-sm-push-2' },
         React.createElement(AboutYou, {
-          heightChange: this.props.heightChange,
+          max: this.props.max,
           lengthLarge: this.props.lengthLarge,
           lengthSmall: this.props.lengthSmall,
           aboutAnswers: this.props.aboutAnswers,
