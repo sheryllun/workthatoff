@@ -15,8 +15,12 @@ var AboutFood = React.createClass({
           <div className="questions">
             <div className="holder">
               <p>Start typing to search for a food.  Add up to 5 items.</p>
-              <input name="food-item" type="text" onChange={this.props.searchFood} />
-              <SearchList searchList={searchList} />
+              <input name="food-item" type="text" onChange={this.props.searchFood} value={this.props.searchedText}/>
+              <input type="number" placeholder="servings" />
+              <span className="glyphicon glyphicon-plus"></span>
+              <SearchList
+                selectFood={this.props.selectFood}
+                searchList={searchList} />
             </div>
             <hr />
             <button className="btn btn-default back">Back</button>

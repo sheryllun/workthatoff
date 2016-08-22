@@ -168,7 +168,7 @@ input[type="radio"] {
 }
 
 input[type="text"] {
-  width: 80%;
+  width: 65%;
 }
 
 button.next {
@@ -185,7 +185,7 @@ button.next {
   background:  white;
   border-bottom: 1px solid #ccc;
   list-style-type: none;
-  width: 80%;
+  width: 65%;
   padding: 5px;
   cursor: pointer;
 }

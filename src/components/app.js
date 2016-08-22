@@ -17,8 +17,11 @@ var App = React.createClass({
         heightLarge: '',
         heightSmall: ''
       },
-      foodList: {},
+      calorieCount: [],
       searchList: [],
+      searchedText: '',
+      searchedCals: '',
+      servingsText: '',
       errors: {}
     };
   },
@@ -54,6 +57,8 @@ var App = React.createClass({
 
   searchFood: function(e) {
     var search = e.target.value;
+    this.setState({searchedText: search});
+
     if(search.length < 2) {
       this.setState({searchList: []});
       return;
@@ -71,7 +76,6 @@ var App = React.createClass({
       success: (function(data) {
         if(data.hits.length > 0) {
           var food = data.hits;
-          console.log(food);
           for(var i = 0; i < food.length; i++) {
             this.state.searchList[i] = {
               name: food[i].fields.brand_name + ' ' + food[i].fields.item_name,
@@ -89,9 +93,17 @@ var App = React.createClass({
       }
     });
   },
-
-  selectFood: function() {
-
+  selectFood: function(e) {
+    var select = e.target.textContent;
+    var calories = e.target.getAttribute('data-cals');
+    this.setState({
+      searchedText: select,
+      searchedCals: calories,
+      searchList: []
+    });
+  },
+  addToList: function() {
+    
   },
 
   render: function() {
@@ -108,6 +120,8 @@ var App = React.createClass({
           errors={this.state.errors}
           searchFood={this.searchFood}
           searchList={this.state.searchList}
+          selectFood={this.selectFood}
+          searchedText={this.state.searchedText}
         />
         <Results results={this.props.results} />
       </div>
