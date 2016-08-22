@@ -30366,6 +30366,8 @@ var App = React.createClass({
         heightLarge: '',
         heightSmall: ''
       },
+      foodList: {},
+      searchList: [],
       errors: {}
     };
   },
@@ -30399,6 +30401,46 @@ var App = React.createClass({
     //show food card
   },
 
+  searchFood: function (e) {
+    var search = e.target.value;
+    if (search.length < 2) {
+      this.setState({ searchList: [] });
+      return;
+    }
+    var params = {
+      results: '0:10',
+      fields: '*',
+      appKey: '0fb276d93ce6f301cb6c0654e8a7206e',
+      appId: 'b898ecf9'
+    };
+
+    $.ajax({
+      url: 'https://api.nutritionix.com/v1_1/search/' + search,
+      data: params,
+      success: function (data) {
+        if (data.hits.length > 0) {
+          var food = data.hits;
+          console.log(food);
+          for (var i = 0; i < food.length; i++) {
+            this.state.searchList[i] = {
+              name: food[i].fields.brand_name + ' ' + food[i].fields.item_name,
+              calories: food[i].fields.nf_calories.toFixed(),
+              quantity: food[i].fields.nf_serving_size_qty,
+              unit: food[i].fields.nf_serving_size_unit,
+              id: food[i]._id
+            };
+          }
+          this.setState({ searchList: this.state.searchList });
+        }
+      }.bind(this),
+      error: function () {
+        console.log('error');
+      }
+    });
+  },
+
+  selectFood: function () {},
+
   render: function () {
     return React.createElement(
       'div',
@@ -30408,11 +30450,12 @@ var App = React.createClass({
         max: this.state.aboutAnswers.heightUnit === "1" ? "12" : "100",
         lengthLarge: this.state.aboutAnswers.heightUnit === "1" ? "ft" : "m",
         lengthSmall: this.state.aboutAnswers.heightUnit === "1" ? "in" : "cm",
-        heightChange: this.onHeightChange,
         aboutAnswers: this.state.aboutAnswers,
         setAboutState: this.setAboutState,
         goNext: this.goNext,
-        errors: this.state.errors
+        errors: this.state.errors,
+        searchFood: this.searchFood,
+        searchList: this.state.searchList
       }),
       React.createElement(Results, { results: this.props.results })
     );
@@ -30421,7 +30464,7 @@ var App = React.createClass({
 
 module.exports = App;
 
-},{"./form/formMain":176,"./header":177,"./results":178,"react":170}],172:[function(require,module,exports){
+},{"./form/formMain":176,"./header":178,"./results":179,"react":170}],172:[function(require,module,exports){
 "use strict";
 
 var React = require('react');
@@ -30531,43 +30574,46 @@ module.exports = Input;
 "use strict";
 
 var React = require('react');
+var SearchList = require('./searchList');
 
 var AboutFood = React.createClass({
-  displayName: "AboutFood",
+  displayName: 'AboutFood',
 
   render: function () {
+    var searchList = this.props.searchList;
     return React.createElement(
-      "div",
-      { className: "about-food" },
+      'div',
+      { className: 'about-food' },
       React.createElement(
-        "div",
-        { className: "form-head" },
-        React.createElement("span", { className: "glyphicon glyphicon-cutlery" }),
-        "  About What You Ate"
+        'div',
+        { className: 'form-head' },
+        React.createElement('span', { className: 'glyphicon glyphicon-cutlery' }),
+        '  About What You Ate'
       ),
       React.createElement(
-        "div",
-        { className: "questions" },
+        'div',
+        { className: 'questions' },
         React.createElement(
-          "div",
-          { className: "holder" },
+          'div',
+          { className: 'holder' },
           React.createElement(
-            "p",
+            'p',
             null,
-            "Start typing to search for a food.  Add up to 5 items."
+            'Start typing to search for a food.  Add up to 5 items.'
           ),
-          React.createElement("input", { name: "food-item", type: "text" })
+          React.createElement('input', { name: 'food-item', type: 'text', onChange: this.props.searchFood }),
+          React.createElement(SearchList, { searchList: searchList })
         ),
-        React.createElement("hr", null),
+        React.createElement('hr', null),
         React.createElement(
-          "button",
-          { className: "btn btn-default back" },
-          "Back"
+          'button',
+          { className: 'btn btn-default back' },
+          'Back'
         ),
         React.createElement(
-          "button",
-          { className: "btn btn-default next" },
-          "Calculate!"
+          'button',
+          { className: 'btn btn-default next' },
+          'Calculate!'
         )
       )
     );
@@ -30576,7 +30622,7 @@ var AboutFood = React.createClass({
 
 module.exports = AboutFood;
 
-},{"react":170}],175:[function(require,module,exports){
+},{"./searchList":177,"react":170}],175:[function(require,module,exports){
 "use strict";
 
 var React = require('react');
@@ -30715,7 +30761,10 @@ var Form = React.createClass({
           goNext: this.props.goNext,
           errors: this.props.errors
         }),
-        React.createElement(AboutFood, null)
+        React.createElement(AboutFood, {
+          searchFood: this.props.searchFood,
+          searchList: this.props.searchList
+        })
       )
     );
   }
@@ -30724,6 +30773,45 @@ var Form = React.createClass({
 module.exports = Form;
 
 },{"./aboutFood":174,"./aboutYou":175,"react":170}],177:[function(require,module,exports){
+"use strict";
+
+var React = require('react');
+
+var SearchItem = React.createClass({
+  displayName: "SearchItem",
+
+  render: function () {
+    return React.createElement(
+      "li",
+      { className: "" },
+      this.props.food.name,
+      ", ",
+      this.props.food.quantity,
+      " ",
+      this.props.food.unit
+    );
+  }
+});
+
+var SearchList = React.createClass({
+  displayName: "SearchList",
+
+  render: function () {
+    var rows = [];
+    this.props.searchList.forEach(function (food) {
+      rows.push(React.createElement(SearchItem, { food: food, key: food.id }));
+    });
+    return React.createElement(
+      "ul",
+      { className: "search-list" },
+      rows
+    );
+  }
+});
+
+module.exports = SearchList;
+
+},{"react":170}],178:[function(require,module,exports){
 "use strict";
 
 var React = require('react');
@@ -30755,7 +30843,7 @@ var Header = React.createClass({
 
 module.exports = Header;
 
-},{"react":170}],178:[function(require,module,exports){
+},{"react":170}],179:[function(require,module,exports){
 "use strict";
 
 var React = require('react');
@@ -30815,7 +30903,7 @@ var Results = React.createClass({
 
 module.exports = Results;
 
-},{"react":170}],179:[function(require,module,exports){
+},{"react":170}],180:[function(require,module,exports){
 $ = jQuery = require('jquery'); //requiring jquery in the global namespace for bootstrap
 var React = require('react');
 var ReactDOM = require('react-dom');
@@ -30825,4 +30913,4 @@ var RESULTS = [{ activity: "Walking, 2.5 mi/hr", time: 120 }, { activity: "Snowb
 
 ReactDOM.render(React.createElement(App, { results: RESULTS }), document.getElementById('app'));
 
-},{"./components/app":171,"jquery":2,"react":170,"react-dom":3}]},{},[179]);
+},{"./components/app":171,"jquery":2,"react":170,"react-dom":3}]},{},[180]);

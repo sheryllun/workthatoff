@@ -18,7 +18,10 @@ var Form = React.createClass({
             goNext={this.props.goNext}
             errors={this.props.errors}
           />
-          <AboutFood />
+          <AboutFood
+            searchFood={this.props.searchFood}
+            searchList={this.props.searchList}
+          />
         </div>
       </div>
       );
