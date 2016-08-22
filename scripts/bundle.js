@@ -30366,8 +30366,11 @@ var App = React.createClass({
         heightLarge: '',
         heightSmall: ''
       },
-      foodList: {},
+      calorieCount: [],
       searchList: [],
+      searchedText: '',
+      searchedCals: '',
+      servingsText: '',
       errors: {}
     };
   },
@@ -30403,6 +30406,8 @@ var App = React.createClass({
 
   searchFood: function (e) {
     var search = e.target.value;
+    this.setState({ searchedText: search });
+
     if (search.length < 2) {
       this.setState({ searchList: [] });
       return;
@@ -30420,7 +30425,6 @@ var App = React.createClass({
       success: function (data) {
         if (data.hits.length > 0) {
           var food = data.hits;
-          console.log(food);
           for (var i = 0; i < food.length; i++) {
             this.state.searchList[i] = {
               name: food[i].fields.brand_name + ' ' + food[i].fields.item_name,
@@ -30438,8 +30442,16 @@ var App = React.createClass({
       }
     });
   },
-
-  selectFood: function () {},
+  selectFood: function (e) {
+    var select = e.target.textContent;
+    var calories = e.target.getAttribute('data-cals');
+    this.setState({
+      searchedText: select,
+      searchedCals: calories,
+      searchList: []
+    });
+  },
+  addToList: function () {},
 
   render: function () {
     return React.createElement(
@@ -30455,7 +30467,9 @@ var App = React.createClass({
         goNext: this.goNext,
         errors: this.state.errors,
         searchFood: this.searchFood,
-        searchList: this.state.searchList
+        searchList: this.state.searchList,
+        selectFood: this.selectFood,
+        searchedText: this.state.searchedText
       }),
       React.createElement(Results, { results: this.props.results })
     );
@@ -30601,8 +30615,12 @@ var AboutFood = React.createClass({
             null,
             'Start typing to search for a food.  Add up to 5 items.'
           ),
-          React.createElement('input', { name: 'food-item', type: 'text', onChange: this.props.searchFood }),
-          React.createElement(SearchList, { searchList: searchList })
+          React.createElement('input', { name: 'food-item', type: 'text', onChange: this.props.searchFood, value: this.props.searchedText }),
+          React.createElement('input', { type: 'number', placeholder: 'servings' }),
+          React.createElement('span', { className: 'glyphicon glyphicon-plus' }),
+          React.createElement(SearchList, {
+            selectFood: this.props.selectFood,
+            searchList: searchList })
         ),
         React.createElement('hr', null),
         React.createElement(
@@ -30763,7 +30781,9 @@ var Form = React.createClass({
         }),
         React.createElement(AboutFood, {
           searchFood: this.props.searchFood,
-          searchList: this.props.searchList
+          searchList: this.props.searchList,
+          selectFood: this.props.selectFood,
+          searchedText: this.props.searchedText
         })
       )
     );
@@ -30783,7 +30803,7 @@ var SearchItem = React.createClass({
   render: function () {
     return React.createElement(
       "li",
-      { className: "" },
+      { onClick: this.props.selectFood, "data-cals": this.props.food.calories },
       this.props.food.name,
       ", ",
       this.props.food.quantity,
@@ -30797,9 +30817,10 @@ var SearchList = React.createClass({
   displayName: "SearchList",
 
   render: function () {
+    var selectFood = this.props.selectFood;
     var rows = [];
     this.props.searchList.forEach(function (food) {
-      rows.push(React.createElement(SearchItem, { food: food, key: food.id }));
+      rows.push(React.createElement(SearchItem, { food: food, key: food.id, selectFood: selectFood }));
     });
     return React.createElement(
       "ul",
