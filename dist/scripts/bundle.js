@@ -30457,7 +30457,6 @@ var App = React.createClass({
   },
   addToFoodList: function () {
     if (this.state.servingsText.length <= 0) {
-      console.log('error');
       return;
     }
     var addedFood = {
@@ -30465,8 +30464,11 @@ var App = React.createClass({
       calories: parseInt(this.state.searchedCals),
       servings: parseInt(this.state.servingsText)
     };
-    addedFood.totalCalories = addedFood.calories * addedFood.servings;
-    this.setState({ foodList: this.state.foodList.concat([addedFood]) });
+    this.setState({
+      foodList: this.state.foodList.concat([addedFood]),
+      searchedText: '',
+      servingsText: ''
+    });
   },
 
   render: function () {
@@ -30488,7 +30490,8 @@ var App = React.createClass({
         servingsText: this.state.servingsText,
         setServings: this.setServings,
         searchedText: this.state.searchedText,
-        addToFoodList: this.addToFoodList
+        addToFoodList: this.addToFoodList,
+        foodList: this.state.foodList
       }),
       React.createElement(Results, { results: this.props.results })
     );
@@ -30497,7 +30500,7 @@ var App = React.createClass({
 
 module.exports = App;
 
-},{"./form/formMain":176,"./header":178,"./results":179,"react":170}],172:[function(require,module,exports){
+},{"./form/formMain":177,"./header":179,"./results":180,"react":170}],172:[function(require,module,exports){
 "use strict";
 
 var React = require('react');
@@ -30608,6 +30611,7 @@ module.exports = Input;
 
 var React = require('react');
 var SearchList = require('./searchList');
+var FoodList = require('./foodList');
 
 var AboutFood = React.createClass({
   displayName: 'AboutFood',
@@ -30639,7 +30643,9 @@ var AboutFood = React.createClass({
           React.createElement('span', { className: 'glyphicon glyphicon-plus', onClick: this.props.addToFoodList }),
           React.createElement(SearchList, {
             selectFood: this.props.selectFood,
-            searchList: searchList })
+            searchList: searchList }),
+          React.createElement(FoodList, {
+            foodList: this.props.foodList })
         ),
         React.createElement('hr', null),
         React.createElement(
@@ -30659,7 +30665,7 @@ var AboutFood = React.createClass({
 
 module.exports = AboutFood;
 
-},{"./searchList":177,"react":170}],175:[function(require,module,exports){
+},{"./foodList":176,"./searchList":178,"react":170}],175:[function(require,module,exports){
 "use strict";
 
 var React = require('react');
@@ -30776,6 +30782,51 @@ module.exports = AboutYou;
 "use strict";
 
 var React = require('react');
+
+var FoodItem = React.createClass({
+  displayName: 'FoodItem',
+
+  render: function () {
+    var item = this.props.food;
+    var totalCals = item.servings * item.calories;
+
+    return React.createElement(
+      'div',
+      { className: 'food-item' },
+      item.name,
+      React.createElement('br', null),
+      ' ',
+      item.servings,
+      ' servings, ',
+      totalCals,
+      ' total calories'
+    );
+  }
+});
+
+var FoodList = React.createClass({
+  displayName: 'FoodList',
+
+  render: function () {
+    var foodList = this.props.foodList;
+    var rows = [];
+    foodList.forEach(function (food) {
+      rows.push(React.createElement(FoodItem, { food: food }));
+    });
+    return React.createElement(
+      'div',
+      { className: 'list-of-food' },
+      rows
+    );
+  }
+});
+
+module.exports = FoodList;
+
+},{"react":170}],177:[function(require,module,exports){
+"use strict";
+
+var React = require('react');
 var AboutYou = require('./aboutYou');
 var AboutFood = require('./aboutFood');
 
@@ -30805,7 +30856,8 @@ var Form = React.createClass({
           servingsText: this.props.servingsText,
           setServings: this.props.setServings,
           searchedText: this.props.searchedText,
-          addToFoodList: this.props.addToFoodList
+          addToFoodList: this.props.addToFoodList,
+          foodList: this.props.foodList
         })
       )
     );
@@ -30814,7 +30866,7 @@ var Form = React.createClass({
 
 module.exports = Form;
 
-},{"./aboutFood":174,"./aboutYou":175,"react":170}],177:[function(require,module,exports){
+},{"./aboutFood":174,"./aboutYou":175,"react":170}],178:[function(require,module,exports){
 "use strict";
 
 var React = require('react');
@@ -30854,7 +30906,7 @@ var SearchList = React.createClass({
 
 module.exports = SearchList;
 
-},{"react":170}],178:[function(require,module,exports){
+},{"react":170}],179:[function(require,module,exports){
 "use strict";
 
 var React = require('react');
@@ -30886,7 +30938,7 @@ var Header = React.createClass({
 
 module.exports = Header;
 
-},{"react":170}],179:[function(require,module,exports){
+},{"react":170}],180:[function(require,module,exports){
 "use strict";
 
 var React = require('react');
@@ -30946,7 +30998,7 @@ var Results = React.createClass({
 
 module.exports = Results;
 
-},{"react":170}],180:[function(require,module,exports){
+},{"react":170}],181:[function(require,module,exports){
 $ = jQuery = require('jquery'); //requiring jquery in the global namespace for bootstrap
 var React = require('react');
 var ReactDOM = require('react-dom');
@@ -30956,4 +31008,4 @@ var RESULTS = [{ activity: "Walking, 2.5 mi/hr", time: 120 }, { activity: "Snowb
 
 ReactDOM.render(React.createElement(App, { results: RESULTS }), document.getElementById('app'));
 
-},{"./components/app":171,"jquery":2,"react":170,"react-dom":3}]},{},[180]);
+},{"./components/app":171,"jquery":2,"react":170,"react-dom":3}]},{},[181]);

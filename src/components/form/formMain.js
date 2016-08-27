@@ -26,6 +26,7 @@ var Form = React.createClass({
             setServings={this.props.setServings}
             searchedText={this.props.searchedText}
             addToFoodList={this.props.addToFoodList}
+            foodList={this.props.foodList}
           />
         </div>
       </div>

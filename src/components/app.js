@@ -108,7 +108,6 @@ var App = React.createClass({
   },
   addToFoodList: function() {
     if(this.state.servingsText.length <= 0) {
-      console.log('error');
       return;
     }
     var addedFood = {
@@ -116,8 +115,11 @@ var App = React.createClass({
       calories: parseInt(this.state.searchedCals),
       servings: parseInt(this.state.servingsText)
     };
-    addedFood.totalCalories = addedFood.calories * addedFood.servings;
-    this.setState({foodList: this.state.foodList.concat([addedFood])});
+    this.setState({
+      foodList: this.state.foodList.concat([addedFood]), 
+      searchedText: '', 
+      servingsText: ''
+    });
   },
 
   render: function() {
@@ -139,6 +141,7 @@ var App = React.createClass({
           setServings={this.setServings}
           searchedText={this.state.searchedText}
           addToFoodList={this.addToFoodList}
+          foodList={this.state.foodList}
         />
         <Results results={this.props.results} />
       </div>

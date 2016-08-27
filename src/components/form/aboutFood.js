@@ -2,6 +2,7 @@
 
 var React = require('react');
 var SearchList = require('./searchList');
+var FoodList = require('./foodList');
 
 var AboutFood = React.createClass({
   render: function() {
@@ -21,6 +22,8 @@ var AboutFood = React.createClass({
               <SearchList
                 selectFood={this.props.selectFood}
                 searchList={searchList} />
+              <FoodList
+                foodList={this.props.foodList} />
             </div>
             <hr />
             <button className="btn btn-default back">Back</button>
