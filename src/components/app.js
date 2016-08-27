@@ -17,7 +17,7 @@ var App = React.createClass({
         heightLarge: '',
         heightSmall: ''
       },
-      calorieCount: [],
+      foodList: [],
       searchList: [],
       searchedText: '',
       searchedCals: '',
@@ -102,8 +102,22 @@ var App = React.createClass({
       searchList: []
     });
   },
-  addToList: function() {
-    
+  setServings: function(e) {
+    var value = e.target.value;
+    this.setState({servingsText: value});
+  },
+  addToFoodList: function() {
+    if(this.state.servingsText.length <= 0) {
+      console.log('error');
+      return;
+    }
+    var addedFood = {
+      name: this.state.searchedText,
+      calories: parseInt(this.state.searchedCals),
+      servings: parseInt(this.state.servingsText)
+    };
+    addedFood.totalCalories = addedFood.calories * addedFood.servings;
+    this.setState({foodList: this.state.foodList.concat([addedFood])});
   },
 
   render: function() {
@@ -121,7 +135,10 @@ var App = React.createClass({
           searchFood={this.searchFood}
           searchList={this.state.searchList}
           selectFood={this.selectFood}
+          servingsText={this.state.servingsText}
+          setServings={this.setServings}
           searchedText={this.state.searchedText}
+          addToFoodList={this.addToFoodList}
         />
         <Results results={this.props.results} />
       </div>

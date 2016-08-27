@@ -30366,7 +30366,7 @@ var App = React.createClass({
         heightLarge: '',
         heightSmall: ''
       },
-      calorieCount: [],
+      foodList: [],
       searchList: [],
       searchedText: '',
       searchedCals: '',
@@ -30451,7 +30451,23 @@ var App = React.createClass({
       searchList: []
     });
   },
-  addToList: function () {},
+  setServings: function (e) {
+    var value = e.target.value;
+    this.setState({ servingsText: value });
+  },
+  addToFoodList: function () {
+    if (this.state.servingsText.length <= 0) {
+      console.log('error');
+      return;
+    }
+    var addedFood = {
+      name: this.state.searchedText,
+      calories: parseInt(this.state.searchedCals),
+      servings: parseInt(this.state.servingsText)
+    };
+    addedFood.totalCalories = addedFood.calories * addedFood.servings;
+    this.setState({ foodList: this.state.foodList.concat([addedFood]) });
+  },
 
   render: function () {
     return React.createElement(
@@ -30469,7 +30485,10 @@ var App = React.createClass({
         searchFood: this.searchFood,
         searchList: this.state.searchList,
         selectFood: this.selectFood,
-        searchedText: this.state.searchedText
+        servingsText: this.state.servingsText,
+        setServings: this.setServings,
+        searchedText: this.state.searchedText,
+        addToFoodList: this.addToFoodList
       }),
       React.createElement(Results, { results: this.props.results })
     );
@@ -30616,8 +30635,8 @@ var AboutFood = React.createClass({
             'Start typing to search for a food.  Add up to 5 items.'
           ),
           React.createElement('input', { name: 'food-item', type: 'text', onChange: this.props.searchFood, value: this.props.searchedText }),
-          React.createElement('input', { type: 'number', placeholder: 'servings' }),
-          React.createElement('span', { className: 'glyphicon glyphicon-plus' }),
+          React.createElement('input', { type: 'number', placeholder: 'servings', onChange: this.props.setServings, value: this.props.servingsText }),
+          React.createElement('span', { className: 'glyphicon glyphicon-plus', onClick: this.props.addToFoodList }),
           React.createElement(SearchList, {
             selectFood: this.props.selectFood,
             searchList: searchList })
@@ -30783,7 +30802,10 @@ var Form = React.createClass({
           searchFood: this.props.searchFood,
           searchList: this.props.searchList,
           selectFood: this.props.selectFood,
-          searchedText: this.props.searchedText
+          servingsText: this.props.servingsText,
+          setServings: this.props.setServings,
+          searchedText: this.props.searchedText,
+          addToFoodList: this.props.addToFoodList
         })
       )
     );
