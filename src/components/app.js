@@ -21,6 +21,7 @@ var App = React.createClass({
       searchList: [],
       searchedText: '',
       searchedCals: '',
+      searchedId: '',
       servingsText: '',
       errors: {}
     };
@@ -96,9 +97,11 @@ var App = React.createClass({
   selectFood: function(e) {
     var select = e.target.textContent;
     var calories = e.target.getAttribute('data-cals');
+    var id = e.target.getAttribute('data-id');
     this.setState({
       searchedText: select,
       searchedCals: calories,
+      searchedId: id,
       searchList: []
     });
   },
@@ -113,11 +116,13 @@ var App = React.createClass({
     var addedFood = {
       name: this.state.searchedText,
       calories: parseInt(this.state.searchedCals),
-      servings: parseInt(this.state.servingsText)
+      servings: parseInt(this.state.servingsText),
+      id: this.state.searchedId
     };
     this.setState({
-      foodList: this.state.foodList.concat([addedFood]), 
-      searchedText: '', 
+      foodList: this.state.foodList.concat([addedFood]),
+      searchedText: '',
+      searchedId: '',
       servingsText: ''
     });
   },

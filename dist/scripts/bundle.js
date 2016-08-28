@@ -30370,6 +30370,7 @@ var App = React.createClass({
       searchList: [],
       searchedText: '',
       searchedCals: '',
+      searchedId: '',
       servingsText: '',
       errors: {}
     };
@@ -30445,9 +30446,11 @@ var App = React.createClass({
   selectFood: function (e) {
     var select = e.target.textContent;
     var calories = e.target.getAttribute('data-cals');
+    var id = e.target.getAttribute('data-id');
     this.setState({
       searchedText: select,
       searchedCals: calories,
+      searchedId: id,
       searchList: []
     });
   },
@@ -30462,11 +30465,13 @@ var App = React.createClass({
     var addedFood = {
       name: this.state.searchedText,
       calories: parseInt(this.state.searchedCals),
-      servings: parseInt(this.state.servingsText)
+      servings: parseInt(this.state.servingsText),
+      id: this.state.searchedId
     };
     this.setState({
       foodList: this.state.foodList.concat([addedFood]),
       searchedText: '',
+      searchedId: '',
       servingsText: ''
     });
   },
@@ -30789,17 +30794,17 @@ var FoodItem = React.createClass({
   render: function () {
     var item = this.props.food;
     var totalCals = item.servings * item.calories;
-
     return React.createElement(
       'div',
-      { className: 'food-item' },
+      { className: 'food-item', 'data-id': item.id },
       item.name,
       React.createElement('br', null),
       ' ',
       item.servings,
       ' servings, ',
       totalCals,
-      ' total calories'
+      ' total calories',
+      React.createElement('span', { className: 'glyphicon glyphicon-remove' })
     );
   }
 });
@@ -30810,8 +30815,8 @@ var FoodList = React.createClass({
   render: function () {
     var foodList = this.props.foodList;
     var rows = [];
-    foodList.forEach(function (food) {
-      rows.push(React.createElement(FoodItem, { food: food }));
+    foodList.forEach(function (food, i) {
+      rows.push(React.createElement(FoodItem, { food: food, key: i }));
     });
     return React.createElement(
       'div',
@@ -30877,7 +30882,7 @@ var SearchItem = React.createClass({
   render: function () {
     return React.createElement(
       "li",
-      { onClick: this.props.selectFood, "data-cals": this.props.food.calories },
+      { onClick: this.props.selectFood, "data-cals": this.props.food.calories, "data-id": this.props.food.id },
       this.props.food.name,
       ", ",
       this.props.food.quantity,

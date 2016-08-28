@@ -5,7 +5,7 @@ var React = require('react');
 var SearchItem = React.createClass({
   render: function() {
     return (
-      <li onClick={this.props.selectFood} data-cals={this.props.food.calories}>
+      <li onClick={this.props.selectFood} data-cals={this.props.food.calories} data-id={this.props.food.id}>
         {this.props.food.name}, {this.props.food.quantity} {this.props.food.unit}
       </li>
     );
