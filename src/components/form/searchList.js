@@ -4,9 +4,10 @@ var React = require('react');
 
 var SearchItem = React.createClass({
   render: function() {
+    var food = this.props.food;
     return (
-      <li onClick={this.props.selectFood} data-cals={this.props.food.calories} data-id={this.props.food.id}>
-        {this.props.food.name}, {this.props.food.quantity} {this.props.food.unit}
+      <li onClick={this.props.selectFood.bind(null, food)} data-cals={food.calories} data-id={food.id}>
+        {food.name}, {food.quantity} {food.unit}
       </li>
     );
   }

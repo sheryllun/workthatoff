@@ -19,9 +19,8 @@ var App = React.createClass({
       },
       foodList: [],
       searchList: [],
+      tempSelection: {},
       searchedText: '',
-      searchedCals: '',
-      searchedId: '',
       servingsText: '',
       errors: {}
     };
@@ -83,7 +82,8 @@ var App = React.createClass({
               calories: (food[i].fields.nf_calories).toFixed(),
               quantity: food[i].fields.nf_serving_size_qty,
               unit: food[i].fields.nf_serving_size_unit,
-              id: food[i]._id
+              id: food[i]._id,
+              servings: 1
             };
           }
           this.setState({searchList: this.state.searchList});
@@ -94,15 +94,18 @@ var App = React.createClass({
       }
     });
   },
-  selectFood: function(e) {
-    var select = e.target.textContent;
-    var calories = e.target.getAttribute('data-cals');
-    var id = e.target.getAttribute('data-id');
+  selectFood: function(item) {
     this.setState({
-      searchedText: select,
-      searchedCals: calories,
-      searchedId: id,
-      searchList: []
+      tempSelection: {
+        name: item.name,
+        id: item.id,
+        calories: item.calories,
+        quantity: item.quantity,
+        unit: item.unit,
+        servings: item.servings
+      },
+      searchList: [],
+      searchedText: item.name
     });
   },
   setServings: function(e) {
@@ -113,14 +116,13 @@ var App = React.createClass({
     if(this.state.servingsText.length <= 0) {
       return;
     }
-    var addedFood = {
-      name: this.state.searchedText,
-      calories: parseInt(this.state.searchedCals),
-      servings: parseInt(this.state.servingsText),
-      id: this.state.searchedId
-    };
+
+    this.state.tempSelection.servings = this.state.servingsText;
+    this.forceUpdate();
+
     this.setState({
-      foodList: this.state.foodList.concat([addedFood]),
+      foodList: this.state.foodList.concat([this.state.tempSelection]),
+      tempSelection: {},
       searchedText: '',
       searchedId: '',
       servingsText: ''
