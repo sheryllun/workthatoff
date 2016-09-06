@@ -4,6 +4,7 @@ var React = require('react');
 var Header = require('./header');
 var Form = require('./form/formMain');
 var Results = require('./results');
+var update = require('react-addons-update');
 
 var App = React.createClass({
   getInitialState: function() {
@@ -113,19 +114,22 @@ var App = React.createClass({
     this.setState({servingsText: value});
   },
   addToFoodList: function() {
-    if(this.state.servingsText.length <= 0) {
+    var servings = this.state.servingsText;
+    if(servings.length <= 0) {
+      console.log("Please enter number of servings");
       return;
     }
 
-    this.state.tempSelection.servings = this.state.servingsText;
-    this.forceUpdate();
-
     this.setState({
-      foodList: this.state.foodList.concat([this.state.tempSelection]),
-      tempSelection: {},
-      searchedText: '',
-      searchedId: '',
-      servingsText: ''
+      tempSelection: update(this.state.tempSelection, {servings: {$set: servings}})
+    }, function() { 
+      this.setState({
+        foodList: this.state.foodList.concat([this.state.tempSelection]),
+        tempSelection: {},
+        searchedText: '',
+        searchedId: '',
+        servingsText: ''
+      });
     });
   },
 
