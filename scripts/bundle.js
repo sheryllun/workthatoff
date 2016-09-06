@@ -30586,7 +30586,7 @@ var App = React.createClass({
       console.log("Please enter number of servings");
       return;
     }
-
+    //use react addons update to manage the nested servings property of tempSelection, then update the rest of the state in a callback function
     this.setState({
       tempSelection: update(this.state.tempSelection, { servings: { $set: servings } })
     }, function () {
