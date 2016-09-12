@@ -16,9 +16,9 @@ var AboutFood = React.createClass({
           <div className="questions">
             <div className="holder">
               <p>Start typing to search for a food.  Add up to 5 items.</p>
-              <input name="food-item" type="text" onChange={this.props.searchFood} value={this.props.searchedText}/>
-              <input type="number" placeholder="servings" onChange={this.props.setServings} value={this.props.servingsText} />
-              <span className="glyphicon glyphicon-plus" onClick={this.props.addToFoodList}></span>
+              <input name="food-item" type="text" onChange={this.props.searchFood} value={this.props.searchedText} disabled={this.props.foodList.length >= 5}/>
+              <input type="number" placeholder="servings" onChange={this.props.setServings} value={this.props.servingsText} disabled={this.props.foodList.length >= 5}/>
+              <span className={"glyphicon glyphicon-plus " + (this.props.foodList.length >= 5 ? "hidden" : "")} onClick={this.props.addToFoodList}></span>
               <SearchList
                 selectFood={this.props.selectFood}
                 searchList={searchList} />

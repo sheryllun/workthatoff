@@ -7,9 +7,10 @@ var FoodItem = React.createClass({
     var item = this.props.food;
     var index = this.props.index;
     var totalCals = item.servings * item.calories;
+    var serveUnit = (item.servings === "1") ? "serving" : "servings";
     return(
       <div className='food-item' data-id={item.id}>
-        {item.name}<br /> {item.servings} servings, {totalCals} total calories
+        {item.name}<br /> {item.servings} {serveUnit}, {totalCals} total calories
         <span className="glyphicon glyphicon-remove" onClick={this.props.removeFromFoodList.bind(null, index)}></span>
       </div>
       );

@@ -30775,9 +30775,9 @@ var AboutFood = React.createClass({
             null,
             'Start typing to search for a food.  Add up to 5 items.'
           ),
-          React.createElement('input', { name: 'food-item', type: 'text', onChange: this.props.searchFood, value: this.props.searchedText }),
-          React.createElement('input', { type: 'number', placeholder: 'servings', onChange: this.props.setServings, value: this.props.servingsText }),
-          React.createElement('span', { className: 'glyphicon glyphicon-plus', onClick: this.props.addToFoodList }),
+          React.createElement('input', { name: 'food-item', type: 'text', onChange: this.props.searchFood, value: this.props.searchedText, disabled: this.props.foodList.length >= 5 }),
+          React.createElement('input', { type: 'number', placeholder: 'servings', onChange: this.props.setServings, value: this.props.servingsText, disabled: this.props.foodList.length >= 5 }),
+          React.createElement('span', { className: "glyphicon glyphicon-plus " + (this.props.foodList.length >= 5 ? "hidden" : ""), onClick: this.props.addToFoodList }),
           React.createElement(SearchList, {
             selectFood: this.props.selectFood,
             searchList: searchList }),
@@ -30922,29 +30922,32 @@ module.exports = AboutYou;
 var React = require('react');
 
 var FoodItem = React.createClass({
-  displayName: 'FoodItem',
+  displayName: "FoodItem",
 
   render: function () {
     var item = this.props.food;
     var index = this.props.index;
     var totalCals = item.servings * item.calories;
+    var serveUnit = item.servings === "1" ? "serving" : "servings";
     return React.createElement(
-      'div',
-      { className: 'food-item', 'data-id': item.id },
+      "div",
+      { className: "food-item", "data-id": item.id },
       item.name,
-      React.createElement('br', null),
-      ' ',
+      React.createElement("br", null),
+      " ",
       item.servings,
-      ' servings, ',
+      " ",
+      serveUnit,
+      ", ",
       totalCals,
-      ' total calories',
-      React.createElement('span', { className: 'glyphicon glyphicon-remove', onClick: this.props.removeFromFoodList.bind(null, index) })
+      " total calories",
+      React.createElement("span", { className: "glyphicon glyphicon-remove", onClick: this.props.removeFromFoodList.bind(null, index) })
     );
   }
 });
 
 var FoodList = React.createClass({
-  displayName: 'FoodList',
+  displayName: "FoodList",
 
   render: function () {
     var foodList = this.props.foodList;
@@ -30954,8 +30957,8 @@ var FoodList = React.createClass({
       rows.push(React.createElement(FoodItem, { food: food, key: i, index: i, removeFromFoodList: removeFromFoodList }));
     });
     return React.createElement(
-      'div',
-      { className: 'list-of-food' },
+      "div",
+      { className: "list-of-food" },
       rows
     );
   }
