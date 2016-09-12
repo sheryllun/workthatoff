@@ -23,7 +23,8 @@ var AboutFood = React.createClass({
                 selectFood={this.props.selectFood}
                 searchList={searchList} />
               <FoodList
-                foodList={this.props.foodList} />
+                foodList={this.props.foodList} 
+                removeFromFoodList={this.props.removeFromFoodList}/>
             </div>
             <hr />
             <button className="btn btn-default back">Back</button>

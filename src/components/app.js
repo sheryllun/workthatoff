@@ -133,6 +133,13 @@ var App = React.createClass({
     });
   },
 
+  removeFromFoodList: function(e) {
+    var index = e;
+    this.setState({
+      foodList: update(this.state.foodList, {$splice: [[index, 1]]})
+    });
+  },
+
   render: function() {
     return (
       <div className="main container-fluid">
@@ -152,6 +159,7 @@ var App = React.createClass({
           setServings={this.setServings}
           searchedText={this.state.searchedText}
           addToFoodList={this.addToFoodList}
+          removeFromFoodList={this.removeFromFoodList}
           foodList={this.state.foodList}
         />
         <Results results={this.props.results} />

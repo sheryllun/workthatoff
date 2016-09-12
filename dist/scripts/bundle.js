@@ -30600,6 +30600,13 @@ var App = React.createClass({
     });
   },
 
+  removeFromFoodList: function (e) {
+    var index = e;
+    this.setState({
+      foodList: update(this.state.foodList, { $splice: [[index, 1]] })
+    });
+  },
+
   render: function () {
     return React.createElement(
       'div',
@@ -30620,6 +30627,7 @@ var App = React.createClass({
         setServings: this.setServings,
         searchedText: this.state.searchedText,
         addToFoodList: this.addToFoodList,
+        removeFromFoodList: this.removeFromFoodList,
         foodList: this.state.foodList
       }),
       React.createElement(Results, { results: this.props.results })
@@ -30774,7 +30782,8 @@ var AboutFood = React.createClass({
             selectFood: this.props.selectFood,
             searchList: searchList }),
           React.createElement(FoodList, {
-            foodList: this.props.foodList })
+            foodList: this.props.foodList,
+            removeFromFoodList: this.props.removeFromFoodList })
         ),
         React.createElement('hr', null),
         React.createElement(
@@ -30917,6 +30926,7 @@ var FoodItem = React.createClass({
 
   render: function () {
     var item = this.props.food;
+    var index = this.props.index;
     var totalCals = item.servings * item.calories;
     return React.createElement(
       'div',
@@ -30928,7 +30938,7 @@ var FoodItem = React.createClass({
       ' servings, ',
       totalCals,
       ' total calories',
-      React.createElement('span', { className: 'glyphicon glyphicon-remove' })
+      React.createElement('span', { className: 'glyphicon glyphicon-remove', onClick: this.props.removeFromFoodList.bind(null, index) })
     );
   }
 });
@@ -30938,9 +30948,10 @@ var FoodList = React.createClass({
 
   render: function () {
     var foodList = this.props.foodList;
+    var removeFromFoodList = this.props.removeFromFoodList;
     var rows = [];
     foodList.forEach(function (food, i) {
-      rows.push(React.createElement(FoodItem, { food: food, key: i }));
+      rows.push(React.createElement(FoodItem, { food: food, key: i, index: i, removeFromFoodList: removeFromFoodList }));
     });
     return React.createElement(
       'div',
@@ -30986,6 +30997,7 @@ var Form = React.createClass({
           setServings: this.props.setServings,
           searchedText: this.props.searchedText,
           addToFoodList: this.props.addToFoodList,
+          removeFromFoodList: this.props.removeFromFoodList,
           foodList: this.props.foodList
         })
       )
