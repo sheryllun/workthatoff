@@ -43,7 +43,10 @@ input[type="number"].has-error {
   padding: 0;
 }
 
-.btn-default { background-image: none; }
+.btn-default { 
+  background-image: none;
+  margin: 10px;
+}
 
 .form-head {
   font-family: 'Dosis', sans-serif;
@@ -55,7 +58,7 @@ input[type="number"].has-error {
   left: 0;
   top: 27px;
   color: white;
-  width: 100%;
+  width: 103%;
   z-index: 10;
 }
 
@@ -93,12 +96,9 @@ input[type="number"].has-error {
   background: white;
   padding: 8em 0 0;
   font-size: 1.4em;
-  min-height: 350px;
-  position: absolute;
+  position: relative;
   top: 0;
-  right: 0;
   left: 16px;
-  bottom: 18px;
   box-shadow: 2px 2px 3px #c59898;
 }
 
@@ -132,11 +132,10 @@ fieldset { display: inline;}
 .about-you, .about-food, .results-main {
   display: block;
   position: relative;
-  height: 370px;
 }
 
-.about-you {
-  height: 410px;
+.about-you, .about-food {
+  margin-bottom: 50px;
 }
 
 input[type="number"], input[type="text"] {
@@ -172,7 +171,6 @@ input[type="text"] {
 }
 
 button.next {
-  float: right;
   margin-right: 1em;
 }
 
