@@ -30586,7 +30586,8 @@ var App = React.createClass({
       console.log("Please enter number of servings");
       return;
     }
-    //use react addons update to manage the nested servings property of tempSelection, then update the rest of the state in a callback function
+    //use react addons update to manage the nested servings property of
+    //tempSelection, then update the rest of the state in a callback function
     this.setState({
       tempSelection: update(this.state.tempSelection, { servings: { $set: servings } })
     }, function () {
@@ -30608,6 +30609,8 @@ var App = React.createClass({
 
   calculateResults: function () {
     var bmr = this.calcBMR();
+    var totalCalories = this.calculateTotalCalories();
+    console.log(totalCalories);
   },
   convertToKg: function (weight) {
     return parseInt((weight * 0.453592).toFixed(0));
@@ -30638,6 +30641,17 @@ var App = React.createClass({
       bmr = 9.56 * weight + 1.85 * height - 4.68 * this.state.aboutAnswers.age + 655;
     }
     return bmr;
+  },
+  calculateTotalCalories: function () {
+    var totCals = this.state.foodList.map(function (obj) {
+      var qty = parseInt(obj.servings);
+      var cals = parseInt(obj.calories);
+      return qty * cals;
+    });
+    var sum = totCals.reduce(function (a, b) {
+      return a + b;
+    }, 0);
+    return sum;
   },
   render: function () {
     return React.createElement(
