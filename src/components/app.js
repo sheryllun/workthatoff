@@ -132,7 +132,6 @@ var App = React.createClass({
       });
     });
   },
-
   removeFromFoodList: function(e) {
     var index = e;
     this.setState({
@@ -140,6 +139,39 @@ var App = React.createClass({
     });
   },
 
+  calculateResults: function() {
+    var bmr = this.calcBMR();
+  },
+  convertToKg: function(weight) {
+    return parseInt((weight * 0.453592).toFixed(0));
+  },
+  convertToCm: function() {
+    var finalHeight;
+    var heightLarge = parseInt(this.state.aboutAnswers.heightLarge);
+    var heightSmall = parseInt(this.state.aboutAnswers.heightSmall);
+    if(this.state.aboutAnswers.heightUnit === '1') {
+      var feetToInches = heightLarge * 12;
+      finalHeight = ((feetToInches + heightSmall) * 2.54).toFixed(0);
+    } else {
+      finalHeight = (heightLarge * 100) + heightSmall;
+    }
+    return finalHeight;
+  },
+  calcBMR: function() {
+    var weight = parseInt(this.state.aboutAnswers.weight);
+    var height = this.convertToCm();
+    var bmr;
+    if(this.state.aboutAnswers.weightUnit === '1') {
+      weight = this.convertToKg(weight);
+    }
+
+    if(this.state.aboutAnswers.gender === '1') {
+      bmr = (13.75 * weight) + (5 * height) - (6.76 * this.state.aboutAnswers.age) + 66;
+    } else {
+      bmr = (9.56 * weight) + (1.85 * height) - (4.68 * this.state.aboutAnswers.age) + 655;
+    }
+    return bmr;
+  },
   render: function() {
     return (
       <div className="main container-fluid">
@@ -161,6 +193,7 @@ var App = React.createClass({
           addToFoodList={this.addToFoodList}
           removeFromFoodList={this.removeFromFoodList}
           foodList={this.state.foodList}
+          calculateResults={this.calculateResults}
         />
         <Results results={this.props.results} />
       </div>

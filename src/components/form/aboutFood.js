@@ -28,7 +28,7 @@ var AboutFood = React.createClass({
             </div>
             <hr />
             <button className="btn btn-default back">Back</button>
-            <button className="btn btn-default next">Calculate!</button>
+            <button className="btn btn-default next" onClick={this.props.calculateResults}>Calculate!</button>
           </div>
         </div>
       );

@@ -28,6 +28,7 @@ var Form = React.createClass({
             addToFoodList={this.props.addToFoodList}
             removeFromFoodList={this.props.removeFromFoodList}
             foodList={this.props.foodList}
+            calculateResults={this.props.calculateResults}
           />
         </div>
       </div>
