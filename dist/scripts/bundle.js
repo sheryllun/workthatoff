@@ -30490,8 +30490,16 @@ var App = React.createClass({
       tempSelection: {},
       searchedText: '',
       servingsText: '',
-      errors: {}
+      errors: {},
+      activities: []
     };
+  },
+  componentDidMount: function () {
+    this.serverRequest = $.get('https://s3.amazonaws.com/alljsondata/activities.json', function (result) {
+      var data = result;
+      console.log(typeof data);
+      this.setState({ activities: data });
+    }.bind(this), 'json');
   },
   setAboutState: function (e) {
     var field = e.target.name;
@@ -30610,7 +30618,7 @@ var App = React.createClass({
   calculateResults: function () {
     var bmr = this.calcBMR();
     var totalCalories = this.calculateTotalCalories();
-    console.log(totalCalories);
+    console.log(this.state.activities[1]);
   },
   convertToKg: function (weight) {
     return parseInt((weight * 0.453592).toFixed(0));
@@ -30677,7 +30685,7 @@ var App = React.createClass({
         foodList: this.state.foodList,
         calculateResults: this.calculateResults
       }),
-      React.createElement(Results, { results: this.props.results })
+      React.createElement(Results, { results: this.state.activities })
     );
   }
 });
@@ -31143,9 +31151,9 @@ var ResultsRow = React.createClass({
     return React.createElement(
       "li",
       null,
-      this.props.item.time,
+      this.props.item.Mets,
       " minutes of ",
-      this.props.item.activity
+      this.props.item.Activity
     );
   }
 });
@@ -31156,7 +31164,7 @@ var Results = React.createClass({
   render: function () {
     var rows = [];
     this.props.results.forEach(function (item) {
-      rows.push(React.createElement(ResultsRow, { item: item, key: item.activity }));
+      rows.push(React.createElement(ResultsRow, { item: item, key: item.Activity }));
     });
     return React.createElement(
       "div",
@@ -31197,8 +31205,6 @@ var React = require('react');
 var ReactDOM = require('react-dom');
 var App = require('./components/app');
 
-var RESULTS = [{ activity: "Walking, 2.5 mi/hr", time: 120 }, { activity: "Snowboarding", time: 10 }, { activity: "Dancing, Latin", time: 50 }];
-
-ReactDOM.render(React.createElement(App, { results: RESULTS }), document.getElementById('app'));
+ReactDOM.render(React.createElement(App, null), document.getElementById('app'));
 
 },{"./components/app":173,"jquery":2,"react":172,"react-dom":4}]},{},[183]);

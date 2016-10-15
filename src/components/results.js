@@ -5,7 +5,7 @@ var React = require('react');
 var ResultsRow = React.createClass({
   render: function() {
     return (
-      <li>{this.props.item.time} minutes of {this.props.item.activity}</li>
+      <li>{this.props.item.Mets} minutes of {this.props.item.Activity}</li>
     );
   }
 });
@@ -14,7 +14,7 @@ var Results = React.createClass({
   render: function() {
     var rows = [];
     this.props.results.forEach(function(item) {
-      rows.push(<ResultsRow item={item} key={item.activity} />);
+      rows.push(<ResultsRow item={item} key={item.Activity} />);
     });
     return (
       <div className="row">

@@ -23,8 +23,15 @@ var App = React.createClass({
       tempSelection: {},
       searchedText: '',
       servingsText: '',
-      errors: {}
+      errors: {},
+      activities: []
     };
+  },
+  componentDidMount: function() {
+    this.serverRequest = $.get('https://s3.amazonaws.com/alljsondata/activities.json', function(result) {
+      var data = result;
+      this.setState({activities: data});
+    }.bind(this), 'json');
   },
   setAboutState: function(e) {
     var field = e.target.name;
@@ -143,7 +150,7 @@ var App = React.createClass({
   calculateResults: function() {
     var bmr = this.calcBMR();
     var totalCalories = this.calculateTotalCalories();
-    console.log(totalCalories);
+    console.log(this.state.activities[1]);
   },
   convertToKg: function(weight) {
     return parseInt((weight * 0.453592).toFixed(0));
@@ -181,7 +188,7 @@ var App = React.createClass({
       var cals = parseInt(obj.calories);
       return qty * cals;
     });
-    var sum = totCals.reduce(function(a,b) { return a + b; }, 0);
+    var sum = totCals.reduce(function(a, b) { return a + b; }, 0);
     return sum;
   },
   render: function() {
@@ -207,7 +214,7 @@ var App = React.createClass({
           foodList={this.state.foodList}
           calculateResults={this.calculateResults}
         />
-        <Results results={this.props.results} />
+        <Results results={this.state.activities} />
       </div>
     );
   }
