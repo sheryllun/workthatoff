@@ -31227,7 +31227,7 @@ var App = React.createClass({
       console.log("Please enter number of servings");
       return;
     }
-    //use react addons update to manage the nested servings property of 
+    //use react addons update to manage the nested servings property of
     //tempSelection, then update the rest of the state in a callback function
     this.setState({
       tempSelection: update(this.state.tempSelection, { servings: { $set: servings } })
@@ -31264,7 +31264,7 @@ var App = React.createClass({
       result.time = duration;
       results.push(result);
     }
-    console.log(results);
+    this.setState({ results: results });
   },
   convertToKg: function (weight) {
     return parseInt((weight * 0.453592).toFixed(2));
@@ -31362,7 +31362,9 @@ var App = React.createClass({
         foodList: this.state.foodList,
         calculateResults: this.calculateResults
       }),
-      React.createElement(Results, { results: this.state.activities })
+      React.createElement(Results, {
+        results: this.state.results,
+        calculateTotalCalories: this.calculateTotalCalories })
     );
   }
 });
@@ -31828,9 +31830,9 @@ var ResultsRow = React.createClass({
     return React.createElement(
       "li",
       null,
-      this.props.item.Mets,
-      " minutes of ",
-      this.props.item.Activity
+      this.props.item.time,
+      " of ",
+      this.props.item.activity
     );
   }
 });
@@ -31839,9 +31841,10 @@ var Results = React.createClass({
   displayName: "Results",
 
   render: function () {
+    var totCal = this.props.calculateTotalCalories();
     var rows = [];
     this.props.results.forEach(function (item) {
-      rows.push(React.createElement(ResultsRow, { item: item, key: item.Activity }));
+      rows.push(React.createElement(ResultsRow, { item: item, key: item.activity }));
     });
     return React.createElement(
       "div",
@@ -31861,7 +31864,9 @@ var Results = React.createClass({
           React.createElement(
             "div",
             { className: "results" },
-            "To burn off xxx calories, you'll have to do:",
+            "To burn off ",
+            totCal,
+            " calories, you'll have to do:",
             React.createElement(
               "ul",
               null,

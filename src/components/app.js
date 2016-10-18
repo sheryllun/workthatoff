@@ -127,7 +127,7 @@ var App = React.createClass({
       console.log("Please enter number of servings");
       return;
     }
-    //use react addons update to manage the nested servings property of 
+    //use react addons update to manage the nested servings property of
     //tempSelection, then update the rest of the state in a callback function
     this.setState({
       tempSelection: update(this.state.tempSelection, {servings: {$set: servings}})
@@ -164,7 +164,7 @@ var App = React.createClass({
       result.time = duration;
       results.push(result);
     }
-    console.log(results);
+    this.setState({results: results});
   },
   convertToKg: function(weight) {
     return parseInt((weight * 0.453592).toFixed(2));
@@ -214,7 +214,7 @@ var App = React.createClass({
     var array = fixedTime.toString().split('.');
     var hours = parseInt(array[0]);
     var minutes = array[1];
-    var finalTime = ''; 
+    var finalTime = '';
     if(hours === 1) {
       finalTime = '1 hour ';
     } else if (hours > 1) {
@@ -259,7 +259,9 @@ var App = React.createClass({
           foodList={this.state.foodList}
           calculateResults={this.calculateResults}
         />
-        <Results results={this.state.activities} />
+        <Results 
+          results={this.state.results}
+          calculateTotalCalories={this.calculateTotalCalories} />
       </div>
     );
   }

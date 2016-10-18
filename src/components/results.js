@@ -5,16 +5,17 @@ var React = require('react');
 var ResultsRow = React.createClass({
   render: function() {
     return (
-      <li>{this.props.item.Mets} minutes of {this.props.item.Activity}</li>
+      <li>{this.props.item.time} of {this.props.item.activity}</li>
     );
   }
 });
 
 var Results = React.createClass({
   render: function() {
+    var totCal = this.props.calculateTotalCalories();
     var rows = [];
     this.props.results.forEach(function(item) {
-      rows.push(<ResultsRow item={item} key={item.Activity} />);
+      rows.push(<ResultsRow item={item} key={item.activity} />);
     });
     return (
       <div className="row">
@@ -25,7 +26,7 @@ var Results = React.createClass({
               &nbsp; Results
             </div>
             <div className="results">
-              To burn off xxx calories, you'll have to do:
+              To burn off {totCal} calories, you'll have to do:
               <ul>{rows}</ul>
             </div>
           </div>
