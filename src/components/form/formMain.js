@@ -25,6 +25,7 @@ var Form = React.createClass({
             servingsText={this.props.servingsText}
             setServings={this.props.setServings}
             searchedText={this.props.searchedText}
+            errors={this.props.errors}
             addToFoodList={this.props.addToFoodList}
             removeFromFoodList={this.props.removeFromFoodList}
             foodList={this.props.foodList}

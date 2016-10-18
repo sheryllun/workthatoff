@@ -122,11 +122,26 @@ var App = React.createClass({
     this.setState({servingsText: value});
   },
   addToFoodList: function() {
+    this.setState({errors: []});
+    var foodinput = this.state.searchedText;
     var servings = this.state.servingsText;
-    if(servings.length <= 0) {
-      console.log("Please enter number of servings");
+
+    if(foodinput.length <= 0) {
+      this.state.errors.foodinput = "Required";
+      this.setState({errors: this.state.errors});
+      return;
+    } else if ($.isEmptyObject(this.state.tempSelection)) {
+      this.state.errors.foodinput = "Please make a selection from the list";
+      this.setState({errors: this.state.errors});
       return;
     }
+
+    if(servings.length <= 0) {
+      this.state.errors.servings = "Required";
+      this.setState({errors: this.state.errors});
+      return;
+    }
+
     //use react addons update to manage the nested servings property of
     //tempSelection, then update the rest of the state in a callback function
     this.setState({

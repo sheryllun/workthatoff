@@ -39,13 +39,15 @@ body {
 }
 
 .error {
-  display: inline;
+  position: absolute;
+  top: 0;
+  left: 3px;
   color: red;
   font-size:  .7em;
   font-style: italic;
 }
 
-input[type="number"].has-error {
+input[type="number"].has-error, input[type="text"].has-error {
   border-color:  red;
 }
 
@@ -158,6 +160,8 @@ input[type="number"], input[type="text"] {
   margin: 0 5px;
 }
 
+.age, .gender, .weightDiv, .heightDiv { position: relative; }
+
 .weight { display: inline; }
 
 .heightLarge, .heightSmall {
@@ -219,6 +223,12 @@ button.next {
 
 .food-item:nth-child(even) {
   background-color:  #ccc;
+}
+
+.food-input, .num-svgs { display: inline; }
+
+.food-input label, .num-svgs label {
+  display: none;
 }
 
 .glyphicon-remove {

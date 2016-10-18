@@ -31222,11 +31222,26 @@ var App = React.createClass({
     this.setState({ servingsText: value });
   },
   addToFoodList: function () {
+    this.setState({ errors: [] });
+    var foodinput = this.state.searchedText;
     var servings = this.state.servingsText;
-    if (servings.length <= 0) {
-      console.log("Please enter number of servings");
+
+    if (foodinput.length <= 0) {
+      this.state.errors.foodinput = "Required";
+      this.setState({ errors: this.state.errors });
+      return;
+    } else if ($.isEmptyObject(this.state.tempSelection)) {
+      this.state.errors.foodinput = "Please make a selection from the list";
+      this.setState({ errors: this.state.errors });
       return;
     }
+
+    if (servings.length <= 0) {
+      this.state.errors.servings = "Required";
+      this.setState({ errors: this.state.errors });
+      return;
+    }
+
     //use react addons update to manage the nested servings property of
     //tempSelection, then update the rest of the state in a callback function
     this.setState({
@@ -31483,6 +31498,7 @@ module.exports = Input;
 var React = require('react');
 var SearchList = require('./searchList');
 var FoodList = require('./foodList');
+var Input = require('../common/textinput');
 
 var AboutFood = React.createClass({
   displayName: 'AboutFood',
@@ -31509,8 +31525,24 @@ var AboutFood = React.createClass({
             null,
             'Start typing to search for a food.  Add up to 5 items.'
           ),
-          React.createElement('input', { name: 'food-item', type: 'text', onChange: this.props.searchFood, value: this.props.searchedText, disabled: this.props.foodList.length >= 5 }),
-          React.createElement('input', { type: 'number', placeholder: 'servings', onChange: this.props.setServings, value: this.props.servingsText, disabled: this.props.foodList.length >= 5 }),
+          React.createElement(Input, {
+            name: 'food-input',
+            type: 'text',
+            min: '1',
+            placeholder: 'Search food',
+            value: this.props.searchedText,
+            onChange: this.props.searchFood,
+            disabled: this.props.foodList.length >= 5,
+            error: this.props.errors.foodinput }),
+          React.createElement(Input, {
+            name: 'num-svgs',
+            type: 'number',
+            min: '1',
+            placeholder: 'servings',
+            value: this.props.servingsText,
+            onChange: this.props.setServings,
+            disabled: this.props.foodList.length >= 5,
+            error: this.props.errors.servings }),
           React.createElement('span', { className: "glyphicon glyphicon-plus " + (this.props.foodList.length >= 5 ? "hidden" : ""), onClick: this.props.addToFoodList }),
           React.createElement(SearchList, {
             selectFood: this.props.selectFood,
@@ -31537,7 +31569,7 @@ var AboutFood = React.createClass({
 
 module.exports = AboutFood;
 
-},{"./foodList":180,"./searchList":182,"react":174}],179:[function(require,module,exports){
+},{"../common/textinput":177,"./foodList":180,"./searchList":182,"react":174}],179:[function(require,module,exports){
 "use strict";
 
 var React = require('react');
@@ -31560,14 +31592,18 @@ var AboutYou = React.createClass({
       React.createElement(
         'div',
         { className: 'questions' },
-        React.createElement(Input, {
-          name: 'age',
-          label: 'Age:',
-          type: 'number',
-          min: '1',
-          value: this.props.aboutAnswers.age,
-          onChange: this.props.setAboutState,
-          error: this.props.errors.age }),
+        React.createElement(
+          'div',
+          { className: 'age' },
+          React.createElement(Input, {
+            name: 'age',
+            label: 'Age:',
+            type: 'number',
+            min: '1',
+            value: this.props.aboutAnswers.age,
+            onChange: this.props.setAboutState,
+            error: this.props.errors.age })
+        ),
         React.createElement(
           'div',
           { className: 'gender' },
@@ -31733,6 +31769,7 @@ var Form = React.createClass({
           servingsText: this.props.servingsText,
           setServings: this.props.setServings,
           searchedText: this.props.searchedText,
+          errors: this.props.errors,
           addToFoodList: this.props.addToFoodList,
           removeFromFoodList: this.props.removeFromFoodList,
           foodList: this.props.foodList,

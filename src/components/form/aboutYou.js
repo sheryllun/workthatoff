@@ -13,14 +13,16 @@ var AboutYou = React.createClass({
           &nbsp; About You
         </div>
         <div className="questions">
-          <Input
-            name="age"
-            label="Age:"
-            type="number"
-            min="1"
-            value={this.props.aboutAnswers.age}
-            onChange={this.props.setAboutState}
-            error={this.props.errors.age} />
+          <div className="age">
+            <Input
+              name="age"
+              label="Age:"
+              type="number"
+              min="1"
+              value={this.props.aboutAnswers.age}
+              onChange={this.props.setAboutState}
+              error={this.props.errors.age} />
+          </div>
 
           <div className="gender">
             <label htmlFor="gender">Gender: </label>
