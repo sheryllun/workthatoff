@@ -24,7 +24,8 @@ var App = React.createClass({
       searchedText: '',
       servingsText: '',
       errors: {},
-      activities: []
+      activities: [],
+      results: []
     };
   },
   componentDidMount: function() {
@@ -150,10 +151,23 @@ var App = React.createClass({
   calculateResults: function() {
     var bmr = this.calcBMR();
     var totalCalories = this.calculateTotalCalories();
-    console.log(this.state.activities[1]);
+    var randomNum = Math.floor(Math.random() * 5); //randomNum between 1 - 5
+    var randomActivities = this.randomNumbers(randomNum);
+    var calsPerActivity = totalCalories / randomActivities.length;
+    var results = [];
+    for(var i = 0; i < randomActivities.length; i++) {
+      var result = {};
+      var activityIndex = randomActivities[i];
+      var mets = this.state.activities[activityIndex].Mets;
+      var duration = this.calculateActivityDuration(mets, bmr, calsPerActivity);
+      result.activity = this.state.activities[activityIndex].Activity;
+      result.time = duration;
+      results.push(result);
+    }
+    console.log(results);
   },
   convertToKg: function(weight) {
-    return parseInt((weight * 0.453592).toFixed(0));
+    return parseInt((weight * 0.453592).toFixed(2));
   },
   convertToCm: function() {
     var finalHeight;
@@ -161,7 +175,7 @@ var App = React.createClass({
     var heightSmall = parseInt(this.state.aboutAnswers.heightSmall);
     if(this.state.aboutAnswers.heightUnit === '1') {
       var feetToInches = heightLarge * 12;
-      finalHeight = ((feetToInches + heightSmall) * 2.54).toFixed(0);
+      finalHeight = ((feetToInches + heightSmall) * 2.54).toFixed(2);
     } else {
       finalHeight = (heightLarge * 100) + heightSmall;
     }
@@ -174,13 +188,12 @@ var App = React.createClass({
     if(this.state.aboutAnswers.weightUnit === '1') {
       weight = this.convertToKg(weight);
     }
-
     if(this.state.aboutAnswers.gender === '1') {
       bmr = (13.75 * weight) + (5 * height) - (6.76 * this.state.aboutAnswers.age) + 66;
     } else {
       bmr = (9.56 * weight) + (1.85 * height) - (4.68 * this.state.aboutAnswers.age) + 655;
     }
-    return bmr;
+    return bmr.toFixed(2);
   },
   calculateTotalCalories: function() {
     var totCals = this.state.foodList.map(function(obj) {
@@ -190,6 +203,38 @@ var App = React.createClass({
     });
     var sum = totCals.reduce(function(a, b) { return a + b; }, 0);
     return sum;
+  },
+  calculateActivityDuration: function(mets, bmr, calories) {
+    var time = calories / ((bmr / 24) * mets);
+    time = this.parseTime(time);
+    return time;
+  },
+  parseTime: function(time) {
+    var fixedTime = time.toFixed(2);
+    var array = fixedTime.toString().split('.');
+    var hours = parseInt(array[0]);
+    var minutes = array[1];
+    var finalTime = ''; 
+    if(hours === 1) {
+      finalTime = '1 hour ';
+    } else if (hours > 1) {
+      finalTime = hours + ' hours ';
+    }
+    if(minutes !== '0') {
+      minutes = ((parseInt(minutes) / 100) * 60).toFixed(0);
+    }
+    var minCounter = (minutes === 1) ? ' minute' : ' minutes';
+    finalTime += (minutes + minCounter);
+    return finalTime;
+  },
+  randomNumbers: function(qty) {
+    var randoms = [];
+    var max = this.state.activities.length;
+    for(var i = 0; i <= qty; i++) {
+      var rando = Math.floor(Math.random() * max);
+      randoms.push(rando);
+    }
+    return randoms;
   },
   render: function() {
     return (
