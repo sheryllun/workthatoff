@@ -31137,6 +31137,24 @@ var App = React.createClass({
   setAboutState: function (e) {
     var field = e.target.name;
     var value = e.target.value;
+
+    //quick validation - no negative numbers
+    if (value.includes('-')) {
+      value = '0';
+    }
+
+    //if inches, no more than 11, if cm, no more than 99
+    if (field === 'heightSmall' && this.state.aboutAnswers.heightUnit === '1') {
+      if (value >= 12) {
+        value = '11';
+      }
+    }
+    if (field === 'heightSmall' && this.state.aboutAnswers.heightUnit === '2') {
+      if (value >= 100) {
+        value = '99';
+      }
+    }
+
     this.state.aboutAnswers[field] = value;
     return this.setState({ aboutAnswers: this.state.aboutAnswers });
   },
@@ -31228,18 +31246,15 @@ var App = React.createClass({
 
     if (foodinput.length <= 0) {
       this.state.errors.foodinput = "Required";
-      this.setState({ errors: this.state.errors });
-      return;
+      return this.setState({ errors: this.state.errors });
     } else if ($.isEmptyObject(this.state.tempSelection)) {
       this.state.errors.foodinput = "Please make a selection from the list";
-      this.setState({ errors: this.state.errors });
-      return;
+      return this.setState({ errors: this.state.errors });
     }
 
     if (servings.length <= 0) {
       this.state.errors.servings = "Required";
-      this.setState({ errors: this.state.errors });
-      return;
+      return this.setState({ errors: this.state.errors });
     }
 
     //use react addons update to manage the nested servings property of
@@ -31312,7 +31327,7 @@ var App = React.createClass({
   },
   calculateTotalCalories: function () {
     var totCals = this.state.foodList.map(function (obj) {
-      var qty = parseInt(obj.servings);
+      var qty = parseFloat(obj.servings);
       var cals = parseInt(obj.calories);
       return qty * cals;
     });
@@ -31746,6 +31761,11 @@ var AboutFood = require('./aboutFood');
 var Form = React.createClass({
   displayName: 'Form',
 
+  // checkNegativeNumbers: function(input) {
+  //   if(input.includes('-')) {
+  //     console.log('negative');
+  //   }
+  // },
   render: function () {
     return React.createElement(
       'div',
@@ -31760,7 +31780,8 @@ var Form = React.createClass({
           aboutAnswers: this.props.aboutAnswers,
           setAboutState: this.props.setAboutState,
           goNext: this.props.goNext,
-          errors: this.props.errors
+          errors: this.props.errors,
+          checkNegativeNumbers: this.checkNegativeNumbers
         }),
         React.createElement(AboutFood, {
           searchFood: this.props.searchFood,

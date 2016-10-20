@@ -1,5 +1,5 @@
 body {
-  background-color: pink;
+  background-color: #797979;
   font-size: 10px;
 }
 
@@ -27,9 +27,7 @@ body {
 }
 
 .error {
-  position: absolute;
-  top: 0;
-  left: 3px;
+  display: inline;
   color: red;
   font-size:  .7em;
   font-style: italic;
@@ -101,7 +99,7 @@ input[type="number"].has-error, input[type="text"].has-error {
   position: relative;
   top: 0;
   left: 16px;
-  box-shadow: 2px 2px 3px #c59898;
+  box-shadow: 2px 2px 3px #4a3a3a;
 }
 
 .questions div {
@@ -112,10 +110,15 @@ input[type="number"].has-error, input[type="text"].has-error {
   padding: 0 1em;
 }
 
+.holder p {
+  margin-bottom: 2em;
+}
+
 label {
   width: 65px;
   text-align: right;
   margin-right: 10px;
+  vertical-align: top;
 }
 
 .gender fieldset label, .weightDiv fieldset label, .heightDiv fieldset label {
@@ -148,7 +151,9 @@ input[type="number"], input[type="text"] {
   margin: 0 5px;
 }
 
-.age, .gender, .weightDiv, .heightDiv { position: relative; }
+.age, .gender, .weightDiv, .heightDiv { 
+  position: relative; 
+}
 
 .weight { display: inline; }
 
@@ -160,7 +165,6 @@ input[type="number"], input[type="text"] {
   display: none;
 }
 
-/* Error messages class */
 .input {
   display: inline;
 }
@@ -213,7 +217,16 @@ button.next {
   background-color:  #ccc;
 }
 
-.food-input, .num-svgs { display: inline; }
+.food-input, .num-svgs { 
+  position: relative;
+  display: inline;
+}
+
+.food-input .error, .num-svgs .error {
+  position: absolute;
+  top: -27px;
+  left: 5px;
+}
 
 .food-input label, .num-svgs label {
   display: none;

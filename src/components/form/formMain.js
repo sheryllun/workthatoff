@@ -5,6 +5,11 @@ var AboutYou = require('./aboutYou');
 var AboutFood = require('./aboutFood');
 
 var Form = React.createClass({
+  // checkNegativeNumbers: function(input) {
+  //   if(input.includes('-')) {
+  //     console.log('negative');
+  //   }
+  // },
   render: function() {
     return (
       <div className="row">
@@ -17,6 +22,7 @@ var Form = React.createClass({
             setAboutState={this.props.setAboutState}
             goNext={this.props.goNext}
             errors={this.props.errors}
+            checkNegativeNumbers={this.checkNegativeNumbers}
           />
           <AboutFood
             searchFood={this.props.searchFood}
