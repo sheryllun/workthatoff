@@ -45,14 +45,10 @@ var App = React.createClass({
 
     //if inches, no more than 11, if cm, no more than 99
     if(field === 'heightSmall' && this.state.aboutAnswers.heightUnit === '1') {
-      if(value >= 12) {
-        value = '11';
-      }
+      value = (value >= 12) ? '11' : value;
     }
     if(field === 'heightSmall' && this.state.aboutAnswers.heightUnit === '2') {
-      if(value >= 100) {
-        value = '99';
-      }
+      value = (value >= 100) ? '99' : value;
     }
 
     this.state.aboutAnswers[field] = value;

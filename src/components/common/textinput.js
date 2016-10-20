@@ -21,17 +21,20 @@ var Input = React.createClass({
     }
     return(
       <div className={this.props.name}>
-        <label htmlFor={this.props.name}>{this.props.label}</label>
-        <input
-          className={wrapperClass}
-          name={this.props.name}
-          type={this.props.type}
-          min={this.props.min}
-          max={this.props.max}
-          value={this.props.value}
-          placeholder={this.props.placeholder}
-          onChange={this.props.onChange} />
-          <div className="error">{this.props.error}</div>
+        <div className='group'>
+          <input required
+            className={wrapperClass}
+            name={this.props.name}
+            type={this.props.type}
+            min={this.props.min}
+            max={this.props.max}
+            value={this.props.value}
+            placeholder={this.props.placeholder}
+            onChange={this.props.onChange} />
+            <span className="bar"></span>
+            <label htmlFor={this.props.name}>{this.props.label}</label>
+            <div className="error">{this.props.error}</div>
+          </div>
       </div>
       );
   }

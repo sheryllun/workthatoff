@@ -29,12 +29,12 @@ body {
 .error {
   display: inline;
   color: red;
-  font-size:  .7em;
+  font-size: .7em;
   font-style: italic;
 }
 
 input[type="number"].has-error, input[type="text"].has-error {
-  border-color:  red;
+  border-color: red;
 }
 
 .main-form, .results-main-col {
@@ -43,7 +43,7 @@ input[type="number"].has-error, input[type="text"].has-error {
   padding: 0;
 }
 
-.btn-default { 
+.btn-default {
   background-image: none;
   margin: 10px;
 }
@@ -94,16 +94,13 @@ input[type="number"].has-error, input[type="text"].has-error {
 
 .questions, .results {
   background: white;
-  padding: 8em 0 0;
+  padding: 8em 4em 0;
   font-size: 1.4em;
   position: relative;
   top: 0;
   left: 16px;
   box-shadow: 2px 2px 3px #4a3a3a;
-}
-
-.questions div {
-  margin-bottom: 10px;
+  overflow: auto;
 }
 
 .holder {
@@ -113,21 +110,6 @@ input[type="number"].has-error, input[type="text"].has-error {
 .holder p {
   margin-bottom: 2em;
 }
-
-label {
-  width: 65px;
-  text-align: right;
-  margin-right: 10px;
-  vertical-align: top;
-}
-
-.gender fieldset label, .weightDiv fieldset label, .heightDiv fieldset label {
-  text-align: left;
-  font-weight: normal;
-  width: auto;
-}
-
-fieldset { display: inline;}
 
 .glyphicon-star-empty {
   font-size: 1.2em;
@@ -143,30 +125,84 @@ fieldset { display: inline;}
   margin-bottom: 50px;
 }
 
-input[type="number"], input[type="text"] {
-  width: 75px;
-  border: 1px solid #ccc;
-  border-radius: 3px;
+/*Material Design Inputs*/
+
+.heightSmall {
+  margin-top: 10px;
+  margin-left: 20px;
+}
+
+.group {
+  position: relative;
+  margin: 30px 0;
+}
+
+input:not([type="radio"]) {
+  font-size: 18px;
   padding: 5px;
-  margin: 0 5px;
+  display: block;
+  width: 100%;
+  border: none;
+  border-bottom: 1px solid #757575;
+  margin: 0 auto;
 }
 
-.age, .gender, .weightDiv, .heightDiv { 
-  position: relative; 
+input:focus { outline: none; }
+
+.group label {
+  color: #999;
+  font-size: 18px;
+  font-weight: normal;
+  position: absolute;
+  pointer-events: none;
+  left: 5px;
+  top: 10px;
+  transition: 0.2s ease all;
 }
 
-.weight { display: inline; }
+input:focus ~ label, input:valid ~ label {
+  top: -20px;
+  font-size: 14px;
+  color: #5264AE;
+}
+
+.bar {
+  position: relative;
+  display: block;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.bar:before, .bar:after {
+  content: '';
+  height: 2px;
+  width: 0;
+  bottom: 1px;
+  position: absolute;
+  background: #5264AE;
+  transition: 0.2s ease all;
+}
+
+.bar:before {
+  left: 50%;
+}
+
+.bar:after {
+  right: 50%;
+}
+
+input:focus ~ .bar:before, input:focus ~ .bar:after {
+  width: 50%;
+}
+
+/*End Material Design Input*/
 
 .heightLarge, .heightSmall {
   display: inline-block;
 }
 
-.heightSmall > label {
+.gender > label {
   display: none;
-}
-
-.input {
-  display: inline;
 }
 
 input[type="radio"] {
@@ -179,7 +215,19 @@ input[type="text"] {
 }
 
 button.next {
-  margin-right: 1em;
+  display: block;
+  margin: 1em auto;
+  text-transform: uppercase;
+  font-size: 1.5em;
+  font-weight: lighter;
+  border: none;
+  background: #5264AE;
+  color: white;
+  letter-spacing: 4px;
+  text-align: center;
+  width: 50%;
+  max-width: 200px;
+  padding: 10px 0;
 }
 
 /* search list */

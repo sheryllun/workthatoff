@@ -16,7 +16,7 @@ var AboutYou = React.createClass({
           <div className="age">
             <Input
               name="age"
-              label="Age:"
+              label="Age"
               type="number"
               min="1"
               value={this.props.aboutAnswers.age}
@@ -37,15 +37,6 @@ var AboutYou = React.createClass({
           </div>
 
           <div className="weightDiv">
-            <Input
-              name="weight"
-              label="Weight:"
-              type="number"
-              min="1"
-              value={this.props.aboutAnswers.weight}
-              onChange={this.props.setAboutState}
-              error={this.props.errors.weight} />
-
               <Radio
                 group="weightUnit"
                 value1="1"
@@ -55,27 +46,17 @@ var AboutYou = React.createClass({
                 checked1={this.props.aboutAnswers.weightUnit === "1"}
                 checked2={this.props.aboutAnswers.weightUnit === "2"}
                 onChange={this.props.setAboutState} />
-          </div>
-          <div className="heightDiv">
+
             <Input
-              name="heightLarge"
-              label="Height:"
+              name="weight"
+              label="Weight"
               type="number"
               min="1"
-              placeholder={this.props.lengthLarge}
-              value={this.props.aboutAnswers.heightLarge}
+              value={this.props.aboutAnswers.weight}
               onChange={this.props.setAboutState}
-              error={this.props.errors.heightLarge} />
-            <Input
-              name="heightSmall"
-              type="number"
-              min="0"
-              max={this.props.max}
-              placeholder={this.props.lengthSmall}
-              value={this.props.aboutAnswers.heightSmall}
-              onChange={this.props.setAboutState}
-              error={this.props.errors.heightSmall}/>
-
+              error={this.props.errors.weight} />
+          </div>
+          <div className="heightDiv">
               <Radio
                 group="heightUnit"
                 checked1={this.props.aboutAnswers.heightUnit === "1"}
@@ -85,9 +66,26 @@ var AboutYou = React.createClass({
                 label1="Feet"
                 value2="2"
                 label2="Meters" />
+
+            <Input
+              name="heightLarge"
+              type="number"
+              min="1"
+              label={this.props.lengthLarge}
+              value={this.props.aboutAnswers.heightLarge}
+              onChange={this.props.setAboutState}
+              error={this.props.errors.heightLarge} />
+            <Input
+              name="heightSmall"
+              type="number"
+              min="0"
+              max={this.props.max}
+              label={this.props.lengthSmall}
+              value={this.props.aboutAnswers.heightSmall}
+              onChange={this.props.setAboutState}
+              error={this.props.errors.heightSmall}/>
           </div>
-          <hr />
-          <button className="btn btn-default next" name="aboutAnswers" onClick={this.props.goNext} >Next</button>
+          <button className="next" name="aboutAnswers" onClick={this.props.goNext} >Next</button>
         </div>
       </div>
       );
