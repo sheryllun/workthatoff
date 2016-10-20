@@ -31145,14 +31145,10 @@ var App = React.createClass({
 
     //if inches, no more than 11, if cm, no more than 99
     if (field === 'heightSmall' && this.state.aboutAnswers.heightUnit === '1') {
-      if (value >= 12) {
-        value = '11';
-      }
+      value = value >= 12 ? '11' : value;
     }
     if (field === 'heightSmall' && this.state.aboutAnswers.heightUnit === '2') {
-      if (value >= 100) {
-        value = '99';
-      }
+      value = value >= 100 ? '99' : value;
     }
 
     this.state.aboutAnswers[field] = value;
@@ -31483,23 +31479,28 @@ var Input = React.createClass({
       'div',
       { className: this.props.name },
       React.createElement(
-        'label',
-        { htmlFor: this.props.name },
-        this.props.label
-      ),
-      React.createElement('input', {
-        className: wrapperClass,
-        name: this.props.name,
-        type: this.props.type,
-        min: this.props.min,
-        max: this.props.max,
-        value: this.props.value,
-        placeholder: this.props.placeholder,
-        onChange: this.props.onChange }),
-      React.createElement(
         'div',
-        { className: 'error' },
-        this.props.error
+        { className: 'group' },
+        React.createElement('input', { required: true,
+          className: wrapperClass,
+          name: this.props.name,
+          type: this.props.type,
+          min: this.props.min,
+          max: this.props.max,
+          value: this.props.value,
+          placeholder: this.props.placeholder,
+          onChange: this.props.onChange }),
+        React.createElement('span', { className: 'bar' }),
+        React.createElement(
+          'label',
+          { htmlFor: this.props.name },
+          this.props.label
+        ),
+        React.createElement(
+          'div',
+          { className: 'error' },
+          this.props.error
+        )
       )
     );
   }
@@ -31612,7 +31613,7 @@ var AboutYou = React.createClass({
           { className: 'age' },
           React.createElement(Input, {
             name: 'age',
-            label: 'Age:',
+            label: 'Age',
             type: 'number',
             min: '1',
             value: this.props.aboutAnswers.age,
@@ -31639,14 +31640,6 @@ var AboutYou = React.createClass({
         React.createElement(
           'div',
           { className: 'weightDiv' },
-          React.createElement(Input, {
-            name: 'weight',
-            label: 'Weight:',
-            type: 'number',
-            min: '1',
-            value: this.props.aboutAnswers.weight,
-            onChange: this.props.setAboutState,
-            error: this.props.errors.weight }),
           React.createElement(Radio, {
             group: 'weightUnit',
             value1: '1',
@@ -31655,29 +31648,19 @@ var AboutYou = React.createClass({
             label2: 'Kilos',
             checked1: this.props.aboutAnswers.weightUnit === "1",
             checked2: this.props.aboutAnswers.weightUnit === "2",
-            onChange: this.props.setAboutState })
+            onChange: this.props.setAboutState }),
+          React.createElement(Input, {
+            name: 'weight',
+            label: 'Weight',
+            type: 'number',
+            min: '1',
+            value: this.props.aboutAnswers.weight,
+            onChange: this.props.setAboutState,
+            error: this.props.errors.weight })
         ),
         React.createElement(
           'div',
           { className: 'heightDiv' },
-          React.createElement(Input, {
-            name: 'heightLarge',
-            label: 'Height:',
-            type: 'number',
-            min: '1',
-            placeholder: this.props.lengthLarge,
-            value: this.props.aboutAnswers.heightLarge,
-            onChange: this.props.setAboutState,
-            error: this.props.errors.heightLarge }),
-          React.createElement(Input, {
-            name: 'heightSmall',
-            type: 'number',
-            min: '0',
-            max: this.props.max,
-            placeholder: this.props.lengthSmall,
-            value: this.props.aboutAnswers.heightSmall,
-            onChange: this.props.setAboutState,
-            error: this.props.errors.heightSmall }),
           React.createElement(Radio, {
             group: 'heightUnit',
             checked1: this.props.aboutAnswers.heightUnit === "1",
@@ -31686,12 +31669,28 @@ var AboutYou = React.createClass({
             value1: '1',
             label1: 'Feet',
             value2: '2',
-            label2: 'Meters' })
+            label2: 'Meters' }),
+          React.createElement(Input, {
+            name: 'heightLarge',
+            type: 'number',
+            min: '1',
+            label: this.props.lengthLarge,
+            value: this.props.aboutAnswers.heightLarge,
+            onChange: this.props.setAboutState,
+            error: this.props.errors.heightLarge }),
+          React.createElement(Input, {
+            name: 'heightSmall',
+            type: 'number',
+            min: '0',
+            max: this.props.max,
+            label: this.props.lengthSmall,
+            value: this.props.aboutAnswers.heightSmall,
+            onChange: this.props.setAboutState,
+            error: this.props.errors.heightSmall })
         ),
-        React.createElement('hr', null),
         React.createElement(
           'button',
-          { className: 'btn btn-default next', name: 'aboutAnswers', onClick: this.props.goNext },
+          { className: 'next', name: 'aboutAnswers', onClick: this.props.goNext },
           'Next'
         )
       )
