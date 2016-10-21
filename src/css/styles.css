@@ -28,6 +28,7 @@ body {
 
 .error {
   display: inline;
+  position: absolute;
   color: red;
   font-size: .7em;
   font-style: italic;
@@ -51,7 +52,7 @@ input[type="number"].has-error, input[type="text"].has-error {
 .form-head {
   font-family: 'Dosis', sans-serif;
   background: #87ecef;
-  font-size: 2em;
+  font-size: 3em;
   font-weight: 300;
   padding: 1em 2em;
   position: absolute;
@@ -94,21 +95,13 @@ input[type="number"].has-error, input[type="text"].has-error {
 
 .questions, .results {
   background: white;
-  padding: 8em 4em 0;
+  padding: 11em 4em 0;
   font-size: 1.4em;
   position: relative;
   top: 0;
   left: 16px;
   box-shadow: 2px 2px 3px #4a3a3a;
   overflow: auto;
-}
-
-.holder {
-  padding: 0 1em;
-}
-
-.holder p {
-  margin-bottom: 2em;
 }
 
 .glyphicon-star-empty {
@@ -195,6 +188,25 @@ input:focus ~ .bar:before, input:focus ~ .bar:after {
   width: 50%;
 }
 
+.food-input .group, .num-svgs .group {
+  width: 70%;
+  display: inline-block;
+}
+
+.num-svgs .group {
+  width: 30%;
+}
+
+.num-svgs .bar {
+  width: 50%;
+}
+
+.num-svgs label {
+  left: 38px;
+}
+
+input.numsvgs { width: 50%; }
+
 /*End Material Design Input*/
 
 .heightLarge, .heightSmall {
@@ -210,11 +222,7 @@ input[type="radio"] {
   display: inline-block;
 }
 
-input[type="text"] {
-  width: 65%;
-}
-
-button.next {
+.btnstyle {
   display: block;
   margin: 1em auto;
   text-transform: uppercase;
@@ -228,6 +236,10 @@ button.next {
   width: 50%;
   max-width: 200px;
   padding: 10px 0;
+}
+
+.btnstyle:hover {
+  background: #778bde;
 }
 
 /* search list */
@@ -268,16 +280,6 @@ button.next {
 .food-input, .num-svgs { 
   position: relative;
   display: inline;
-}
-
-.food-input .error, .num-svgs .error {
-  position: absolute;
-  top: -27px;
-  left: 5px;
-}
-
-.food-input label, .num-svgs label {
-  display: none;
 }
 
 .glyphicon-remove {

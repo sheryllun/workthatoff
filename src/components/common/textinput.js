@@ -5,6 +5,7 @@ var React = require('react');
 var Input = React.createClass({
   propTypes: {
     name: React.PropTypes.string.isRequired,
+    className: React.PropTypes.string,
     label: React.PropTypes.string,
     type: React.PropTypes.string.isRequired,
     min: React.PropTypes.string.isRequired,
@@ -15,9 +16,9 @@ var Input = React.createClass({
     placeholder: React.PropTypes.string
   },
   render: function() {
-    var wrapperClass = '';
+    var wrapperClass = this.props.className;
     if(this.props.error && this.props.error.length > 0) {
-      wrapperClass = 'has-error';
+      wrapperClass += ' has-error';
     }
     return(
       <div className={this.props.name}>

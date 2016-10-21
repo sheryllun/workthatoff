@@ -85,7 +85,7 @@ var AboutYou = React.createClass({
               onChange={this.props.setAboutState}
               error={this.props.errors.heightSmall}/>
           </div>
-          <button className="next" name="aboutAnswers" onClick={this.props.goNext} >Next</button>
+          <button className="btnstyle next" name="aboutAnswers" onClick={this.props.goNext} >Next</button>
         </div>
       </div>
       );

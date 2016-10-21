@@ -31239,7 +31239,6 @@ var App = React.createClass({
     this.setState({ errors: [] });
     var foodinput = this.state.searchedText;
     var servings = this.state.servingsText;
-
     if (foodinput.length <= 0) {
       this.state.errors.foodinput = "Required";
       return this.setState({ errors: this.state.errors });
@@ -31461,6 +31460,7 @@ var Input = React.createClass({
 
   propTypes: {
     name: React.PropTypes.string.isRequired,
+    className: React.PropTypes.string,
     label: React.PropTypes.string,
     type: React.PropTypes.string.isRequired,
     min: React.PropTypes.string.isRequired,
@@ -31471,9 +31471,9 @@ var Input = React.createClass({
     placeholder: React.PropTypes.string
   },
   render: function () {
-    var wrapperClass = '';
+    var wrapperClass = this.props.className;
     if (this.props.error && this.props.error.length > 0) {
-      wrapperClass = 'has-error';
+      wrapperClass += ' has-error';
     }
     return React.createElement(
       'div',
@@ -31534,48 +31534,45 @@ var AboutFood = React.createClass({
         'div',
         { className: 'questions' },
         React.createElement(
-          'div',
-          { className: 'holder' },
-          React.createElement(
-            'p',
-            null,
-            'Start typing to search for a food.  Add up to 5 items.'
-          ),
-          React.createElement(Input, {
-            name: 'food-input',
-            type: 'text',
-            min: '1',
-            placeholder: 'Search food',
-            value: this.props.searchedText,
-            onChange: this.props.searchFood,
-            disabled: this.props.foodList.length >= 5,
-            error: this.props.errors.foodinput }),
-          React.createElement(Input, {
-            name: 'num-svgs',
-            type: 'number',
-            min: '1',
-            placeholder: 'servings',
-            value: this.props.servingsText,
-            onChange: this.props.setServings,
-            disabled: this.props.foodList.length >= 5,
-            error: this.props.errors.servings }),
-          React.createElement('span', { className: "glyphicon glyphicon-plus " + (this.props.foodList.length >= 5 ? "hidden" : ""), onClick: this.props.addToFoodList }),
-          React.createElement(SearchList, {
-            selectFood: this.props.selectFood,
-            searchList: searchList }),
-          React.createElement(FoodList, {
-            foodList: this.props.foodList,
-            removeFromFoodList: this.props.removeFromFoodList })
+          'p',
+          null,
+          'Start typing to search for a food.  Add up to 5 items.'
         ),
-        React.createElement('hr', null),
+        React.createElement(Input, {
+          name: 'food-input',
+          className: 'foodinput',
+          type: 'text',
+          min: '1',
+          label: 'Search food',
+          value: this.props.searchedText,
+          onChange: this.props.searchFood,
+          disabled: this.props.foodList.length >= 5,
+          error: this.props.errors.foodinput }),
+        React.createElement(Input, {
+          name: 'num-svgs',
+          className: 'numsvgs',
+          type: 'number',
+          min: '1',
+          label: 'servings',
+          value: this.props.servingsText,
+          onChange: this.props.setServings,
+          disabled: this.props.foodList.length >= 5,
+          error: this.props.errors.servings }),
+        React.createElement('span', { className: "glyphicon glyphicon-plus " + (this.props.foodList.length >= 5 ? "hidden" : ""), onClick: this.props.addToFoodList }),
+        React.createElement(SearchList, {
+          selectFood: this.props.selectFood,
+          searchList: searchList }),
+        React.createElement(FoodList, {
+          foodList: this.props.foodList,
+          removeFromFoodList: this.props.removeFromFoodList }),
         React.createElement(
           'button',
-          { className: 'btn btn-default back' },
+          { className: 'btnstyle back' },
           'Back'
         ),
         React.createElement(
           'button',
-          { className: 'btn btn-default next', onClick: this.props.calculateResults },
+          { className: 'btnstyle next', onClick: this.props.calculateResults },
           'Calculate!'
         )
       )
@@ -31690,7 +31687,7 @@ var AboutYou = React.createClass({
         ),
         React.createElement(
           'button',
-          { className: 'next', name: 'aboutAnswers', onClick: this.props.goNext },
+          { className: 'btnstyle next', name: 'aboutAnswers', onClick: this.props.goNext },
           'Next'
         )
       )

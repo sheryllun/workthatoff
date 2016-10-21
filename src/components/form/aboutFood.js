@@ -15,27 +15,28 @@ var AboutFood = React.createClass({
           &nbsp; About What You Ate
         </div>
           <div className="questions">
-            <div className="holder">
-              <p>Start typing to search for a food.  Add up to 5 items.</p>
-              <Input
-                name="food-input"
-                type="text"
-                min="1"
-                placeholder="Search food"
-                value={this.props.searchedText}
-                onChange={this.props.searchFood}
-                disabled={this.props.foodList.length >= 5}
-                error={this.props.errors.foodinput} />
+            <p>Start typing to search for a food.  Add up to 5 items.</p>
+            <Input
+              name="food-input"
+              className="foodinput"
+              type="text"
+              min="1"
+              label="Search food"
+              value={this.props.searchedText}
+              onChange={this.props.searchFood}
+              disabled={this.props.foodList.length >= 5}
+              error={this.props.errors.foodinput} />
 
-                <Input
-                  name="num-svgs"
-                  type="number"
-                  min="1"
-                  placeholder="servings"
-                  value={this.props.servingsText}
-                  onChange={this.props.setServings}
-                  disabled={this.props.foodList.length >= 5}
-                  error={this.props.errors.servings} />
+              <Input
+                name="num-svgs"
+                className="numsvgs"
+                type="number"
+                min="1"
+                label="servings"
+                value={this.props.servingsText}
+                onChange={this.props.setServings}
+                disabled={this.props.foodList.length >= 5}
+                error={this.props.errors.servings} />
 
               <span className={"glyphicon glyphicon-plus " + (this.props.foodList.length >= 5 ? "hidden" : "")} onClick={this.props.addToFoodList}></span>
               <SearchList
@@ -44,10 +45,9 @@ var AboutFood = React.createClass({
               <FoodList
                 foodList={this.props.foodList}
                 removeFromFoodList={this.props.removeFromFoodList}/>
-            </div>
-            <hr />
-            <button className="btn btn-default back">Back</button>
-            <button className="btn btn-default next" onClick={this.props.calculateResults}>Calculate!</button>
+          
+            <button className="btnstyle back">Back</button>
+            <button className="btnstyle next" onClick={this.props.calculateResults}>Calculate!</button>
           </div>
         </div>
       );

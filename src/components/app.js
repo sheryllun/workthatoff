@@ -139,7 +139,6 @@ var App = React.createClass({
     this.setState({errors: []});
     var foodinput = this.state.searchedText;
     var servings = this.state.servingsText;
-
     if(foodinput.length <= 0) {
       this.state.errors.foodinput = "Required";
       return this.setState({errors: this.state.errors});
