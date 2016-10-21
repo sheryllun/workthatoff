@@ -11,7 +11,7 @@ var FoodItem = React.createClass({
     return(
       <div className='food-item' data-id={item.id}>
         {item.name}<br /> {item.servings} {serveUnit}, {totalCals} total calories
-        <span className="glyphicon glyphicon-remove" onClick={this.props.removeFromFoodList.bind(null, index)}></span>
+        <img src="../images/delete-cross.png" className="remove-btn" onClick={this.props.removeFromFoodList.bind(null, index)} />
       </div>
       );
   }

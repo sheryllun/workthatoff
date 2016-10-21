@@ -6,6 +6,12 @@ var FoodList = require('./foodList');
 var Input = require('../common/textinput');
 
 var AboutFood = React.createClass({
+  hideAddButton: function() {
+    if(this.props.foodList.length >= 5 || this.props.searchedText === '' || this.props.servingsText === '') {
+      return true;
+    }
+    return false;
+  },
   render: function() {
     var searchList = this.props.searchList;
     return (
@@ -38,16 +44,17 @@ var AboutFood = React.createClass({
                 disabled={this.props.foodList.length >= 5}
                 error={this.props.errors.servings} />
 
-              <span className={"glyphicon glyphicon-plus " + (this.props.foodList.length >= 5 ? "hidden" : "")} onClick={this.props.addToFoodList}></span>
+              <img src="../images/plus.png" className={"add-btn " + (this.hideAddButton() ? "hidden" : "")} onClick={this.props.addToFoodList} />
               <SearchList
                 selectFood={this.props.selectFood}
                 searchList={searchList} />
               <FoodList
                 foodList={this.props.foodList}
                 removeFromFoodList={this.props.removeFromFoodList}/>
-          
-            <button className="btnstyle back">Back</button>
-            <button className="btnstyle next" onClick={this.props.calculateResults}>Calculate!</button>
+            <div className="btn-div">
+              <button className="btnstyle back">Back</button>
+              <button className="btnstyle next" onClick={this.props.calculateResults} disabled={this.props.foodList.length <= 0}>Calculate!</button>
+            </div>
           </div>
         </div>
       );

@@ -31239,22 +31239,15 @@ var App = React.createClass({
     this.setState({ errors: [] });
     var foodinput = this.state.searchedText;
     var servings = this.state.servingsText;
-    if (foodinput.length <= 0) {
-      this.state.errors.foodinput = "Required";
-      return this.setState({ errors: this.state.errors });
-    } else if ($.isEmptyObject(this.state.tempSelection)) {
-      this.state.errors.foodinput = "Please make a selection from the list";
-      return this.setState({ errors: this.state.errors });
-    }
 
-    if (servings.length <= 0) {
-      this.state.errors.servings = "Required";
+    if ($.isEmptyObject(this.state.tempSelection)) {
+      this.state.errors.foodinput = "Please make a selection from the list";
       return this.setState({ errors: this.state.errors });
     }
 
     //use react addons update to manage the nested servings property of
     //tempSelection, then update the rest of the state in a callback function
-    this.setState({
+    return this.setState({
       tempSelection: update(this.state.tempSelection, { servings: { $set: servings } })
     }, function () {
       this.setState({
@@ -31468,7 +31461,8 @@ var Input = React.createClass({
     onChange: React.PropTypes.func.isRequired,
     value: React.PropTypes.string,
     error: React.PropTypes.string,
-    placeholder: React.PropTypes.string
+    placeholder: React.PropTypes.string,
+    disabled: React.PropTypes.bool
   },
   render: function () {
     var wrapperClass = this.props.className;
@@ -31489,6 +31483,7 @@ var Input = React.createClass({
           max: this.props.max,
           value: this.props.value,
           placeholder: this.props.placeholder,
+          disabled: this.props.disabled,
           onChange: this.props.onChange }),
         React.createElement('span', { className: 'bar' }),
         React.createElement(
@@ -31519,6 +31514,12 @@ var Input = require('../common/textinput');
 var AboutFood = React.createClass({
   displayName: 'AboutFood',
 
+  hideAddButton: function () {
+    if (this.props.foodList.length >= 5 || this.props.searchedText === '' || this.props.servingsText === '') {
+      return true;
+    }
+    return false;
+  },
   render: function () {
     var searchList = this.props.searchList;
     return React.createElement(
@@ -31558,7 +31559,7 @@ var AboutFood = React.createClass({
           onChange: this.props.setServings,
           disabled: this.props.foodList.length >= 5,
           error: this.props.errors.servings }),
-        React.createElement('span', { className: "glyphicon glyphicon-plus " + (this.props.foodList.length >= 5 ? "hidden" : ""), onClick: this.props.addToFoodList }),
+        React.createElement('img', { src: '../images/plus.png', className: "add-btn " + (this.hideAddButton() ? "hidden" : ""), onClick: this.props.addToFoodList }),
         React.createElement(SearchList, {
           selectFood: this.props.selectFood,
           searchList: searchList }),
@@ -31566,14 +31567,18 @@ var AboutFood = React.createClass({
           foodList: this.props.foodList,
           removeFromFoodList: this.props.removeFromFoodList }),
         React.createElement(
-          'button',
-          { className: 'btnstyle back' },
-          'Back'
-        ),
-        React.createElement(
-          'button',
-          { className: 'btnstyle next', onClick: this.props.calculateResults },
-          'Calculate!'
+          'div',
+          { className: 'btn-div' },
+          React.createElement(
+            'button',
+            { className: 'btnstyle back' },
+            'Back'
+          ),
+          React.createElement(
+            'button',
+            { className: 'btnstyle next', onClick: this.props.calculateResults, disabled: this.props.foodList.length <= 0 },
+            'Calculate!'
+          )
         )
       )
     );
@@ -31722,7 +31727,7 @@ var FoodItem = React.createClass({
       ", ",
       totalCals,
       " total calories",
-      React.createElement("span", { className: "glyphicon glyphicon-remove", onClick: this.props.removeFromFoodList.bind(null, index) })
+      React.createElement("img", { src: "../images/delete-cross.png", className: "remove-btn", onClick: this.props.removeFromFoodList.bind(null, index) })
     );
   }
 });

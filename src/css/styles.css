@@ -51,7 +51,7 @@ input[type="number"].has-error, input[type="text"].has-error {
 
 .form-head {
   font-family: 'Dosis', sans-serif;
-  background: #87ecef;
+  background: #7CC6FE;
   font-size: 3em;
   font-weight: 300;
   padding: 1em 2em;
@@ -64,19 +64,19 @@ input[type="number"].has-error, input[type="text"].has-error {
 }
 
 .about-food .form-head {
-  background: #bc9fde;
+  background: #8789C0;
 }
 
 .results-main .form-head {
-  background: #8df57d;
+  background: #5DFDCB;
 }
 
 .form-head:before {
   content: '';
   border: 8px solid;
   border-top-color: transparent;
-  border-right-color: #66afb1;
-  border-bottom-color: #66afb1;
+  border-right-color: #67a4d2;
+  border-bottom-color: #67a4d2;
   border-left-color: transparent;
   position: absolute;
   top: -16px;
@@ -84,13 +84,13 @@ input[type="number"].has-error, input[type="text"].has-error {
 }
 
 .about-food .form-head:before {
-  border-right-color: #8f79a9;
-  border-bottom-color: #8f79a9;
+  border-right-color: #787aad;
+  border-bottom-color: #787aad;
 }
 
 .results-main .form-head:before {
-  border-right-color: #6ebf61;
-  border-bottom-color: #6ebf61;
+  border-right-color: #46c59e;
+  border-bottom-color: #46c59e;
 }
 
 .questions, .results {
@@ -156,7 +156,7 @@ input:focus { outline: none; }
 input:focus ~ label, input:valid ~ label {
   top: -20px;
   font-size: 14px;
-  color: #5264AE;
+  color: #776D5A;
 }
 
 .bar {
@@ -172,7 +172,7 @@ input:focus ~ label, input:valid ~ label {
   width: 0;
   bottom: 1px;
   position: absolute;
-  background: #5264AE;
+  background: #776D5A;
   transition: 0.2s ease all;
 }
 
@@ -202,7 +202,7 @@ input:focus ~ .bar:before, input:focus ~ .bar:after {
 }
 
 .num-svgs label {
-  left: 38px;
+  left: 25%;
 }
 
 input.numsvgs { width: 50%; }
@@ -229,7 +229,7 @@ input[type="radio"] {
   font-size: 1.5em;
   font-weight: lighter;
   border: none;
-  background: #5264AE;
+  background: #776D5A;
   color: white;
   letter-spacing: 4px;
   text-align: center;
@@ -239,7 +239,23 @@ input[type="radio"] {
 }
 
 .btnstyle:hover {
-  background: #778bde;
+  background: #92866e;
+}
+
+.next:disabled {
+  background-color: #ccc;
+}
+
+.btn-div {
+  text-align: center;
+}
+
+.btn-div .btnstyle {
+  display: inline-block;
+}
+
+.btn-div .next {
+  margin-left: 15px;
 }
 
 /* search list */
@@ -260,11 +276,14 @@ input[type="radio"] {
   background: #ccc;
 }
 
-.glyphicon-plus {
-  margin-left: 10px;
-  color: green;
+.add-btn {
+  width: 30px;
+  position: absolute;
+  top: 220px;
   cursor: pointer;
 }
+
+
 /* end search list */
 
 /* food list */
@@ -274,7 +293,7 @@ input[type="radio"] {
 }
 
 .food-item:nth-child(even) {
-  background-color:  #ccc;
+  background-color:  #e3e4ff;
 }
 
 .food-input, .num-svgs { 
@@ -282,11 +301,11 @@ input[type="radio"] {
   display: inline;
 }
 
-.glyphicon-remove {
+.remove-btn {
+  width: 20px;
   position: absolute;
-  top: 13px;
-  right: 3px;
-  color:  red;
+  top: 20px;
+  right: 13px;
   cursor: pointer;
 }
 /* end food list */

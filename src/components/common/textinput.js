@@ -13,7 +13,8 @@ var Input = React.createClass({
     onChange: React.PropTypes.func.isRequired,
     value: React.PropTypes.string,
     error: React.PropTypes.string,
-    placeholder: React.PropTypes.string
+    placeholder: React.PropTypes.string,
+    disabled: React.PropTypes.bool
   },
   render: function() {
     var wrapperClass = this.props.className;
@@ -31,6 +32,7 @@ var Input = React.createClass({
             max={this.props.max}
             value={this.props.value}
             placeholder={this.props.placeholder}
+            disabled={this.props.disabled}
             onChange={this.props.onChange} />
             <span className="bar"></span>
             <label htmlFor={this.props.name}>{this.props.label}</label>
