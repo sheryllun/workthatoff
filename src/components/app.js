@@ -133,6 +133,9 @@ var App = React.createClass({
   },
   setServings: function(e) {
     var value = e.target.value;
+    if(value.includes('-') || value === '0') {
+      value = '1';
+    }
     this.setState({servingsText: value});
   },
   addToFoodList: function() {

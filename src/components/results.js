@@ -5,7 +5,7 @@ var React = require('react');
 var ResultsRow = React.createClass({
   render: function() {
     return (
-      <li>{this.props.item.time} of {this.props.item.activity}</li>
+      <li><span className="highlight">{this.props.item.time}</span> of {this.props.item.activity}</li>
     );
   }
 });
@@ -26,7 +26,7 @@ var Results = React.createClass({
               &nbsp; Results
             </div>
             <div className="results">
-              To burn off {totCal} calories, you'll have to do:
+              <p>You consumed a total of <span className="highlight">{totCal} calories</span>.  To work all of that off you'll have to do ALL of the following:</p>
               <ul>{rows}</ul>
             </div>
           </div>
