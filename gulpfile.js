@@ -18,6 +18,7 @@ var config = {
 		html: './src/*.html',
 		js: './src/**/*.js',
 		css: [
+			'node_modules/css-toggle-switch/dist/toggle-switch.css',
 			'node_modules/bootstrap/dist/css/bootstrap.min.css',
 			'node_modules/bootstrap/dist/css/bootstrap-theme.min.css',
 			'src/css/*.css'

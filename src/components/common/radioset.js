@@ -17,19 +17,23 @@ var Radio = React.createClass({
   render: function() {
     return(
         <fieldset>
-          <input type="radio"
-            name={this.props.group}
-            value={this.props.value1}
-            onChange={this.props.onChange}
-            checked={this.props.checked1} />
-          <label htmlFor={this.props.group}>{this.props.label1}</label>
+          <div className="switch-toggle well">
             <input type="radio"
+              id={this.props.label1}
               name={this.props.group}
-              value={this.props.value2}
+              value={this.props.value1}
               onChange={this.props.onChange}
-              checked={this.props.checked2} />
-          <label htmlFor={this.props.group}>{this.props.label2}</label>
-          <div className="error">{this.props.error}</div>
+              checked={this.props.checked1} />
+            <label htmlFor={this.props.label1}>{this.props.label1}</label>
+              <input type="radio"
+                id={this.props.label2}
+                name={this.props.group}
+                value={this.props.value2}
+                onChange={this.props.onChange}
+                checked={this.props.checked2} />
+            <label htmlFor={this.props.label2}>{this.props.label2}</label>
+            <a className="toggle-btn"></a>
+          </div>
         </fieldset>
       );
   }

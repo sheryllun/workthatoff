@@ -30480,7 +30480,7 @@ var App = React.createClass({
         heightUnit: '1',
         weightUnit: '1',
         age: '',
-        gender: '',
+        gender: '1',
         weight: '',
         heightLarge: '',
         heightSmall: ''
@@ -30782,30 +30782,32 @@ var Radio = React.createClass({
     return React.createElement(
       "fieldset",
       null,
-      React.createElement("input", { type: "radio",
-        name: this.props.group,
-        value: this.props.value1,
-        onChange: this.props.onChange,
-        checked: this.props.checked1 }),
-      React.createElement(
-        "label",
-        { htmlFor: this.props.group },
-        this.props.label1
-      ),
-      React.createElement("input", { type: "radio",
-        name: this.props.group,
-        value: this.props.value2,
-        onChange: this.props.onChange,
-        checked: this.props.checked2 }),
-      React.createElement(
-        "label",
-        { htmlFor: this.props.group },
-        this.props.label2
-      ),
       React.createElement(
         "div",
-        { className: "error" },
-        this.props.error
+        { className: "switch-toggle well" },
+        React.createElement("input", { type: "radio",
+          id: this.props.label1,
+          name: this.props.group,
+          value: this.props.value1,
+          onChange: this.props.onChange,
+          checked: this.props.checked1 }),
+        React.createElement(
+          "label",
+          { htmlFor: this.props.label1 },
+          this.props.label1
+        ),
+        React.createElement("input", { type: "radio",
+          id: this.props.label2,
+          name: this.props.group,
+          value: this.props.value2,
+          onChange: this.props.onChange,
+          checked: this.props.checked2 }),
+        React.createElement(
+          "label",
+          { htmlFor: this.props.label2 },
+          this.props.label2
+        ),
+        React.createElement("a", { className: "toggle-btn" })
       )
     );
   }
@@ -31006,6 +31008,8 @@ var AboutYou = React.createClass({
             label1: 'Male',
             value2: '2',
             label2: 'Female',
+            checked1: this.props.aboutAnswers.gender === "1",
+            checked2: this.props.aboutAnswers.gender === "2",
             onChange: this.props.setAboutState,
             error: this.props.errors.gender })
         ),

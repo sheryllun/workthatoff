@@ -161,7 +161,7 @@ input:focus { outline: none; }
   transition: 0.2s ease all;
 }
 
-input:focus ~ label, input:valid ~ label {
+input:not([type="radio"]):focus ~ label, input:not([type="radio"]):valid ~ label {
   top: -20px;
   font-size: 14px;
   color: #776D5A;
@@ -217,17 +217,41 @@ input.numsvgs { width: 50%; }
 
 /*End Material Design Input*/
 
+/* Radio toggle */
+fieldset {
+  width: 90%;
+  margin: 0 auto;
+}
+.well {
+  background: white;
+  border: 1px solid #afafaf;
+  height: 50px;
+  box-shadow: none;
+  border-radius: 0;
+}
+
+.switch-toggle.well label {
+  color: #776D5A;
+  height: 50px;
+  padding-top: 9px;
+  cursor: pointer;
+  font-weight: normal;
+  letter-spacing: 2px;
+}
+
+input[type="radio"]:checked+label{ color: white; } 
+
+.toggle-btn {
+  background: #776D5A;
+}
+/* End radio toggle */
+
 .heightLarge, .heightSmall {
   display: inline-block;
 }
 
 .gender > label {
   display: none;
-}
-
-input[type="radio"] {
-  margin: 4px 8px;
-  display: inline-block;
 }
 
 .btnstyle {

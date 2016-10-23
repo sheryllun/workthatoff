@@ -13,7 +13,7 @@ var App = React.createClass({
         heightUnit: '1',
         weightUnit: '1',
         age: '',
-        gender: '',
+        gender: '1',
         weight: '',
         heightLarge: '',
         heightSmall: ''

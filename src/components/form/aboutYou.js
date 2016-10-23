@@ -32,6 +32,8 @@ var AboutYou = React.createClass({
               label1="Male"
               value2="2"
               label2="Female"
+              checked1={this.props.aboutAnswers.gender === "1"}
+              checked2={this.props.aboutAnswers.gender === "2"}
               onChange={this.props.setAboutState}
               error={this.props.errors.gender} />
           </div>
