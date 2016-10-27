@@ -4,8 +4,8 @@ body {
 }
 
 .container-fluid {
-  background: url('../images/hbgwhite.png') no-repeat fixed left bottom;
-  background-size: 25%;
+  background: url('../images/hbgwhite.png') no-repeat fixed 0% 97%;
+  background-size: 20%;
 }
 
 .header {
@@ -120,11 +120,10 @@ input[type="number"].has-error, input[type="text"].has-error {
 .about-you, .about-food, .results-main {
   display: block;
   position: relative;
+  max-width: 600px;
+  margin: 0 auto 50px;
 }
 
-.about-you, .about-food {
-  margin-bottom: 50px;
-}
 
 /*Material Design Inputs*/
 
@@ -353,12 +352,48 @@ input[type="radio"]:checked+label{ color: white; }
 }
 
 .results li {
+  display: flex;
+  align-items: center;
   padding: 1em 0;
   border-bottom: 1px solid #ccc;
   min-height: 70px;
+}
 
+.results li:last-child {
+  border-bottom: none;
+}
+
+.action-icon {
+  width: 24px;
+  margin-right: 10px;
+}
+
+.results .btn-div button {
+  font-size: 1em;
 }
 /* end results list */
+
+/*footer*/
+footer {
+  background: white;
+  text-align: center;
+  font-size: 1.2em;
+  opacity: 0.7;
+}
+
+footer:hover {
+  opacity: 1;
+}
+
+footer ul {
+  margin: 1em 0;
+}
+
+footer li {
+  display: inline-block;
+  margin-right: 10px;
+}
+/*end footer*/
 
 @media screen and (max-width: 720px) {
   .header p {

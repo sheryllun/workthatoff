@@ -4,6 +4,7 @@ var React = require('react');
 var Header = require('./header');
 var Form = require('./form/formMain');
 var Results = require('./results');
+var Footer = require('./footer');
 var update = require('react-addons-update');
 
 var App = React.createClass({
@@ -282,7 +283,10 @@ var App = React.createClass({
         />
         <Results
           results={this.state.results}
-          calculateTotalCalories={this.calculateTotalCalories} />
+          calculateTotalCalories={this.calculateTotalCalories}
+          calculateResults={this.calculateResults}
+        />
+        <Footer />
       </div>
     );
   }

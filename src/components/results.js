@@ -5,7 +5,12 @@ var React = require('react');
 var ResultsRow = React.createClass({
   render: function() {
     return (
-      <li><span className="highlight">{this.props.item.time}</span> of {this.props.item.activity}</li>
+      <li>
+        <img src="../images/run.png" className="action-icon" />
+        <span>
+          <span className="highlight">{this.props.item.time}</span> of {this.props.item.activity}
+        </span>
+      </li>
     );
   }
 });
@@ -28,6 +33,10 @@ var Results = React.createClass({
             <div className="results">
               <p>You consumed a total of <span className="highlight">{totCal} calories</span>.  To work all of that off you'll have to do ALL of the following:</p>
               <ul>{rows}</ul>
+              <div className="btn-div">
+                <button className="btnstyle back">Change Food</button>
+                <button className="btnstyle next" onClick={this.props.calculateResults}>Retry</button>
+              </div>
             </div>
           </div>
         </div>
