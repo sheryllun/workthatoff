@@ -4,6 +4,7 @@ var React = require('react');
 var SearchList = require('./searchList');
 var FoodList = require('./foodList');
 var Input = require('../common/textinput');
+var ReactCSSTransitionGroup = require('react-addons-css-transition-group');
 
 var AboutFood = React.createClass({
   hideAddButton: function() {
@@ -13,8 +14,17 @@ var AboutFood = React.createClass({
     return false;
   },
   render: function() {
+    if(this.props.currentCard !== '2') {
+      return false;
+    }
     var searchList = this.props.searchList;
     return (
+      <ReactCSSTransitionGroup 
+        transitionName='card'
+        transitionEnterTimeout={600}
+        transitionAppearTimeout={600}
+        transitionLeaveTimeout={600}
+        transitionAppear={true}>
       <div className="about-food">
         <div className="form-head">
           <span className="glyphicon glyphicon-cutlery"></span>
@@ -57,6 +67,7 @@ var AboutFood = React.createClass({
             </div>
           </div>
         </div>
+        </ReactCSSTransitionGroup>
       );
   }
 });

@@ -3,10 +3,20 @@
 var React = require('react');
 var Input = require('../common/textinput');
 var Radio = require('../common/radioset');
+var ReactCSSTransitionGroup = require('react-addons-css-transition-group');
 
 var AboutYou = React.createClass({
   render: function() {
+    if(this.props.currentCard !== '1') {
+      return false;
+    }
     return (
+      <ReactCSSTransitionGroup 
+        transitionName='card'
+        transitionEnterTimeout={600}
+        transitionAppearTimeout={600}
+        transitionLeaveTimeout={600}
+        transitionAppear={true}>
       <div className="about-you">
         <div className="form-head">
           <span className="glyphicon glyphicon-star-empty"></span>
@@ -90,6 +100,7 @@ var AboutYou = React.createClass({
           <button className="btnstyle next" name="aboutAnswers" onClick={this.props.goNext} >Next</button>
         </div>
       </div>
+      </ReactCSSTransitionGroup>
       );
   }
 });

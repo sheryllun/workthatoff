@@ -9,8 +9,6 @@ var Form = React.createClass({
     return (
       <div className="row">
         <div className="main-form col-xs-12 col-sm-8 col-sm-push-2">
-        {
-          this.props.currentCard === '1' ? 
           <AboutYou
             max={this.props.max}
             lengthLarge={this.props.lengthLarge}
@@ -19,10 +17,8 @@ var Form = React.createClass({
             setAboutState={this.props.setAboutState}
             goNext={this.props.goNext}
             errors={this.props.errors}
-          /> : null
-        }
-        {
-          this.props.currentCard === '2' ?
+            currentCard={this.props.currentCard}
+          />
           <AboutFood
             goBack={this.props.goBack}
             searchFood={this.props.searchFood}
@@ -36,8 +32,8 @@ var Form = React.createClass({
             removeFromFoodList={this.props.removeFromFoodList}
             foodList={this.props.foodList}
             calculateResults={this.props.calculateResults}
-          /> : null
-        }
+            currentCard={this.props.currentCard}
+          />
         </div>
       </div>
       );

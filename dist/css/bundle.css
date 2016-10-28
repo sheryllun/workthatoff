@@ -4552,7 +4552,7 @@ input[type="number"].has-error, input[type="text"].has-error {
 
 .questions, .results {
   background: white;
-  padding: 11em 4em 0;
+  padding: 9em 4em 0;
   font-size: 1.4em;
   position: relative;
   top: 0;
@@ -4822,7 +4822,8 @@ input[type="radio"]:checked+label{ color: white; }
 }
 
 .results .btn-div button {
-  font-size: 0.8em;
+  font-size: 1em;
+  max-width: 200px;
 }
 /* end results list */
 
@@ -4873,6 +4874,37 @@ strong {
 }
 /*end modal*/
 
+/*card animations*/
+
+.card-appear {
+  opacity: 0.01;
+}
+
+.card-appear.card-appear-active {
+  opacity: 1;
+  transition: opacity .5s ease-in;
+}
+
+.card-enter {
+  opacity: 0.01;
+}
+
+.card-enter.card-enter-active {
+  opacity: 1;
+  transition: opacity 1s ease-in;
+}
+
+.card-leave {
+  opacity: 1;
+}
+
+.card-leave.card-leave-active {
+  opacity: 0.01;
+  transition: opacity 1s ease-in;
+}
+
+/*end card animations*/
+
 @media screen and (max-width: 720px) {
   .header p {
     margin-left: 0;
@@ -4900,6 +4932,18 @@ strong {
 
   .group label {
     font-size: 1em;
+  }
+
+  fieldset {
+    width: 60%;
+  }
+
+  .well {
+    height: 40px;
+  }
+
+  .switch-toggle.well label {
+    padding-top: 5px;
   }
 
   .btnstyle {

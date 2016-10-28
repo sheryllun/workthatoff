@@ -7,6 +7,7 @@ var Results = require('./results');
 var Footer = require('./footer');
 var update = require('react-addons-update');
 
+
 var App = React.createClass({
   getInitialState: function() {
     return {
@@ -297,15 +298,13 @@ var App = React.createClass({
           calculateResults={this.calculateResults}
           currentCard={this.state.currentCard}
         />
-        {
-          this.state.currentCard === '3' ?
-          <Results
-            goBack={this.goBack}
-            results={this.state.results}
-            calculateTotalCalories={this.calculateTotalCalories}
-            calculateResults={this.calculateResults}
-          /> : null
-        }
+        <Results
+          currentCard={this.state.currentCard}
+          goBack={this.goBack}
+          results={this.state.results}
+          calculateTotalCalories={this.calculateTotalCalories}
+          calculateResults={this.calculateResults}
+        />
         <div className="push"></div>
         <Footer 
           modalShown={this.state.modalShown}
