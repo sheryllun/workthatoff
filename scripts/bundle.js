@@ -49331,16 +49331,88 @@ var Footer = React.createClass({
           React.createElement(
             Modal.Title,
             null,
-            'How does this work?'
+            'Answers to Questions'
           )
         ),
         React.createElement(
           Modal.Body,
           null,
           React.createElement(
+            'h3',
+            null,
+            'How does this work?'
+          ),
+          React.createElement(
             'p',
             null,
-            'Duis mollis, est non commodo luctus, nisi erat porttitor ligula.'
+            'First we calculate your Basal Metabolic Rate (BMR), which essentially is all the energy your body uses to stay alive.',
+            React.createElement(
+              'em',
+              null,
+              React.createElement(
+                'strong',
+                null,
+                'Women: '
+              ),
+              'BMR = ( 9.56 x weight kg ) + ( 1.85 x height cm ) - ( 4.68 x age ) + 655'
+            ),
+            React.createElement(
+              'em',
+              null,
+              React.createElement(
+                'strong',
+                null,
+                'Men: '
+              ),
+              'BMR = ( 13.75 x weight kg ) + ( 5 x height cm ) - ( 6.76 x age ) + 66'
+            )
+          ),
+          React.createElement(
+            'p',
+            null,
+            'Using ',
+            React.createElement(
+              'a',
+              { href: 'https://sites.google.com/site/compendiumofphysicalactivities/home', target: '_blank' },
+              'The Compendium of Physical Activities Tracking Guide 2011'
+            ),
+            ' by B.E. Ainsworth, we take the Metabolic Equivalent (MET) data to calculate the exercise results. A MET value represents the ratio of energy (calories) required to perform a particular activiy relative to your BMR. Sitting quietly is equal to 1 MET. Mountain biking is equal to 8.5 METs.'
+          ),
+          React.createElement(
+            'p',
+            null,
+            'A random range from 1 - 5 is picked and the corresponding number of activities are chosen at random from the compendium. The total number of calories from the list of food is evenly divided by the number of activities there are.'
+          ),
+          React.createElement(
+            'p',
+            null,
+            'To calculate the time needed to perform each activity in order to burn a certain number of calories, we used the following equation:',
+            React.createElement(
+              'em',
+              null,
+              'Time (in hours) = calories to burn / ((BMR / 24) * MET of activity)'
+            )
+          ),
+          React.createElement(
+            'h3',
+            null,
+            'Why does this exist?'
+          ),
+          React.createElement(
+            'p',
+            null,
+            'I was inspired to create this calculator after reading ',
+            React.createElement(
+              'a',
+              { href: 'http://www.telegraph.co.uk/news/health/12101397/Food-labels-should-show-how-much-exercise-would-burn-off-calories.html', target: '_blank' },
+              'an article'
+            ),
+            ' about nutrition labels in the UK possibly showing how long a person would need to run to burn off the calories being consumed. I was surprised by how much work was needed to burn off a candy bar and thought it would be great to experiment with a number of different activities.'
+          ),
+          React.createElement(
+            'p',
+            null,
+            'I am not a trainer, physician, or nutritionist. I did a lot of research to make this calculator as accurate as possible, but the information provided is intended just for fun and not to take the place of any professional advice.'
           )
         )
       ),
