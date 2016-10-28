@@ -48912,7 +48912,8 @@ var App = React.createClass({
       errors: {},
       activities: [],
       results: [],
-      modalShown: false
+      modalShown: false,
+      currentCard: '1'
     };
   },
   componentDidMount: function () {
@@ -48955,16 +48956,21 @@ var App = React.createClass({
     this.setState({ errors: this.state.errors });
     return valid;
   },
-
   goNext: function (e) {
     var sectionName = e.target.name;
     var valid = this.validateSection(sectionName);
     if (!valid) {
       return;
     }
-    //show food card
+    this.setState({ currentCard: '2' });
   },
-
+  goBack: function () {
+    if (this.state.currentCard === '2') {
+      this.setState({ currentCard: '1' });
+    } else {
+      this.setState({ currentCard: '2' });
+    }
+  },
   searchFood: function (e) {
     var search = e.target.value;
     this.setState({ searchedText: search });
@@ -49072,7 +49078,7 @@ var App = React.createClass({
       result.time = duration;
       results.push(result);
     }
-    this.setState({ results: results });
+    this.setState({ results: results, currentCard: '3' });
   },
   convertToKg: function (weight) {
     return parseInt((weight * 0.453592).toFixed(2));
@@ -49165,6 +49171,7 @@ var App = React.createClass({
         aboutAnswers: this.state.aboutAnswers,
         setAboutState: this.setAboutState,
         goNext: this.goNext,
+        goBack: this.goBack,
         errors: this.state.errors,
         searchFood: this.searchFood,
         searchList: this.state.searchList,
@@ -49175,13 +49182,16 @@ var App = React.createClass({
         addToFoodList: this.addToFoodList,
         removeFromFoodList: this.removeFromFoodList,
         foodList: this.state.foodList,
-        calculateResults: this.calculateResults
+        calculateResults: this.calculateResults,
+        currentCard: this.state.currentCard
       }),
-      React.createElement(Results, {
+      this.state.currentCard === '3' ? React.createElement(Results, {
+        goBack: this.goBack,
         results: this.state.results,
         calculateTotalCalories: this.calculateTotalCalories,
         calculateResults: this.calculateResults
-      }),
+      }) : null,
+      React.createElement('div', { className: 'push' }),
       React.createElement(Footer, {
         modalShown: this.state.modalShown,
         showModal: this.showModal,
@@ -49527,7 +49537,7 @@ var AboutFood = React.createClass({
           { className: 'btn-div' },
           React.createElement(
             'button',
-            { className: 'btnstyle back' },
+            { className: 'btnstyle back', onClick: this.props.goBack },
             'Back'
           ),
           React.createElement(
@@ -49727,7 +49737,7 @@ var Form = React.createClass({
       React.createElement(
         'div',
         { className: 'main-form col-xs-12 col-sm-8 col-sm-push-2' },
-        React.createElement(AboutYou, {
+        this.props.currentCard === '1' ? React.createElement(AboutYou, {
           max: this.props.max,
           lengthLarge: this.props.lengthLarge,
           lengthSmall: this.props.lengthSmall,
@@ -49735,8 +49745,9 @@ var Form = React.createClass({
           setAboutState: this.props.setAboutState,
           goNext: this.props.goNext,
           errors: this.props.errors
-        }),
-        React.createElement(AboutFood, {
+        }) : null,
+        this.props.currentCard === '2' ? React.createElement(AboutFood, {
+          goBack: this.props.goBack,
           searchFood: this.props.searchFood,
           searchList: this.props.searchList,
           selectFood: this.props.selectFood,
@@ -49748,7 +49759,7 @@ var Form = React.createClass({
           removeFromFoodList: this.props.removeFromFoodList,
           foodList: this.props.foodList,
           calculateResults: this.props.calculateResults
-        })
+        }) : null
       )
     );
   }
@@ -49894,7 +49905,14 @@ var Results = React.createClass({
                 totCal,
                 " calories"
               ),
-              ".  To work all of that off you'll have to do ALL of the following:"
+              ".",
+              React.createElement("br", null),
+              "To work all of that off you'll have to do ",
+              React.createElement(
+                "span",
+                { className: "highlight" },
+                "ALL of the following:"
+              )
             ),
             React.createElement(
               "ul",
@@ -49906,7 +49924,7 @@ var Results = React.createClass({
               { className: "btn-div" },
               React.createElement(
                 "button",
-                { className: "btnstyle back" },
+                { className: "btnstyle back", onClick: this.props.goBack },
                 "Change Food"
               ),
               React.createElement(
