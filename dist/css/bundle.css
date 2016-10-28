@@ -4449,6 +4449,7 @@ button.close {
 body {
   background-color: #797979;
   font-size: 10px;
+  font-family: 'Questrial', sans-serif;
 }
 
 .container-fluid {
@@ -4497,14 +4498,14 @@ input[type="number"].has-error, input[type="text"].has-error {
 }
 
 .btn-default {
-  background-image: none;
+  background-image: none;ƒ
   margin: 10px;
 }
 
 .form-head {
   font-family: 'Dosis', sans-serif;
   background: #7CC6FE;
-  font-size: 3em;
+  font-size: 2.5em;
   font-weight: 300;
   padding: 1em 2em;
   position: absolute;
@@ -4705,7 +4706,7 @@ input[type="radio"]:checked+label{ color: white; }
   display: block;
   margin: 1em auto;
   text-transform: uppercase;
-  font-size: 1.2em;
+  font-size: 1em;
   font-weight: lighter;
   border: none;
   background: #776D5A;
@@ -4817,7 +4818,7 @@ input[type="radio"]:checked+label{ color: white; }
 }
 
 .results .btn-div button {
-  font-size: 1em;
+  font-size: 0.8em;
 }
 /* end results list */
 
@@ -4842,6 +4843,26 @@ footer li {
   margin-right: 10px;
 }
 /*end footer*/
+
+/*modal*/
+.modal-body {
+  padding: 0 2em;
+  font-size: 1.5em;
+}
+
+.modal-body p {
+  margin-bottom: 1.5em;
+}
+
+.modal-body em {
+  display: block;
+  margin-top: 0.5em;
+}
+
+strong {
+  font-weight: 700;
+}
+/*end modal*/
 
 @media screen and (max-width: 720px) {
   .header p {
