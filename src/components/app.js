@@ -26,7 +26,8 @@ var App = React.createClass({
       servingsText: '',
       errors: {},
       activities: [],
-      results: []
+      results: [],
+      modalShown: false
     };
   },
   componentDidMount: function() {
@@ -258,6 +259,13 @@ var App = React.createClass({
     }
     return randoms;
   },
+  showModal: function(e) {
+    e.preventDefault();
+    this.setState({modalShown: true});
+  },
+  hideModal: function() {
+    this.setState({modalShown: false});
+  },
   render: function() {
     return (
       <div className="main container-fluid">
@@ -286,7 +294,11 @@ var App = React.createClass({
           calculateTotalCalories={this.calculateTotalCalories}
           calculateResults={this.calculateResults}
         />
-        <Footer />
+        <Footer 
+          modalShown={this.state.modalShown}
+          showModal={this.showModal}
+          hideModal={this.hideModal}
+        />
       </div>
     );
   }

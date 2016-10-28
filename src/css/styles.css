@@ -219,7 +219,7 @@ input.numsvgs { width: 50%; }
 /* Radio toggle */
 fieldset {
   width: 90%;
-  margin: 0 auto;
+  margin: 0 auto 0.5em;
 }
 .well {
   background: white;

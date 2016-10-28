@@ -16,15 +16,16 @@ var config = {
 	devBaseUrl: 'http://localhost',
 	paths: {
 		html: './src/*.html',
-		js: './src/**/*.js',
+		js: [
+			'node_modules/react-bootstrap/dist/react-bootstrap.js',
+			'./src/**/*.js'
+			],
 		css: [
 			'node_modules/css-toggle-switch/dist/toggle-switch.css',
-			'node_modules/bootstrap/dist/css/bootstrap.min.css',
-			'node_modules/bootstrap/dist/css/bootstrap-theme.min.css',
 			'src/css/*.css'
 		],
 		images: './src/img/*',
-		fonts: 'node_modules/bootstrap/dist/fonts/*',
+		fonts: './src/fonts/*',
 		dist: './dist',
 		mainJs: './src/main.js'
 	}
