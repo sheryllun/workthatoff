@@ -27,7 +27,8 @@ var App = React.createClass({
       errors: {},
       activities: [],
       results: [],
-      modalShown: false
+      modalShown: false,
+      currentCard: '1'
     };
   },
   componentDidMount: function() {
@@ -70,16 +71,21 @@ var App = React.createClass({
     this.setState({errors: this.state.errors});
     return valid;
   },
-
   goNext: function(e) {
     var sectionName = e.target.name;
     var valid = this.validateSection(sectionName);
     if(!valid) {
       return;
     }
-    //show food card
+    this.setState({currentCard: '2'});
   },
-
+  goBack: function() {
+    if(this.state.currentCard === '2') {
+      this.setState({currentCard: '1'});
+    } else {
+      this.setState({currentCard: '2'});
+    }
+  },
   searchFood: function(e) {
     var search = e.target.value;
     this.setState({searchedText: search});
@@ -187,7 +193,7 @@ var App = React.createClass({
       result.time = duration;
       results.push(result);
     }
-    this.setState({results: results});
+    this.setState({results: results, currentCard: '3'});
   },
   convertToKg: function(weight) {
     return parseInt((weight * 0.453592).toFixed(2));
@@ -277,6 +283,7 @@ var App = React.createClass({
           aboutAnswers={this.state.aboutAnswers}
           setAboutState={this.setAboutState}
           goNext={this.goNext}
+          goBack={this.goBack}
           errors={this.state.errors}
           searchFood={this.searchFood}
           searchList={this.state.searchList}
@@ -288,12 +295,18 @@ var App = React.createClass({
           removeFromFoodList={this.removeFromFoodList}
           foodList={this.state.foodList}
           calculateResults={this.calculateResults}
+          currentCard={this.state.currentCard}
         />
-        <Results
-          results={this.state.results}
-          calculateTotalCalories={this.calculateTotalCalories}
-          calculateResults={this.calculateResults}
-        />
+        {
+          this.state.currentCard === '3' ?
+          <Results
+            goBack={this.goBack}
+            results={this.state.results}
+            calculateTotalCalories={this.calculateTotalCalories}
+            calculateResults={this.calculateResults}
+          /> : null
+        }
+        <div className="push"></div>
         <Footer 
           modalShown={this.state.modalShown}
           showModal={this.showModal}

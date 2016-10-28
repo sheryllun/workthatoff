@@ -52,7 +52,7 @@ var AboutFood = React.createClass({
                 foodList={this.props.foodList}
                 removeFromFoodList={this.props.removeFromFoodList}/>
             <div className="btn-div">
-              <button className="btnstyle back">Back</button>
+              <button className="btnstyle back" onClick={this.props.goBack}>Back</button>
               <button className="btnstyle next" onClick={this.props.calculateResults} disabled={this.props.foodList.length <= 0}>Calculate!</button>
             </div>
           </div>

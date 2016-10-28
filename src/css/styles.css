@@ -1,12 +1,20 @@
+html {
+  position: relative;
+  min-height: 100%;
+}
+
 body {
+  min-height: 100%;
   background-color: #797979;
   font-size: 10px;
   font-family: 'Questrial', sans-serif;
 }
 
 .container-fluid {
-  background: url('../images/hbgwhite.png') no-repeat fixed 0% 97%;
+  background: url('../images/hbgwhite.png') no-repeat fixed 0% 93%;
   background-size: 20%;
+  margin: 0 0 41px;
+  min-height: 96vh;
 }
 
 .header {
@@ -43,10 +51,6 @@ input[type="number"].has-error, input[type="text"].has-error {
   position: relative;
   margin-top: 2em;
   padding: 0;
-}
-
-.results-main-col {
-  margin-bottom: 5em;
 }
 
 .btn-default {
@@ -375,14 +379,19 @@ input[type="radio"]:checked+label{ color: white; }
 /* end results list */
 
 /*footer*/
-footer {
+.main footer {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 41px;
+  width: 100%;
   background: white;
   text-align: center;
   font-size: 1.2em;
   opacity: 0.7;
 }
 
-footer:hover {
+.main footer:hover {
   opacity: 1;
 }
 

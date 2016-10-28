@@ -31,10 +31,12 @@ var Results = React.createClass({
               &nbsp; Results
             </div>
             <div className="results">
-              <p>You consumed a total of <span className="highlight">{totCal} calories</span>.  To work all of that off you'll have to do ALL of the following:</p>
+              <p>You consumed a total of <span className="highlight">{totCal} calories</span>.
+                <br />
+               To work all of that off you'll have to do <span className="highlight">ALL of the following:</span></p>
               <ul>{rows}</ul>
               <div className="btn-div">
-                <button className="btnstyle back">Change Food</button>
+                <button className="btnstyle back" onClick={this.props.goBack}>Change Food</button>
                 <button className="btnstyle next" onClick={this.props.calculateResults}>Retry</button>
               </div>
             </div>
