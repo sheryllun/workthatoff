@@ -19,7 +19,7 @@ var AboutFood = React.createClass({
     }
     var searchList = this.props.searchList;
     return (
-      <ReactCSSTransitionGroup 
+      <ReactCSSTransitionGroup
         transitionName='card'
         transitionEnterTimeout={600}
         transitionAppearTimeout={600}

@@ -7,7 +7,6 @@ var Results = require('./results');
 var Footer = require('./footer');
 var update = require('react-addons-update');
 
-
 var App = React.createClass({
   getInitialState: function() {
     return {
@@ -306,7 +305,7 @@ var App = React.createClass({
           calculateResults={this.calculateResults}
         />
         <div className="push"></div>
-        <Footer 
+        <Footer
           modalShown={this.state.modalShown}
           showModal={this.showModal}
           hideModal={this.hideModal}

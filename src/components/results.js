@@ -27,7 +27,7 @@ var Results = React.createClass({
       rows.push(<ResultsRow item={item} key={item.activity} />);
     });
     return (
-      <ReactCSSTransitionGroup 
+      <ReactCSSTransitionGroup
         transitionName='card'
         transitionEnterTimeout={600}
         transitionAppearTimeout={600}

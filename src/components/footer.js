@@ -27,7 +27,7 @@ var Footer = React.createClass({
               Using <a href="https://sites.google.com/site/compendiumofphysicalactivities/home" target="_blank">The Compendium of Physical Activities Tracking Guide 2011</a> by B.E. Ainsworth, we take the Metabolic Equivalent (MET) data to calculate the exercise results. A MET value represents the ratio of energy (calories) required to perform a particular activiy relative to your BMR. Sitting quietly is equal to 1 MET. Mountain biking is equal to 8.5 METs.
             </p>
             <p>
-              A random range from 1 - 5 is picked and the corresponding number of activities are chosen at random from the compendium. The total number of calories from the list of food is evenly divided by the number of activities there are. 
+              A random range from 1 - 5 is picked and the corresponding number of activities are chosen at random from the compendium. The total number of calories from the list of food is evenly divided by the number of activities there are.
             </p>
             <p>
               To calculate the time needed to perform each activity in order to burn a certain number of calories, we used the following equation:
