@@ -50512,9 +50512,10 @@ module.exports = AboutYou;
 "use strict";
 
 var React = require('react');
+var ReactCSSTransitionGroup = require('react-addons-css-transition-group');
 
 var FoodItem = React.createClass({
-  displayName: "FoodItem",
+  displayName: 'FoodItem',
 
   render: function () {
     var item = this.props.food;
@@ -50522,24 +50523,24 @@ var FoodItem = React.createClass({
     var totalCals = item.servings * item.calories;
     var serveUnit = item.servings === "1" ? "serving" : "servings";
     return React.createElement(
-      "div",
-      { className: "food-item", "data-id": item.id },
+      'div',
+      { className: 'food-item', 'data-id': item.id },
       item.name,
-      React.createElement("br", null),
-      " ",
+      React.createElement('br', null),
+      ' ',
       item.servings,
-      " ",
+      ' ',
       serveUnit,
-      ", ",
+      ', ',
       totalCals,
-      " total calories",
-      React.createElement("img", { src: "../images/delete-cross.png", className: "remove-btn", onClick: this.props.removeFromFoodList.bind(null, index) })
+      ' total calories',
+      React.createElement('img', { src: '../images/delete-cross.png', className: 'remove-btn', onClick: this.props.removeFromFoodList.bind(null, index) })
     );
   }
 });
 
 var FoodList = React.createClass({
-  displayName: "FoodList",
+  displayName: 'FoodList',
 
   render: function () {
     var foodList = this.props.foodList;
@@ -50549,16 +50550,24 @@ var FoodList = React.createClass({
       rows.push(React.createElement(FoodItem, { food: food, key: i, index: i, removeFromFoodList: removeFromFoodList }));
     });
     return React.createElement(
-      "div",
-      { className: "list-of-food" },
-      rows
+      'div',
+      { className: 'list-of-food' },
+      React.createElement(
+        ReactCSSTransitionGroup,
+        {
+          transitionName: 'card',
+          transitionEnterTimeout: 600,
+          transitionLeaveTimeout: 600
+        },
+        rows
+      )
     );
   }
 });
 
 module.exports = FoodList;
 
-},{"react":429}],441:[function(require,module,exports){
+},{"react":429,"react-addons-css-transition-group":136}],441:[function(require,module,exports){
 "use strict";
 
 var React = require('react');

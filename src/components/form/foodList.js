@@ -1,6 +1,7 @@
 "use strict";
 
 var React = require('react');
+var ReactCSSTransitionGroup = require('react-addons-css-transition-group');
 
 var FoodItem = React.createClass({
   render: function() {
@@ -27,7 +28,13 @@ var FoodList = React.createClass({
     });
     return (
       <div className="list-of-food">
+        <ReactCSSTransitionGroup 
+          transitionName="card"
+          transitionEnterTimeout={600}
+          transitionLeaveTimeout={600}
+        >
         {rows}
+        </ReactCSSTransitionGroup>
       </div>
     );
   }
