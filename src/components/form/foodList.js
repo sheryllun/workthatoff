@@ -28,7 +28,7 @@ var FoodList = React.createClass({
     });
     return (
       <div className="list-of-food">
-        <ReactCSSTransitionGroup 
+        <ReactCSSTransitionGroup
           transitionName="card"
           transitionEnterTimeout={600}
           transitionLeaveTimeout={600}

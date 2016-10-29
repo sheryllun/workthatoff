@@ -45,11 +45,15 @@ var Footer = React.createClass({
           </Modal.Body>
         </Modal>
         <footer className="col-xs-12">
-          <ul>
-            <li><a href="#" onClick={this.props.showModal}>How does this work?</a> |</li>
-            <li><a href="http://www.github.com/sheryllun/workthatoff" target="_blank">Made with love &hearts;</a> |</li>
-            <li><a href="https://sheryllun.wordpress.com/about/" target="_blank">Contact me</a></li>
-          </ul>
+          <span className="footer-item">
+            <a href="#" onClick={this.props.showModal}>How does this work?</a>
+          </span>|
+          <span className="footer-item">
+            <a href="http://www.github.com/sheryllun/workthatoff" target="_blank">Made with &hearts;</a>
+          </span>|
+          <span className="footer-item">
+            <a href="https://sheryllun.wordpress.com/about/" target="_blank">Contact me</a>
+          </span>
         </footer>
       </div>
     );
