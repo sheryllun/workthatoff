@@ -50242,36 +50242,32 @@ var Footer = React.createClass({
         'footer',
         { className: 'col-xs-12' },
         React.createElement(
-          'ul',
-          null,
+          'span',
+          { className: 'footer-item' },
           React.createElement(
-            'li',
-            null,
-            React.createElement(
-              'a',
-              { href: '#', onClick: this.props.showModal },
-              'How does this work?'
-            ),
-            ' |'
-          ),
+            'a',
+            { href: '#', onClick: this.props.showModal },
+            'How does this work?'
+          )
+        ),
+        '|',
+        React.createElement(
+          'span',
+          { className: 'footer-item' },
           React.createElement(
-            'li',
-            null,
-            React.createElement(
-              'a',
-              { href: 'http://www.github.com/sheryllun/workthatoff', target: '_blank' },
-              'Made with love \u2665'
-            ),
-            ' |'
-          ),
+            'a',
+            { href: 'http://www.github.com/sheryllun/workthatoff', target: '_blank' },
+            'Made with \u2665'
+          )
+        ),
+        '|',
+        React.createElement(
+          'span',
+          { className: 'footer-item' },
           React.createElement(
-            'li',
-            null,
-            React.createElement(
-              'a',
-              { href: 'https://sheryllun.wordpress.com/about/', target: '_blank' },
-              'Contact me'
-            )
+            'a',
+            { href: 'https://sheryllun.wordpress.com/about/', target: '_blank' },
+            'Contact me'
           )
         )
       )

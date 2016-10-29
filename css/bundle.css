@@ -4456,6 +4456,7 @@ body {
   background-color: #797979;
   font-size: 10px;
   font-family: 'Questrial', sans-serif;
+  overflow-x: hidden;
 }
 
 .container-fluid {
@@ -4558,7 +4559,7 @@ input[type="number"].has-error, input[type="text"].has-error {
   top: 0;
   left: 16px;
   box-shadow: 2px 2px 3px #4a3a3a;
-  overflow: auto;
+  overflow: hidden;
 }
 
 .results {
@@ -4853,14 +4854,12 @@ input[type="radio"]:checked+label{ color: white; }
   opacity: 1;
 }
 
-footer ul {
-  margin: 1em 0;
+.footer-item {
+  display: inline-block;
+  margin: 1em;
+  padding: 0;
 }
 
-footer li {
-  display: inline-block;
-  margin-right: 10px;
-}
 /*end footer*/
 
 /*modal*/
@@ -4922,6 +4921,16 @@ strong {
 }
 /*end card animations*/
 
+@media screen and (max-width: 805px) {
+  .results .btn-div button {
+    display: block;
+  }
+
+  .results .btn-div .next {
+    margin: 1em auto;
+  }
+}
+
 @media screen and (max-width: 720px) {
   .header p {
     margin-left: 0;
@@ -4964,7 +4973,7 @@ strong {
   }
 
   .btnstyle {
-    max-width: 130px;
+    max-width: 150px;
     font-size: 1em;
   }
 
@@ -4986,6 +4995,17 @@ strong {
     width: 25px;
     top: 177px;
     right: 10px;
+  }
+}
+
+@media screen and (max-width: 420px) {
+  .results .btn-div button {
+    width: 75%;
+  }
+
+  .main footer {
+    padding: 0;
+    font-size: 1em;
   }
 }
 
