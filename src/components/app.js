@@ -29,6 +29,7 @@ var App = React.createClass({
       results: [],
       modalShown: false,
       searchShown: false,
+      seriousMode: false,
       currentCard: '1'
     };
   },
@@ -186,14 +187,30 @@ var App = React.createClass({
     var randomActivities = this.randomNumbers(randomNum);
     var calsPerActivity = totalCalories / randomActivities.length;
     var results = [];
-    for(var i = 0; i < randomActivities.length; i++) {
+    if(this.state.seriousMode) {
+      var seriousActivities = this.state.activities.filter(function(item) {
+        if(item.Serious === 1) {
+          return true;
+        }
+      });
+      randomNum = Math.floor(Math.random() * seriousActivities.length);
       var result = {};
-      var activityIndex = randomActivities[i];
-      var mets = this.state.activities[activityIndex].Mets;
-      var duration = this.calculateActivityDuration(mets, bmr, calsPerActivity);
-      result.activity = this.state.activities[activityIndex].Activity;
+      var mets = seriousActivities[randomNum].Mets;
+      var duration = this.calculateActivityDuration(mets, bmr, totalCalories);
+      result.activity = seriousActivities[randomNum].Activity;
       result.time = duration;
       results.push(result);
+    } else {
+      
+      for(var i = 0; i < randomActivities.length; i++) {
+        var result = {};
+        var activityIndex = randomActivities[i];
+        var mets = this.state.activities[activityIndex].Mets;
+        var duration = this.calculateActivityDuration(mets, bmr, calsPerActivity);
+        result.activity = this.state.activities[activityIndex].Activity;
+        result.time = duration;
+        results.push(result);
+      }
     }
     this.setState({results: results, currentCard: '3'});
   },
@@ -280,6 +297,13 @@ var App = React.createClass({
   hideList: function() {
     this.setState({searchShown: false});
   },
+  toggleSeriousMode: function() {
+    if(this.state.seriousMode) {
+      this.setState({seriousMode: false});
+    } else {
+      this.setState({seriousMode: true});
+    }
+  },
   render: function() {
     return (
       <div className="main container-fluid">
@@ -314,6 +338,8 @@ var App = React.createClass({
           results={this.state.results}
           calculateTotalCalories={this.calculateTotalCalories}
           calculateResults={this.calculateResults}
+          seriousMode={this.state.seriousMode}
+          toggleSeriousMode={this.toggleSeriousMode}
         />
         <div className="push"></div>
         <Footer
