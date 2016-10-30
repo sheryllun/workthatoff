@@ -28,6 +28,7 @@ var App = React.createClass({
       activities: [],
       results: [],
       modalShown: false,
+      searchShown: false,
       currentCard: '1'
     };
   },
@@ -118,6 +119,7 @@ var App = React.createClass({
             };
           }
           this.setState({searchList: this.state.searchList});
+          this.showList();
         }
       }).bind(this),
       error: function() {
@@ -272,6 +274,12 @@ var App = React.createClass({
   hideModal: function() {
     this.setState({modalShown: false});
   },
+  showList: function() {
+    this.setState({searchShown: true});
+  },
+  hideList: function() {
+    this.setState({searchShown: false});
+  },
   render: function() {
     return (
       <div className="main container-fluid">
@@ -296,6 +304,9 @@ var App = React.createClass({
           foodList={this.state.foodList}
           calculateResults={this.calculateResults}
           currentCard={this.state.currentCard}
+          showList={this.showList}
+          hideList={this.hideList}
+          searchShown={this.state.searchShown}
         />
         <Results
           currentCard={this.state.currentCard}

@@ -33,6 +33,9 @@ var Form = React.createClass({
             foodList={this.props.foodList}
             calculateResults={this.props.calculateResults}
             currentCard={this.props.currentCard}
+            showList={this.props.showList}
+            hideList={this.props.hideList}
+            searchShown={this.props.searchShown}
           />
         </div>
       </div>

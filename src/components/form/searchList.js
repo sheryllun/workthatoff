@@ -14,14 +14,22 @@ var SearchItem = React.createClass({
 });
 
 var SearchList = React.createClass({
+  componentDidMount: function() {
+    document.addEventListener('click', this.props.hideList);
+  },
+  componentWillUnmount: function() {
+    document.removeEventListener('click', this.props.hideList);
+  },
   render: function() {
+    var className = 'search-list';
+    className += this.props.searchShown ? ' open' : '';
     var selectFood = this.props.selectFood;
     var rows = [];
     this.props.searchList.forEach(function(food) {
       rows.push(<SearchItem food={food} key={food.id} selectFood={selectFood} />);
     });
     return (
-      <ul className="search-list">
+      <ul className={className}>
         {rows}
       </ul>
     );

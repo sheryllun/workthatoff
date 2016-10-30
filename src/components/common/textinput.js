@@ -11,6 +11,7 @@ var Input = React.createClass({
     min: React.PropTypes.string.isRequired,
     max: React.PropTypes.string,
     onChange: React.PropTypes.func.isRequired,
+    onFocus: React.PropTypes.func,
     value: React.PropTypes.string,
     error: React.PropTypes.string,
     placeholder: React.PropTypes.string,
@@ -33,6 +34,7 @@ var Input = React.createClass({
             value={this.props.value}
             placeholder={this.props.placeholder}
             disabled={this.props.disabled}
+            onFocus={this.props.onFocus}
             onChange={this.props.onChange} />
             <span className="bar"></span>
             <label htmlFor={this.props.name}>{this.props.label}</label>
