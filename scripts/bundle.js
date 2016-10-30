@@ -49523,7 +49523,7 @@ var Footer = React.createClass({
           React.createElement(
             'p',
             null,
-            'First we calculate your Basal Metabolic Rate (BMR), which essentially is all the energy your body uses to stay alive.',
+            'First we calculate your Basal Metabolic Rate (BMR) -- an estimate of the number of calories you\'d burn if you stayed in bed for 24 hours. It represents the minimum amount of energy needed to keep your body functioning, including breathing and keeping your heart beating.',
             React.createElement(
               'em',
               null,
