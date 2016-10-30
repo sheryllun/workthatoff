@@ -181,36 +181,29 @@ var App = React.createClass({
   },
 
   calculateResults: function() {
+    var activities = this.state.activities;
     var bmr = this.calcBMR();
     var totalCalories = this.calculateTotalCalories();
-    var randomNum = Math.floor(Math.random() * 5); //randomNum between 1 - 5
-    var randomActivities = this.randomNumbers(randomNum);
-    var calsPerActivity = totalCalories / randomActivities.length;
+    var randomRange = Math.floor(Math.random() * 5); //randomNum between 1 - 5
+    var randomActivities = this.randomNumbers(randomRange);
+    var calsPerActivity = totalCalories / randomRange;
     var results = [];
+
     if(this.state.seriousMode) {
-      var seriousActivities = this.state.activities.filter(function(item) {
-        if(item.Serious === 1) {
-          return true;
-        }
+      randomRange = 1;
+      activities = this.state.activities.filter(function(item) {
+        if(item.Serious === 1) { return true; }
       });
-      randomNum = Math.floor(Math.random() * seriousActivities.length);
+    }
+
+    for(var i = 0; i < randomActivities.length; i++) {
       var result = {};
-      var mets = seriousActivities[randomNum].Mets;
-      var duration = this.calculateActivityDuration(mets, bmr, totalCalories);
-      result.activity = seriousActivities[randomNum].Activity;
+      var activityIndex = randomActivities[i];
+      var mets = activities[activityIndex].Mets;
+      var duration = this.calculateActivityDuration(mets, bmr, calsPerActivity);
+      result.activity = activities[activityIndex].Activity;
       result.time = duration;
       results.push(result);
-    } else {
-      
-      for(var i = 0; i < randomActivities.length; i++) {
-        var result = {};
-        var activityIndex = randomActivities[i];
-        var mets = this.state.activities[activityIndex].Mets;
-        var duration = this.calculateActivityDuration(mets, bmr, calsPerActivity);
-        result.activity = this.state.activities[activityIndex].Activity;
-        result.time = duration;
-        results.push(result);
-      }
     }
     this.setState({results: results, currentCard: '3'});
   },

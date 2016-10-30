@@ -46,7 +46,7 @@ var Results = React.createClass({
                To work all of that off, you'll have to do <span className="highlight">ALL of the following:</span></p>
               <ul>{rows}</ul>
               <div className="mode">
-                <input type="checkbox" id="serious" onChange={this.props.toggleSeriousMode} checked={this.props.seriousMode}/> 
+                <input type="checkbox" id="serious" onChange={this.props.toggleSeriousMode} checked={this.props.seriousMode}/>
                 <label htmlFor="serious">
                   <span className="check"></span>
                   <span className="box"></span>
