@@ -4755,7 +4755,12 @@ input[type="radio"]:checked+label{ color: white; }
 
 /* search list */
 .search-list {
+  display: none;
   padding-left: 5px;
+}
+
+.search-list.open {
+  display: block;
 }
 
 .search-list li {
