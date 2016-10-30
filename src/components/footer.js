@@ -13,7 +13,7 @@ var Footer = React.createClass({
           </Modal.Header>
           <Modal.Body>
             <h3>How does this work?</h3>
-            <p>First we calculate your Basal Metabolic Rate (BMR), which essentially is all the energy your body uses to stay alive.
+            <p>First we calculate your Basal Metabolic Rate (BMR) -- an estimate of the number of calories you'd burn if you stayed in bed for 24 hours. It represents the minimum amount of energy needed to keep your body functioning, including breathing and keeping your heart beating.
               <em>
                 <strong>Women: </strong>
                 BMR = ( 9.56 x weight kg ) + ( 1.85 x height cm ) - ( 4.68 x age ) + 655
