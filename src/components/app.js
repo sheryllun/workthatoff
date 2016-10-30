@@ -185,17 +185,17 @@ var App = React.createClass({
     var bmr = this.calcBMR();
     var totalCalories = this.calculateTotalCalories();
     var randomRange = Math.floor(Math.random() * 5); //randomNum between 1 - 5
-    var randomActivities = this.randomNumbers(randomRange);
-    var calsPerActivity = totalCalories / randomRange;
+    var randomActivities = this.randomNumbers(randomRange, activities);
+    var calsPerActivity = totalCalories / (randomRange + 1);
     var results = [];
 
     if(this.state.seriousMode) {
-      randomRange = 1;
       activities = this.state.activities.filter(function(item) {
         if(item.Serious === 1) { return true; }
       });
+      randomRange = 0;
+      randomActivities = this.randomNumbers(randomRange, activities);
     }
-
     for(var i = 0; i < randomActivities.length; i++) {
       var result = {};
       var activityIndex = randomActivities[i];
@@ -268,9 +268,9 @@ var App = React.createClass({
     finalTime += (minutes + minCounter);
     return finalTime;
   },
-  randomNumbers: function(qty) {
+  randomNumbers: function(qty, array) {
     var randoms = [];
-    var max = this.state.activities.length;
+    var max = array.length;
     for(var i = 0; i <= qty; i++) {
       var rando = Math.floor(Math.random() * max);
       randoms.push(rando);
