@@ -2,6 +2,8 @@
 
 var React = require('react');
 var ReactCSSTransitionGroup = require('react-addons-css-transition-group');
+var Popover = require('react-bootstrap').Popover;
+var OverlayTrigger = require('react-bootstrap').OverlayTrigger;
 
 var ResultsRow = React.createClass({
   render: function() {
@@ -26,6 +28,12 @@ var Results = React.createClass({
     this.props.results.forEach(function(item) {
       rows.push(<ResultsRow item={item} key={item.activity} />);
     });
+    var seriousModeTip = (
+      <Popover id="modeTooltip" title="Serious Mode??">
+        <strong>Serious Mode!!</strong>
+        <p>You'll only get one exercise and it will be something that is doable for the average person. Check the box and click "Gimme Another."</p>
+      </Popover>
+    );
     return (
       <ReactCSSTransitionGroup
         transitionName='card'
@@ -50,8 +58,11 @@ var Results = React.createClass({
                 <label htmlFor="serious">
                   <span className="check"></span>
                   <span className="box"></span>
-                  Serious Mode
+                  Activate Serious Mode
                 </label>
+                <OverlayTrigger trigger="click" rootClose placement="right" overlay={seriousModeTip}>
+                  <img className="question-icon" src="../images/info.png" alt="More info"/>
+                </OverlayTrigger>
               </div>
               <div className="btn-div">
                 <button className="btnstyle back" onClick={this.props.goBack}>Change Food</button>
