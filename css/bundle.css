@@ -4843,6 +4843,11 @@ input[type="radio"]:checked+label{ color: white; }
 
 .mode {
   position: relative;
+  margin-top: 2em;
+}
+
+.popover {
+  max-width: 300px;
 }
 
 input[type="checkbox"] {
@@ -5069,6 +5074,14 @@ strong {
     width: 25px;
     top: 177px;
     right: 10px;
+  }
+
+  .modal-dialog {
+    margin: 0;
+  }
+
+  .modal-open .modal {
+    padding-left: 0;
   }
 }
 
