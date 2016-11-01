@@ -5,11 +5,14 @@ var connect = require('gulp-connect'); //run a local web server
 var open = require('gulp-open'); //open a url in a web browser
 var browserify = require('browserify');
 var source = require('vinyl-source-stream');
+var streamify = require('gulp-streamify');
 var babelify = require('babelify');
 var concat = require('gulp-concat');
 var lint = require('gulp-eslint');
 var imagemin = require('gulp-imagemin');
 var cache = require('gulp-cache');
+var uglify = require('gulp-uglify');
+var minifyCss = require('gulp-clean-css');
 
 var config = {
 	port: 9005,
@@ -63,6 +66,7 @@ gulp.task('js', function() {
 		.bundle()
 		.on('error', console.error.bind(console))
 		.pipe(source('bundle.js'))
+		.pipe(streamify(uglify()))
 		.pipe(gulp.dest(config.paths.dist + '/scripts'))
 		.pipe(connect.reload());
 });
@@ -70,6 +74,7 @@ gulp.task('js', function() {
 gulp.task('css', function() {
 	gulp.src(config.paths.css)
 		.pipe(concat('bundle.css'))
+		.pipe(minifyCss())
 		.pipe(gulp.dest(config.paths.dist + '/css'))
 		.pipe(connect.reload());
 });
