@@ -60,7 +60,7 @@ var Results = React.createClass({
                   <span className="box"></span>
                   Activate Serious Mode
                 </label>
-                <OverlayTrigger trigger="click" rootClose placement="right" overlay={seriousModeTip}>
+                <OverlayTrigger trigger="click" rootClose placement="top" overlay={seriousModeTip}>
                   <img className="question-icon" src="../images/info.png" alt="More info"/>
                 </OverlayTrigger>
               </div>

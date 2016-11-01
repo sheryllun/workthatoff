@@ -181,6 +181,7 @@ var App = React.createClass({
   },
 
   calculateResults: function() {
+    debugger;
     var activities = this.state.activities;
     var bmr = this.calcBMR();
     var totalCalories = this.calculateTotalCalories();
@@ -195,6 +196,7 @@ var App = React.createClass({
       });
       randomRange = 0;
       randomActivities = this.randomNumbers(randomRange, activities);
+      calsPerActivity = totalCalories;
     }
     for(var i = 0; i < randomActivities.length; i++) {
       var result = {};
