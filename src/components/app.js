@@ -97,7 +97,7 @@ var App = React.createClass({
       return;
     }
     var params = {
-      results: '0:10',
+      results: '0:20',
       fields: '*',
       appKey: '0fb276d93ce6f301cb6c0654e8a7206e',
       appId: 'b898ecf9'
@@ -181,7 +181,6 @@ var App = React.createClass({
   },
 
   calculateResults: function() {
-    debugger;
     var activities = this.state.activities;
     var bmr = this.calcBMR();
     var totalCalories = this.calculateTotalCalories();

@@ -4,6 +4,7 @@ var React = require('react');
 var ReactCSSTransitionGroup = require('react-addons-css-transition-group');
 var Popover = require('react-bootstrap').Popover;
 var OverlayTrigger = require('react-bootstrap').OverlayTrigger;
+var ReactShare = require('react-share');
 
 var ResultsRow = React.createClass({
   render: function() {
@@ -23,6 +24,16 @@ var Results = React.createClass({
     if(this.props.currentCard !== '3') {
       return false;
     }
+    var FacebookShareButton = ReactShare.ShareButtons.FacebookShareButton,
+        GooglePlusShareButton = ReactShare.ShareButtons.GooglePlusShareButton,
+        LinkedinShareButton = ReactShare.ShareButtons.LinkedinShareButton,
+        TwitterShareButton = ReactShare.ShareButtons.TwitterShareButton;
+
+    var FacebookShareCount = ReactShare.ShareCounts.FacebookShareCount,
+        GooglePlusShareCount = ReactShare.ShareCounts.GooglePlusShareCount,
+        LinkedinShareCount = ReactShare.ShareCounts.LinkedinShareCount,
+        PinterestShareCount = ReactShare.ShareCounts.PinterestShareCount;
+
     var totCal = this.props.calculateTotalCalories();
     var rows = [];
     this.props.results.forEach(function(item) {
@@ -67,6 +78,27 @@ var Results = React.createClass({
               <div className="btn-div">
                 <button className="btnstyle back" onClick={this.props.goBack}>Change Food</button>
                 <button className="btnstyle next" onClick={this.props.calculateResults}>Gimme Another</button>
+              </div>
+              <div className="share-div">
+                <span>Share your results</span>
+                <FacebookShareButton className="share-btn" title="hello" url="http://www.google.com" description="test">
+                  <img className="fb" src="../images/sharing/fb.svg" alt="Share on Facebook" />
+                </FacebookShareButton>
+
+                <GooglePlusShareButton className="share-btn" title="hello" url="http://www.google.com" description="test">
+                  <img className="gp" src="../images/sharing/gp.svg" alt="Share on G+" />
+                </GooglePlusShareButton>
+
+                <LinkedinShareButton className="share-btn"title="hello" url="http://www.google.com" description="test">
+                  <img className="li" src="../images/sharing/li.svg" alt="Share on LinkedIn" />
+                </LinkedinShareButton>
+
+                <TwitterShareButton className="share-btn" title="hello" url="http://www.google.com" description="test">
+                  <img className="tw" src="../images/sharing/tw.svg" alt="Share on Twitter" />
+                </TwitterShareButton>
+                <a href="mailto:?body=thebody&subject=Your%20Workout%20Results%20from%20WorkThatOff.com" target="_blank">
+                  <img className="mail" src="../images/sharing/mail.svg" alt="Email your results" />
+                </a>
               </div>
             </div>
           </div>

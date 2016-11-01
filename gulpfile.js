@@ -24,7 +24,7 @@ var config = {
 			'node_modules/css-toggle-switch/dist/toggle-switch.css',
 			'src/css/*.css'
 		],
-		images: './src/img/*',
+		images: './src/img/**/*',
 		fonts: './src/fonts/*',
 		dist: './dist',
 		mainJs: './src/main.js'
