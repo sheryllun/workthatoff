@@ -54,7 +54,7 @@ var AboutFood = React.createClass({
               disabled={this.props.foodList.length >= 5}
               error={this.props.errors.servings} />
 
-            <img src="../images/plus.png" className={"add-btn " + (this.hideAddButton() ? "hidden" : "")} onClick={this.props.addToFoodList} />
+            <img src="images/plus.png" className={"add-btn " + (this.hideAddButton() ? "hidden" : "")} onClick={this.props.addToFoodList} />
             <SearchList
               showList={this.props.showList}
               hideList={this.props.hideList}

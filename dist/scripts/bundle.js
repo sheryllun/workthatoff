@@ -53973,7 +53973,7 @@ var AboutFood = React.createClass({
             onChange: this.props.setServings,
             disabled: this.props.foodList.length >= 5,
             error: this.props.errors.servings }),
-          React.createElement('img', { src: '../images/plus.png', className: "add-btn " + (this.hideAddButton() ? "hidden" : ""), onClick: this.props.addToFoodList }),
+          React.createElement('img', { src: 'images/plus.png', className: "add-btn " + (this.hideAddButton() ? "hidden" : ""), onClick: this.props.addToFoodList }),
           React.createElement(SearchList, {
             showList: this.props.showList,
             hideList: this.props.hideList,
@@ -54161,7 +54161,7 @@ var FoodItem = React.createClass({
       ', ',
       totalCals,
       ' total calories',
-      React.createElement('img', { src: '../images/delete-cross.png', className: 'remove-btn', onClick: this.props.removeFromFoodList.bind(null, index) })
+      React.createElement('img', { src: 'images/delete-cross.png', className: 'remove-btn', onClick: this.props.removeFromFoodList.bind(null, index) })
     );
   }
 });
@@ -54343,7 +54343,7 @@ var ResultsRow = React.createClass({
     return React.createElement(
       'li',
       null,
-      React.createElement('img', { src: '../images/run.png', className: 'action-icon' }),
+      React.createElement('img', { src: 'images/run.png', className: 'action-icon' }),
       React.createElement(
         'span',
         null,
@@ -54454,7 +54454,7 @@ var Results = React.createClass({
                 React.createElement(
                   OverlayTrigger,
                   { trigger: 'click', rootClose: true, placement: 'top', overlay: seriousModeTip },
-                  React.createElement('img', { className: 'question-icon', src: '../images/info.png', alt: 'More info' })
+                  React.createElement('img', { className: 'question-icon', src: 'images/info.png', alt: 'More info' })
                 )
               ),
               React.createElement(
@@ -54482,27 +54482,27 @@ var Results = React.createClass({
                 React.createElement(
                   FacebookShareButton,
                   { className: 'share-btn', title: 'hello', url: 'http://www.google.com', description: 'test' },
-                  React.createElement('img', { className: 'fb', src: '../images/sharing/fb.svg', alt: 'Share on Facebook' })
+                  React.createElement('img', { className: 'fb', src: 'images/sharing/fb.svg', alt: 'Share on Facebook' })
                 ),
                 React.createElement(
                   GooglePlusShareButton,
                   { className: 'share-btn', title: 'hello', url: 'http://www.google.com', description: 'test' },
-                  React.createElement('img', { className: 'gp', src: '../images/sharing/gp.svg', alt: 'Share on G+' })
+                  React.createElement('img', { className: 'gp', src: 'images/sharing/gp.svg', alt: 'Share on G+' })
                 ),
                 React.createElement(
                   LinkedinShareButton,
                   { className: 'share-btn', title: 'hello', url: 'http://www.google.com', description: 'test' },
-                  React.createElement('img', { className: 'li', src: '../images/sharing/li.svg', alt: 'Share on LinkedIn' })
+                  React.createElement('img', { className: 'li', src: 'images/sharing/li.svg', alt: 'Share on LinkedIn' })
                 ),
                 React.createElement(
                   TwitterShareButton,
                   { className: 'share-btn', title: 'hello', url: 'http://www.google.com', description: 'test' },
-                  React.createElement('img', { className: 'tw', src: '../images/sharing/tw.svg', alt: 'Share on Twitter' })
+                  React.createElement('img', { className: 'tw', src: 'images/sharing/tw.svg', alt: 'Share on Twitter' })
                 ),
                 React.createElement(
                   'a',
                   { href: 'mailto:?body=thebody&subject=Your%20Workout%20Results%20from%20WorkThatOff.com', target: '_blank' },
-                  React.createElement('img', { className: 'mail', src: '../images/sharing/mail.svg', alt: 'Email your results' })
+                  React.createElement('img', { className: 'mail', src: 'images/sharing/mail.svg', alt: 'Email your results' })
                 )
               )
             )

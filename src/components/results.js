@@ -10,7 +10,7 @@ var ResultsRow = React.createClass({
   render: function() {
     return (
       <li>
-        <img src="../images/run.png" className="action-icon" />
+        <img src="images/run.png" className="action-icon" />
         <span>
           <span className="highlight">{this.props.item.time}</span> of {this.props.item.activity}
         </span>
@@ -67,7 +67,7 @@ var Results = React.createClass({
                   Activate Serious Mode
                 </label>
                 <OverlayTrigger trigger="click" rootClose placement="top" overlay={seriousModeTip}>
-                  <img className="question-icon" src="../images/info.png" alt="More info"/>
+                  <img className="question-icon" src="images/info.png" alt="More info"/>
                 </OverlayTrigger>
               </div>
               <div className="btn-div">
@@ -77,22 +77,22 @@ var Results = React.createClass({
               <div className="share-div">
                 <span>Share your results</span>
                 <FacebookShareButton className="share-btn" title="hello" url="http://www.google.com" description="test">
-                  <img className="fb" src="../images/sharing/fb.svg" alt="Share on Facebook" />
+                  <img className="fb" src="images/sharing/fb.svg" alt="Share on Facebook" />
                 </FacebookShareButton>
 
                 <GooglePlusShareButton className="share-btn" title="hello" url="http://www.google.com" description="test">
-                  <img className="gp" src="../images/sharing/gp.svg" alt="Share on G+" />
+                  <img className="gp" src="images/sharing/gp.svg" alt="Share on G+" />
                 </GooglePlusShareButton>
 
                 <LinkedinShareButton className="share-btn" title="hello" url="http://www.google.com" description="test">
-                  <img className="li" src="../images/sharing/li.svg" alt="Share on LinkedIn" />
+                  <img className="li" src="images/sharing/li.svg" alt="Share on LinkedIn" />
                 </LinkedinShareButton>
 
                 <TwitterShareButton className="share-btn" title="hello" url="http://www.google.com" description="test">
-                  <img className="tw" src="../images/sharing/tw.svg" alt="Share on Twitter" />
+                  <img className="tw" src="images/sharing/tw.svg" alt="Share on Twitter" />
                 </TwitterShareButton>
                 <a href="mailto:?body=thebody&subject=Your%20Workout%20Results%20from%20WorkThatOff.com" target="_blank">
-                  <img className="mail" src="../images/sharing/mail.svg" alt="Email your results" />
+                  <img className="mail" src="images/sharing/mail.svg" alt="Email your results" />
                 </a>
               </div>
             </div>
