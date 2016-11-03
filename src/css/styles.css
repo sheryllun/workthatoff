@@ -487,6 +487,10 @@ input[type=checkbox]:checked ~ label .check {
   display: inline-block;
 }
 
+.share-btn:hover {
+  opacity: 0.7;
+}
+
 .share-div img {
   width: 20px;
   margin: 0 10px;

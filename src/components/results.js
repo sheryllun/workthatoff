@@ -29,11 +29,6 @@ var Results = React.createClass({
         LinkedinShareButton = ReactShare.ShareButtons.LinkedinShareButton,
         TwitterShareButton = ReactShare.ShareButtons.TwitterShareButton;
 
-    var FacebookShareCount = ReactShare.ShareCounts.FacebookShareCount,
-        GooglePlusShareCount = ReactShare.ShareCounts.GooglePlusShareCount,
-        LinkedinShareCount = ReactShare.ShareCounts.LinkedinShareCount,
-        PinterestShareCount = ReactShare.ShareCounts.PinterestShareCount;
-
     var totCal = this.props.calculateTotalCalories();
     var rows = [];
     this.props.results.forEach(function(item) {
@@ -89,7 +84,7 @@ var Results = React.createClass({
                   <img className="gp" src="../images/sharing/gp.svg" alt="Share on G+" />
                 </GooglePlusShareButton>
 
-                <LinkedinShareButton className="share-btn"title="hello" url="http://www.google.com" description="test">
+                <LinkedinShareButton className="share-btn" title="hello" url="http://www.google.com" description="test">
                   <img className="li" src="../images/sharing/li.svg" alt="Share on LinkedIn" />
                 </LinkedinShareButton>
 

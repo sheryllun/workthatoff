@@ -139,7 +139,8 @@ var App = React.createClass({
         servings: item.servings
       },
       searchList: [],
-      searchedText: item.name
+      searchedText: item.name,
+      errors: []
     });
   },
   setServings: function(e) {
