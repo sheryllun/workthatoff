@@ -53438,9 +53438,7 @@ var foodListFunctions = {
   }
 };
 
-var AppMain = React.createClass({
-  displayName: 'AppMain',
-
+var AppMain = {
   getInitialState: function () {
     return {
       aboutAnswers: {
@@ -53643,7 +53641,7 @@ var AppMain = React.createClass({
       })
     );
   }
-});
+};
 
 var App = React.createClass(Object.assign({}, AppMain, calculateFunctions, foodListFunctions));
 

@@ -148,7 +148,7 @@ var foodListFunctions = {
   }
 };
 
-var AppMain = React.createClass({
+var AppMain = {
   getInitialState: function() {
     return {
       aboutAnswers: {
@@ -351,7 +351,7 @@ var AppMain = React.createClass({
       </div>
     );
   }
-});
+};
 
 var App = React.createClass(Object.assign({}, AppMain, calculateFunctions, foodListFunctions));
 
