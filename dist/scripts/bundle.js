@@ -53293,8 +53293,153 @@ var Results = require('./results');
 var Footer = require('./footer');
 var update = require('react-addons-update');
 
-var App = React.createClass({
-  displayName: 'App',
+var calculateFunctions = {
+  calculateResults: function () {
+    var activities = this.state.activities;
+    var bmr = this.calcBMR();
+    var totalCalories = this.calculateTotalCalories();
+    var randomRange = Math.floor(Math.random() * 5); //randomNum between 1 - 5
+    var randomActivities = this.randomNumbers(randomRange, activities);
+    var calsPerActivity = totalCalories / (randomRange + 1);
+    var results = [];
+
+    if (this.state.seriousMode) {
+      activities = this.state.activities.filter(function (item) {
+        if (item.Serious === 1) {
+          return true;
+        }
+      });
+      randomRange = 0;
+      randomActivities = this.randomNumbers(randomRange, activities);
+      calsPerActivity = totalCalories;
+    }
+    for (var i = 0; i < randomActivities.length; i++) {
+      var result = {};
+      var activityIndex = randomActivities[i];
+      var mets = activities[activityIndex].Mets;
+      var duration = this.calculateActivityDuration(mets, bmr, calsPerActivity);
+      result.activity = activities[activityIndex].Activity;
+      result.time = duration;
+      results.push(result);
+    }
+    this.setState({ results: results, currentCard: '3' });
+  },
+  convertToKg: function (weight) {
+    return parseInt((weight * 0.453592).toFixed(2));
+  },
+  convertToCm: function () {
+    var finalHeight;
+    var heightLarge = parseInt(this.state.aboutAnswers.heightLarge);
+    var heightSmall = parseInt(this.state.aboutAnswers.heightSmall);
+    if (this.state.aboutAnswers.heightUnit === '1') {
+      var feetToInches = heightLarge * 12;
+      finalHeight = ((feetToInches + heightSmall) * 2.54).toFixed(2);
+    } else {
+      finalHeight = heightLarge * 100 + heightSmall;
+    }
+    return finalHeight;
+  },
+  calcBMR: function () {
+    var weight = parseInt(this.state.aboutAnswers.weight);
+    var height = this.convertToCm();
+    var bmr;
+    if (this.state.aboutAnswers.weightUnit === '1') {
+      weight = this.convertToKg(weight);
+    }
+    if (this.state.aboutAnswers.gender === '1') {
+      bmr = 13.75 * weight + 5 * height - 6.76 * this.state.aboutAnswers.age + 66;
+    } else {
+      bmr = 9.56 * weight + 1.85 * height - 4.68 * this.state.aboutAnswers.age + 655;
+    }
+    return bmr.toFixed(2);
+  },
+  calculateTotalCalories: function () {
+    var totCals = this.state.foodList.map(function (obj) {
+      var qty = parseFloat(obj.servings);
+      var cals = parseInt(obj.calories);
+      return qty * cals;
+    });
+    var sum = totCals.reduce(function (a, b) {
+      return a + b;
+    }, 0);
+    return sum;
+  },
+  calculateActivityDuration: function (mets, bmr, calories) {
+    var time = calories / (bmr / 24 * mets);
+    time = this.parseTime(time);
+    return time;
+  },
+  parseTime: function (time) {
+    var fixedTime = time.toFixed(2);
+    var array = fixedTime.toString().split('.');
+    var hours = parseInt(array[0]);
+    var minutes = array[1];
+    var finalTime = '';
+    if (hours === 1) {
+      finalTime = '1 hour ';
+    } else if (hours > 1) {
+      finalTime = hours + ' hours ';
+    }
+    if (minutes !== '0') {
+      minutes = (parseInt(minutes) / 100 * 60).toFixed(0);
+    }
+    var minCounter = minutes === 1 ? ' minute' : ' minutes';
+    finalTime += minutes + minCounter;
+    return finalTime;
+  },
+  randomNumbers: function (qty, array) {
+    var randoms = [];
+    var max = array.length;
+    for (var i = 0; i <= qty; i++) {
+      var rando = Math.floor(Math.random() * max);
+      randoms.push(rando);
+    }
+    return randoms;
+  }
+};
+
+var foodListFunctions = {
+  addToFoodList: function () {
+    this.setState({ errors: [] });
+    var foodinput = this.state.searchedText;
+    var servings = this.state.servingsText;
+
+    if ($.isEmptyObject(this.state.tempSelection)) {
+      this.state.errors.foodinput = "Please make a selection from the list";
+      return this.setState({ errors: this.state.errors });
+    }
+
+    //use react addons update to manage the nested servings property of
+    //tempSelection, then update the rest of the state in a callback function
+    return this.setState({
+      tempSelection: update(this.state.tempSelection, { servings: { $set: servings } })
+    }, function () {
+      this.setState({
+        foodList: this.state.foodList.concat([this.state.tempSelection]),
+        tempSelection: {},
+        searchedText: '',
+        searchedId: '',
+        servingsText: ''
+      });
+    });
+  },
+  removeFromFoodList: function (e) {
+    var index = e;
+    this.setState({
+      foodList: update(this.state.foodList, { $splice: [[index, 1]] })
+    });
+  },
+
+  showList: function () {
+    this.setState({ searchShown: true });
+  },
+  hideList: function () {
+    this.setState({ searchShown: false });
+  }
+};
+
+var AppMain = React.createClass({
+  displayName: 'AppMain',
 
   getInitialState: function () {
     return {
@@ -53438,151 +53583,12 @@ var App = React.createClass({
     }
     this.setState({ servingsText: value });
   },
-  addToFoodList: function () {
-    this.setState({ errors: [] });
-    var foodinput = this.state.searchedText;
-    var servings = this.state.servingsText;
-
-    if ($.isEmptyObject(this.state.tempSelection)) {
-      this.state.errors.foodinput = "Please make a selection from the list";
-      return this.setState({ errors: this.state.errors });
-    }
-
-    //use react addons update to manage the nested servings property of
-    //tempSelection, then update the rest of the state in a callback function
-    return this.setState({
-      tempSelection: update(this.state.tempSelection, { servings: { $set: servings } })
-    }, function () {
-      this.setState({
-        foodList: this.state.foodList.concat([this.state.tempSelection]),
-        tempSelection: {},
-        searchedText: '',
-        searchedId: '',
-        servingsText: ''
-      });
-    });
-  },
-  removeFromFoodList: function (e) {
-    var index = e;
-    this.setState({
-      foodList: update(this.state.foodList, { $splice: [[index, 1]] })
-    });
-  },
-
-  calculateResults: function () {
-    var activities = this.state.activities;
-    var bmr = this.calcBMR();
-    var totalCalories = this.calculateTotalCalories();
-    var randomRange = Math.floor(Math.random() * 5); //randomNum between 1 - 5
-    var randomActivities = this.randomNumbers(randomRange, activities);
-    var calsPerActivity = totalCalories / (randomRange + 1);
-    var results = [];
-
-    if (this.state.seriousMode) {
-      activities = this.state.activities.filter(function (item) {
-        if (item.Serious === 1) {
-          return true;
-        }
-      });
-      randomRange = 0;
-      randomActivities = this.randomNumbers(randomRange, activities);
-      calsPerActivity = totalCalories;
-    }
-    for (var i = 0; i < randomActivities.length; i++) {
-      var result = {};
-      var activityIndex = randomActivities[i];
-      var mets = activities[activityIndex].Mets;
-      var duration = this.calculateActivityDuration(mets, bmr, calsPerActivity);
-      result.activity = activities[activityIndex].Activity;
-      result.time = duration;
-      results.push(result);
-    }
-    this.setState({ results: results, currentCard: '3' });
-  },
-  convertToKg: function (weight) {
-    return parseInt((weight * 0.453592).toFixed(2));
-  },
-  convertToCm: function () {
-    var finalHeight;
-    var heightLarge = parseInt(this.state.aboutAnswers.heightLarge);
-    var heightSmall = parseInt(this.state.aboutAnswers.heightSmall);
-    if (this.state.aboutAnswers.heightUnit === '1') {
-      var feetToInches = heightLarge * 12;
-      finalHeight = ((feetToInches + heightSmall) * 2.54).toFixed(2);
-    } else {
-      finalHeight = heightLarge * 100 + heightSmall;
-    }
-    return finalHeight;
-  },
-  calcBMR: function () {
-    var weight = parseInt(this.state.aboutAnswers.weight);
-    var height = this.convertToCm();
-    var bmr;
-    if (this.state.aboutAnswers.weightUnit === '1') {
-      weight = this.convertToKg(weight);
-    }
-    if (this.state.aboutAnswers.gender === '1') {
-      bmr = 13.75 * weight + 5 * height - 6.76 * this.state.aboutAnswers.age + 66;
-    } else {
-      bmr = 9.56 * weight + 1.85 * height - 4.68 * this.state.aboutAnswers.age + 655;
-    }
-    return bmr.toFixed(2);
-  },
-  calculateTotalCalories: function () {
-    var totCals = this.state.foodList.map(function (obj) {
-      var qty = parseFloat(obj.servings);
-      var cals = parseInt(obj.calories);
-      return qty * cals;
-    });
-    var sum = totCals.reduce(function (a, b) {
-      return a + b;
-    }, 0);
-    return sum;
-  },
-  calculateActivityDuration: function (mets, bmr, calories) {
-    var time = calories / (bmr / 24 * mets);
-    time = this.parseTime(time);
-    return time;
-  },
-  parseTime: function (time) {
-    var fixedTime = time.toFixed(2);
-    var array = fixedTime.toString().split('.');
-    var hours = parseInt(array[0]);
-    var minutes = array[1];
-    var finalTime = '';
-    if (hours === 1) {
-      finalTime = '1 hour ';
-    } else if (hours > 1) {
-      finalTime = hours + ' hours ';
-    }
-    if (minutes !== '0') {
-      minutes = (parseInt(minutes) / 100 * 60).toFixed(0);
-    }
-    var minCounter = minutes === 1 ? ' minute' : ' minutes';
-    finalTime += minutes + minCounter;
-    return finalTime;
-  },
-  randomNumbers: function (qty, array) {
-    var randoms = [];
-    var max = array.length;
-    for (var i = 0; i <= qty; i++) {
-      var rando = Math.floor(Math.random() * max);
-      randoms.push(rando);
-    }
-    return randoms;
-  },
   showModal: function (e) {
     e.preventDefault();
     this.setState({ modalShown: true });
   },
   hideModal: function () {
     this.setState({ modalShown: false });
-  },
-  showList: function () {
-    this.setState({ searchShown: true });
-  },
-  hideList: function () {
-    this.setState({ searchShown: false });
   },
   toggleSeriousMode: function () {
     if (this.state.seriousMode) {
@@ -53638,6 +53644,8 @@ var App = React.createClass({
     );
   }
 });
+
+var App = React.createClass(Object.assign({}, AppMain, calculateFunctions, foodListFunctions));
 
 module.exports = App;
 
