@@ -74,27 +74,6 @@ var Results = React.createClass({
                 <button className="btnstyle back" onClick={this.props.goBack}>Change Food</button>
                 <button className="btnstyle next" onClick={this.props.calculateResults}>Gimme Another</button>
               </div>
-              <div className="share-div">
-                <span>Share your results</span>
-                <FacebookShareButton className="share-btn" title="hello" url="http://www.google.com" description="test">
-                  <img className="fb" src="images/sharing/fb.svg" alt="Share on Facebook" />
-                </FacebookShareButton>
-
-                <GooglePlusShareButton className="share-btn" title="hello" url="http://www.google.com" description="test">
-                  <img className="gp" src="images/sharing/gp.svg" alt="Share on G+" />
-                </GooglePlusShareButton>
-
-                <LinkedinShareButton className="share-btn" title="hello" url="http://www.google.com" description="test">
-                  <img className="li" src="images/sharing/li.svg" alt="Share on LinkedIn" />
-                </LinkedinShareButton>
-
-                <TwitterShareButton className="share-btn" title="hello" url="http://www.google.com" description="test">
-                  <img className="tw" src="images/sharing/tw.svg" alt="Share on Twitter" />
-                </TwitterShareButton>
-                <a href="mailto:?body=thebody&subject=Your%20Workout%20Results%20from%20WorkThatOff.com" target="_blank">
-                  <img className="mail" src="images/sharing/mail.svg" alt="Email your results" />
-                </a>
-              </div>
             </div>
           </div>
         </div>
@@ -105,3 +84,26 @@ var Results = React.createClass({
 });
 
 module.exports = Results;
+
+//commenting out social media buttons until I can hook them all up.
+// <div className="share-div">
+//   <span>Share your results</span>
+//   <FacebookShareButton className="share-btn" title="hello" url="http://www.google.com" description="test">
+//     <img className="fb" src="images/sharing/fb.svg" alt="Share on Facebook" />
+//   </FacebookShareButton>
+
+//   <GooglePlusShareButton className="share-btn" title="hello" url="http://www.google.com" description="test">
+//     <img className="gp" src="images/sharing/gp.svg" alt="Share on G+" />
+//   </GooglePlusShareButton>
+
+//   <LinkedinShareButton className="share-btn" title="hello" url="http://www.google.com" description="test">
+//     <img className="li" src="images/sharing/li.svg" alt="Share on LinkedIn" />
+//   </LinkedinShareButton>
+
+//   <TwitterShareButton className="share-btn" title="hello" url="http://www.google.com" description="test">
+//     <img className="tw" src="images/sharing/tw.svg" alt="Share on Twitter" />
+//   </TwitterShareButton>
+//   <a href="mailto:?body=thebody&subject=Your%20Workout%20Results%20from%20WorkThatOff.com" target="_blank">
+//     <img className="mail" src="images/sharing/mail.svg" alt="Email your results" />
+//   </a>
+// </div>
