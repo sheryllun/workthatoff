@@ -1,4 +1,49 @@
 (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
+(function (global){
+'use strict';
+
+// compare and isBuffer taken from https://github.com/feross/buffer/blob/680e9e5e488f22aac27599a57dc844a6315928dd/index.js
+// original notice:
+
+/*!
+ * The buffer module from node.js, for the browser.
+ *
+ * @author   Feross Aboukhadijeh <feross@feross.org> <http://feross.org>
+ * @license  MIT
+ */
+function compare(a, b) {
+  if (a === b) {
+    return 0;
+  }
+
+  var x = a.length;
+  var y = b.length;
+
+  for (var i = 0, len = Math.min(x, y); i < len; ++i) {
+    if (a[i] !== b[i]) {
+      x = a[i];
+      y = b[i];
+      break;
+    }
+  }
+
+  if (x < y) {
+    return -1;
+  }
+  if (y < x) {
+    return 1;
+  }
+  return 0;
+}
+function isBuffer(b) {
+  if (global.Buffer && typeof global.Buffer.isBuffer === 'function') {
+    return global.Buffer.isBuffer(b);
+  }
+  return !!(b != null && b._isBuffer);
+}
+
+// based on node assert, original notice:
+
 // http://wiki.commonjs.org/wiki/Unit_Testing/1.0
 //
 // THIS IS NOT TESTED NOR LIKELY TO WORK OUTSIDE V8!
@@ -23,14 +68,36 @@
 // ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-// when used in node, this will actually load the util module we depend on
-// versus loading the builtin util module as happens otherwise
-// this is a bug in node module loading as far as I am concerned
 var util = require('util/');
-
-var pSlice = Array.prototype.slice;
 var hasOwn = Object.prototype.hasOwnProperty;
-
+var pSlice = Array.prototype.slice;
+var functionsHaveNames = (function () {
+  return function foo() {}.name === 'foo';
+}());
+function pToString (obj) {
+  return Object.prototype.toString.call(obj);
+}
+function isView(arrbuf) {
+  if (isBuffer(arrbuf)) {
+    return false;
+  }
+  if (typeof global.ArrayBuffer !== 'function') {
+    return false;
+  }
+  if (typeof ArrayBuffer.isView === 'function') {
+    return ArrayBuffer.isView(arrbuf);
+  }
+  if (!arrbuf) {
+    return false;
+  }
+  if (arrbuf instanceof DataView) {
+    return true;
+  }
+  if (arrbuf.buffer && arrbuf.buffer instanceof ArrayBuffer) {
+    return true;
+  }
+  return false;
+}
 // 1. The assert module provides functions that throw
 // AssertionError's when particular conditions are not met. The
 // assert module must conform to the following interface.
@@ -42,6 +109,19 @@ var assert = module.exports = ok;
 //                             actual: actual,
 //                             expected: expected })
 
+var regex = /\s*function\s+([^\(\s]*)\s*/;
+// based on https://github.com/ljharb/function.prototype.name/blob/adeeeec8bfcc6068b187d7d9fb3d5bb1d3a30899/implementation.js
+function getName(func) {
+  if (!util.isFunction(func)) {
+    return;
+  }
+  if (functionsHaveNames) {
+    return func.name;
+  }
+  var str = func.toString();
+  var match = str.match(regex);
+  return match && match[1];
+}
 assert.AssertionError = function AssertionError(options) {
   this.name = 'AssertionError';
   this.actual = options.actual;
@@ -55,18 +135,16 @@ assert.AssertionError = function AssertionError(options) {
     this.generatedMessage = true;
   }
   var stackStartFunction = options.stackStartFunction || fail;
-
   if (Error.captureStackTrace) {
     Error.captureStackTrace(this, stackStartFunction);
-  }
-  else {
+  } else {
     // non v8 browsers so we can have a stacktrace
     var err = new Error();
     if (err.stack) {
       var out = err.stack;
 
       // try to strip useless frames
-      var fn_name = stackStartFunction.name;
+      var fn_name = getName(stackStartFunction);
       var idx = out.indexOf('\n' + fn_name);
       if (idx >= 0) {
         // once we have located the function frame
@@ -83,31 +161,25 @@ assert.AssertionError = function AssertionError(options) {
 // assert.AssertionError instanceof Error
 util.inherits(assert.AssertionError, Error);
 
-function replacer(key, value) {
-  if (util.isUndefined(value)) {
-    return '' + value;
-  }
-  if (util.isNumber(value) && !isFinite(value)) {
-    return value.toString();
-  }
-  if (util.isFunction(value) || util.isRegExp(value)) {
-    return value.toString();
-  }
-  return value;
-}
-
 function truncate(s, n) {
-  if (util.isString(s)) {
+  if (typeof s === 'string') {
     return s.length < n ? s : s.slice(0, n);
   } else {
     return s;
   }
 }
-
+function inspect(something) {
+  if (functionsHaveNames || !util.isFunction(something)) {
+    return util.inspect(something);
+  }
+  var rawname = getName(something);
+  var name = rawname ? ': ' + rawname : '';
+  return '[Function' +  name + ']';
+}
 function getMessage(self) {
-  return truncate(JSON.stringify(self.actual, replacer), 128) + ' ' +
+  return truncate(inspect(self.actual), 128) + ' ' +
          self.operator + ' ' +
-         truncate(JSON.stringify(self.expected, replacer), 128);
+         truncate(inspect(self.expected), 128);
 }
 
 // At present only the three keys mentioned above are used and
@@ -167,24 +239,23 @@ assert.notEqual = function notEqual(actual, expected, message) {
 // assert.deepEqual(actual, expected, message_opt);
 
 assert.deepEqual = function deepEqual(actual, expected, message) {
-  if (!_deepEqual(actual, expected)) {
+  if (!_deepEqual(actual, expected, false)) {
     fail(actual, expected, message, 'deepEqual', assert.deepEqual);
   }
 };
 
-function _deepEqual(actual, expected) {
+assert.deepStrictEqual = function deepStrictEqual(actual, expected, message) {
+  if (!_deepEqual(actual, expected, true)) {
+    fail(actual, expected, message, 'deepStrictEqual', assert.deepStrictEqual);
+  }
+};
+
+function _deepEqual(actual, expected, strict, memos) {
   // 7.1. All identical values are equivalent, as determined by ===.
   if (actual === expected) {
     return true;
-
-  } else if (util.isBuffer(actual) && util.isBuffer(expected)) {
-    if (actual.length != expected.length) return false;
-
-    for (var i = 0; i < actual.length; i++) {
-      if (actual[i] !== expected[i]) return false;
-    }
-
-    return true;
+  } else if (isBuffer(actual) && isBuffer(expected)) {
+    return compare(actual, expected) === 0;
 
   // 7.2. If the expected value is a Date object, the actual value is
   // equivalent if it is also a Date object that refers to the same time.
@@ -203,8 +274,22 @@ function _deepEqual(actual, expected) {
 
   // 7.4. Other pairs that do not both pass typeof value == 'object',
   // equivalence is determined by ==.
-  } else if (!util.isObject(actual) && !util.isObject(expected)) {
-    return actual == expected;
+  } else if ((actual === null || typeof actual !== 'object') &&
+             (expected === null || typeof expected !== 'object')) {
+    return strict ? actual === expected : actual == expected;
+
+  // If both values are instances of typed arrays, wrap their underlying
+  // ArrayBuffers in a Buffer each to increase performance
+  // This optimization requires the arrays to have the same type as checked by
+  // Object.prototype.toString (aka pToString). Never perform binary
+  // comparisons for Float*Arrays, though, since e.g. +0 === -0 but their
+  // bit patterns are not identical.
+  } else if (isView(actual) && isView(expected) &&
+             pToString(actual) === pToString(expected) &&
+             !(actual instanceof Float32Array ||
+               actual instanceof Float64Array)) {
+    return compare(new Uint8Array(actual.buffer),
+                   new Uint8Array(expected.buffer)) === 0;
 
   // 7.5 For all other Object pairs, including Array objects, equivalence is
   // determined by having the same number of owned properties (as verified
@@ -212,8 +297,22 @@ function _deepEqual(actual, expected) {
   // (although not necessarily the same order), equivalent values for every
   // corresponding key, and an identical 'prototype' property. Note: this
   // accounts for both named and indexed properties on Arrays.
+  } else if (isBuffer(actual) !== isBuffer(expected)) {
+    return false;
   } else {
-    return objEquiv(actual, expected);
+    memos = memos || {actual: [], expected: []};
+
+    var actualIndex = memos.actual.indexOf(actual);
+    if (actualIndex !== -1) {
+      if (actualIndex === memos.expected.indexOf(expected)) {
+        return true;
+      }
+    }
+
+    memos.actual.push(actual);
+    memos.expected.push(expected);
+
+    return objEquiv(actual, expected, strict, memos);
   }
 }
 
@@ -221,44 +320,44 @@ function isArguments(object) {
   return Object.prototype.toString.call(object) == '[object Arguments]';
 }
 
-function objEquiv(a, b) {
-  if (util.isNullOrUndefined(a) || util.isNullOrUndefined(b))
+function objEquiv(a, b, strict, actualVisitedObjects) {
+  if (a === null || a === undefined || b === null || b === undefined)
     return false;
-  // an identical 'prototype' property.
-  if (a.prototype !== b.prototype) return false;
   // if one is a primitive, the other must be same
-  if (util.isPrimitive(a) || util.isPrimitive(b)) {
+  if (util.isPrimitive(a) || util.isPrimitive(b))
     return a === b;
-  }
-  var aIsArgs = isArguments(a),
-      bIsArgs = isArguments(b);
+  if (strict && Object.getPrototypeOf(a) !== Object.getPrototypeOf(b))
+    return false;
+  var aIsArgs = isArguments(a);
+  var bIsArgs = isArguments(b);
   if ((aIsArgs && !bIsArgs) || (!aIsArgs && bIsArgs))
     return false;
   if (aIsArgs) {
     a = pSlice.call(a);
     b = pSlice.call(b);
-    return _deepEqual(a, b);
+    return _deepEqual(a, b, strict);
   }
-  var ka = objectKeys(a),
-      kb = objectKeys(b),
-      key, i;
+  var ka = objectKeys(a);
+  var kb = objectKeys(b);
+  var key, i;
   // having the same number of owned properties (keys incorporates
   // hasOwnProperty)
-  if (ka.length != kb.length)
+  if (ka.length !== kb.length)
     return false;
   //the same set of keys (although not necessarily the same order),
   ka.sort();
   kb.sort();
   //~~~cheap key test
   for (i = ka.length - 1; i >= 0; i--) {
-    if (ka[i] != kb[i])
+    if (ka[i] !== kb[i])
       return false;
   }
   //equivalent values for every corresponding key, and
   //~~~possibly expensive deep test
   for (i = ka.length - 1; i >= 0; i--) {
     key = ka[i];
-    if (!_deepEqual(a[key], b[key])) return false;
+    if (!_deepEqual(a[key], b[key], strict, actualVisitedObjects))
+      return false;
   }
   return true;
 }
@@ -267,10 +366,18 @@ function objEquiv(a, b) {
 // assert.notDeepEqual(actual, expected, message_opt);
 
 assert.notDeepEqual = function notDeepEqual(actual, expected, message) {
-  if (_deepEqual(actual, expected)) {
+  if (_deepEqual(actual, expected, false)) {
     fail(actual, expected, message, 'notDeepEqual', assert.notDeepEqual);
   }
 };
+
+assert.notDeepStrictEqual = notDeepStrictEqual;
+function notDeepStrictEqual(actual, expected, message) {
+  if (_deepEqual(actual, expected, true)) {
+    fail(actual, expected, message, 'notDeepStrictEqual', notDeepStrictEqual);
+  }
+}
+
 
 // 9. The strict equality assertion tests strict equality, as determined by ===.
 // assert.strictEqual(actual, expected, message_opt);
@@ -297,28 +404,46 @@ function expectedException(actual, expected) {
 
   if (Object.prototype.toString.call(expected) == '[object RegExp]') {
     return expected.test(actual);
-  } else if (actual instanceof expected) {
-    return true;
-  } else if (expected.call({}, actual) === true) {
-    return true;
   }
 
-  return false;
+  try {
+    if (actual instanceof expected) {
+      return true;
+    }
+  } catch (e) {
+    // Ignore.  The instanceof check doesn't work for arrow functions.
+  }
+
+  if (Error.isPrototypeOf(expected)) {
+    return false;
+  }
+
+  return expected.call({}, actual) === true;
+}
+
+function _tryBlock(block) {
+  var error;
+  try {
+    block();
+  } catch (e) {
+    error = e;
+  }
+  return error;
 }
 
 function _throws(shouldThrow, block, expected, message) {
   var actual;
 
-  if (util.isString(expected)) {
+  if (typeof block !== 'function') {
+    throw new TypeError('"block" argument must be a function');
+  }
+
+  if (typeof expected === 'string') {
     message = expected;
     expected = null;
   }
 
-  try {
-    block();
-  } catch (e) {
-    actual = e;
-  }
+  actual = _tryBlock(block);
 
   message = (expected && expected.name ? ' (' + expected.name + ').' : '.') +
             (message ? ' ' + message : '.');
@@ -327,7 +452,14 @@ function _throws(shouldThrow, block, expected, message) {
     fail(actual, expected, 'Missing expected exception' + message);
   }
 
-  if (!shouldThrow && expectedException(actual, expected)) {
+  var userProvidedMessage = typeof message === 'string';
+  var isUnwantedException = !shouldThrow && util.isError(actual);
+  var isUnexpectedException = !shouldThrow && actual && !expected;
+
+  if ((isUnwantedException &&
+      userProvidedMessage &&
+      expectedException(actual, expected)) ||
+      isUnexpectedException) {
     fail(actual, expected, 'Got unwanted exception' + message);
   }
 
@@ -341,15 +473,15 @@ function _throws(shouldThrow, block, expected, message) {
 // assert.throws(block, Error_opt, message_opt);
 
 assert.throws = function(block, /*optional*/error, /*optional*/message) {
-  _throws.apply(this, [true].concat(pSlice.call(arguments)));
+  _throws(true, block, error, message);
 };
 
 // EXTENSION! This is annoying to write outside this module.
-assert.doesNotThrow = function(block, /*optional*/message) {
-  _throws.apply(this, [false].concat(pSlice.call(arguments)));
+assert.doesNotThrow = function(block, /*optional*/error, /*optional*/message) {
+  _throws(false, block, error, message);
 };
 
-assert.ifError = function(err) { if (err) {throw err;}};
+assert.ifError = function(err) { if (err) throw err; };
 
 var objectKeys = Object.keys || function (obj) {
   var keys = [];
@@ -359,7 +491,8 @@ var objectKeys = Object.keys || function (obj) {
   return keys;
 };
 
-},{"util/":462}],2:[function(require,module,exports){
+}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
+},{"util/":469}],2:[function(require,module,exports){
 module.exports = { "default": require("core-js/library/fn/array/from"), __esModule: true };
 },{"core-js/library/fn/array/from":22}],3:[function(require,module,exports){
 module.exports = { "default": require("core-js/library/fn/json/stringify"), __esModule: true };
@@ -526,14 +659,14 @@ var _symbol = require("../core-js/symbol");
 
 var _symbol2 = _interopRequireDefault(_symbol);
 
-var _typeof = typeof _symbol2.default === "function" && typeof _iterator2.default === "symbol" ? function (obj) { return typeof obj; } : function (obj) { return obj && typeof _symbol2.default === "function" && obj.constructor === _symbol2.default ? "symbol" : typeof obj; };
+var _typeof = typeof _symbol2.default === "function" && typeof _iterator2.default === "symbol" ? function (obj) { return typeof obj; } : function (obj) { return obj && typeof _symbol2.default === "function" && obj.constructor === _symbol2.default && obj !== _symbol2.default.prototype ? "symbol" : typeof obj; };
 
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
 exports.default = typeof _symbol2.default === "function" && _typeof(_iterator2.default) === "symbol" ? function (obj) {
   return typeof obj === "undefined" ? "undefined" : _typeof(obj);
 } : function (obj) {
-  return obj && typeof _symbol2.default === "function" && obj.constructor === _symbol2.default ? "symbol" : typeof obj === "undefined" ? "undefined" : _typeof(obj);
+  return obj && typeof _symbol2.default === "function" && obj.constructor === _symbol2.default && obj !== _symbol2.default.prototype ? "symbol" : typeof obj === "undefined" ? "undefined" : _typeof(obj);
 };
 },{"../core-js/symbol":12,"../core-js/symbol/iterator":13}],21:[function(require,module,exports){
 /*!
@@ -1881,243 +2014,802 @@ for(var collections = ['NodeList', 'DOMTokenList', 'MediaList', 'StyleSheetList'
   Iterators[NAME] = Iterators.Array;
 }
 },{"./_global":50,"./_hide":52,"./_iterators":64,"./_wks":98,"./es6.array.iterator":101}],116:[function(require,module,exports){
-'use strict';
+(function (process){
+/**
+ * This is the web browser implementation of `debug()`.
+ *
+ * Expose `debug()` as the module.
+ */
 
-var babelHelpers = require('./util/babelHelpers.js');
-
-exports.__esModule = true;
+exports = module.exports = require('./debug');
+exports.log = log;
+exports.formatArgs = formatArgs;
+exports.save = save;
+exports.load = load;
+exports.useColors = useColors;
+exports.storage = 'undefined' != typeof chrome
+               && 'undefined' != typeof chrome.storage
+                  ? chrome.storage.local
+                  : localstorage();
 
 /**
- * document.activeElement
+ * Colors.
  */
-exports['default'] = activeElement;
 
-var _ownerDocument = require('./ownerDocument');
+exports.colors = [
+  'lightseagreen',
+  'forestgreen',
+  'goldenrod',
+  'dodgerblue',
+  'darkorchid',
+  'crimson'
+];
 
-var _ownerDocument2 = babelHelpers.interopRequireDefault(_ownerDocument);
+/**
+ * Currently only WebKit-based Web Inspectors, Firefox >= v31,
+ * and the Firebug extension (any Firefox version) are known
+ * to support "%c" CSS customizations.
+ *
+ * TODO: add a `localStorage` variable to explicitly enable/disable colors
+ */
 
-function activeElement() {
-  var doc = arguments[0] === undefined ? document : arguments[0];
+function useColors() {
+  // NB: In an Electron preload script, document will be defined but not fully
+  // initialized. Since we know we're in Chrome, we'll just detect this case
+  // explicitly
+  if (typeof window !== 'undefined' && window.process && window.process.type === 'renderer') {
+    return true;
+  }
 
+  // is webkit? http://stackoverflow.com/a/16459606/376773
+  // document is undefined in react-native: https://github.com/facebook/react-native/pull/1632
+  return (typeof document !== 'undefined' && document.documentElement && document.documentElement.style && document.documentElement.style.WebkitAppearance) ||
+    // is firebug? http://stackoverflow.com/a/398120/376773
+    (typeof window !== 'undefined' && window.console && (window.console.firebug || (window.console.exception && window.console.table))) ||
+    // is firefox >= v31?
+    // https://developer.mozilla.org/en-US/docs/Tools/Web_Console#Styling_messages
+    (typeof navigator !== 'undefined' && navigator.userAgent && navigator.userAgent.toLowerCase().match(/firefox\/(\d+)/) && parseInt(RegExp.$1, 10) >= 31) ||
+    // double check webkit in userAgent just in case we are in a worker
+    (typeof navigator !== 'undefined' && navigator.userAgent && navigator.userAgent.toLowerCase().match(/applewebkit\/(\d+)/));
+}
+
+/**
+ * Map %j to `JSON.stringify()`, since no Web Inspectors do that by default.
+ */
+
+exports.formatters.j = function(v) {
   try {
-    return doc.activeElement;
+    return JSON.stringify(v);
+  } catch (err) {
+    return '[UnexpectedJSONParseError]: ' + err.message;
+  }
+};
+
+
+/**
+ * Colorize log arguments if enabled.
+ *
+ * @api public
+ */
+
+function formatArgs(args) {
+  var useColors = this.useColors;
+
+  args[0] = (useColors ? '%c' : '')
+    + this.namespace
+    + (useColors ? ' %c' : ' ')
+    + args[0]
+    + (useColors ? '%c ' : ' ')
+    + '+' + exports.humanize(this.diff);
+
+  if (!useColors) return;
+
+  var c = 'color: ' + this.color;
+  args.splice(1, 0, c, 'color: inherit')
+
+  // the final "%c" is somewhat tricky, because there could be other
+  // arguments passed either before or after the %c, so we need to
+  // figure out the correct index to insert the CSS into
+  var index = 0;
+  var lastC = 0;
+  args[0].replace(/%[a-zA-Z%]/g, function(match) {
+    if ('%%' === match) return;
+    index++;
+    if ('%c' === match) {
+      // we only are interested in the *last* %c
+      // (the user may have provided their own)
+      lastC = index;
+    }
+  });
+
+  args.splice(lastC, 0, c);
+}
+
+/**
+ * Invokes `console.log()` when available.
+ * No-op when `console.log` is not a "function".
+ *
+ * @api public
+ */
+
+function log() {
+  // this hackery is required for IE8/9, where
+  // the `console.log` function doesn't have 'apply'
+  return 'object' === typeof console
+    && console.log
+    && Function.prototype.apply.call(console.log, console, arguments);
+}
+
+/**
+ * Save `namespaces`.
+ *
+ * @param {String} namespaces
+ * @api private
+ */
+
+function save(namespaces) {
+  try {
+    if (null == namespaces) {
+      exports.storage.removeItem('debug');
+    } else {
+      exports.storage.debug = namespaces;
+    }
+  } catch(e) {}
+}
+
+/**
+ * Load `namespaces`.
+ *
+ * @return {String} returns the previously persisted debug modes
+ * @api private
+ */
+
+function load() {
+  var r;
+  try {
+    r = exports.storage.debug;
+  } catch(e) {}
+
+  // If debug isn't set in LS, and we're in Electron, try to load $DEBUG
+  if (!r && typeof process !== 'undefined' && 'env' in process) {
+    r = process.env.DEBUG;
+  }
+
+  return r;
+}
+
+/**
+ * Enable namespaces listed in `localStorage.debug` initially.
+ */
+
+exports.enable(load());
+
+/**
+ * Localstorage attempts to return the localstorage.
+ *
+ * This is necessary because safari throws
+ * when a user disables cookies/localstorage
+ * and you attempt to access it.
+ *
+ * @return {LocalStorage}
+ * @api private
+ */
+
+function localstorage() {
+  try {
+    return window.localStorage;
   } catch (e) {}
 }
 
+}).call(this,require('_process'))
+},{"./debug":117,"_process":155}],117:[function(require,module,exports){
+
+/**
+ * This is the common logic for both the Node.js and web browser
+ * implementations of `debug()`.
+ *
+ * Expose `debug()` as the module.
+ */
+
+exports = module.exports = createDebug.debug = createDebug['default'] = createDebug;
+exports.coerce = coerce;
+exports.disable = disable;
+exports.enable = enable;
+exports.enabled = enabled;
+exports.humanize = require('ms');
+
+/**
+ * The currently active debug mode names, and names to skip.
+ */
+
+exports.names = [];
+exports.skips = [];
+
+/**
+ * Map of special "%n" handling functions, for the debug "format" argument.
+ *
+ * Valid key names are a single, lower or upper-case letter, i.e. "n" and "N".
+ */
+
+exports.formatters = {};
+
+/**
+ * Previous log timestamp.
+ */
+
+var prevTime;
+
+/**
+ * Select a color.
+ * @param {String} namespace
+ * @return {Number}
+ * @api private
+ */
+
+function selectColor(namespace) {
+  var hash = 0, i;
+
+  for (i in namespace) {
+    hash  = ((hash << 5) - hash) + namespace.charCodeAt(i);
+    hash |= 0; // Convert to 32bit integer
+  }
+
+  return exports.colors[Math.abs(hash) % exports.colors.length];
+}
+
+/**
+ * Create a debugger with the given `namespace`.
+ *
+ * @param {String} namespace
+ * @return {Function}
+ * @api public
+ */
+
+function createDebug(namespace) {
+
+  function debug() {
+    // disabled?
+    if (!debug.enabled) return;
+
+    var self = debug;
+
+    // set `diff` timestamp
+    var curr = +new Date();
+    var ms = curr - (prevTime || curr);
+    self.diff = ms;
+    self.prev = prevTime;
+    self.curr = curr;
+    prevTime = curr;
+
+    // turn the `arguments` into a proper Array
+    var args = new Array(arguments.length);
+    for (var i = 0; i < args.length; i++) {
+      args[i] = arguments[i];
+    }
+
+    args[0] = exports.coerce(args[0]);
+
+    if ('string' !== typeof args[0]) {
+      // anything else let's inspect with %O
+      args.unshift('%O');
+    }
+
+    // apply any `formatters` transformations
+    var index = 0;
+    args[0] = args[0].replace(/%([a-zA-Z%])/g, function(match, format) {
+      // if we encounter an escaped % then don't increase the array index
+      if (match === '%%') return match;
+      index++;
+      var formatter = exports.formatters[format];
+      if ('function' === typeof formatter) {
+        var val = args[index];
+        match = formatter.call(self, val);
+
+        // now we need to remove `args[index]` since it's inlined in the `format`
+        args.splice(index, 1);
+        index--;
+      }
+      return match;
+    });
+
+    // apply env-specific formatting (colors, etc.)
+    exports.formatArgs.call(self, args);
+
+    var logFn = debug.log || exports.log || console.log.bind(console);
+    logFn.apply(self, args);
+  }
+
+  debug.namespace = namespace;
+  debug.enabled = exports.enabled(namespace);
+  debug.useColors = exports.useColors();
+  debug.color = selectColor(namespace);
+
+  // env-specific initialization logic for debug instances
+  if ('function' === typeof exports.init) {
+    exports.init(debug);
+  }
+
+  return debug;
+}
+
+/**
+ * Enables a debug mode by namespaces. This can include modes
+ * separated by a colon and wildcards.
+ *
+ * @param {String} namespaces
+ * @api public
+ */
+
+function enable(namespaces) {
+  exports.save(namespaces);
+
+  exports.names = [];
+  exports.skips = [];
+
+  var split = (typeof namespaces === 'string' ? namespaces : '').split(/[\s,]+/);
+  var len = split.length;
+
+  for (var i = 0; i < len; i++) {
+    if (!split[i]) continue; // ignore empty strings
+    namespaces = split[i].replace(/\*/g, '.*?');
+    if (namespaces[0] === '-') {
+      exports.skips.push(new RegExp('^' + namespaces.substr(1) + '$'));
+    } else {
+      exports.names.push(new RegExp('^' + namespaces + '$'));
+    }
+  }
+}
+
+/**
+ * Disable debug output.
+ *
+ * @api public
+ */
+
+function disable() {
+  exports.enable('');
+}
+
+/**
+ * Returns true if the given mode name is enabled, false otherwise.
+ *
+ * @param {String} name
+ * @return {Boolean}
+ * @api public
+ */
+
+function enabled(name) {
+  var i, len;
+  for (i = 0, len = exports.skips.length; i < len; i++) {
+    if (exports.skips[i].test(name)) {
+      return false;
+    }
+  }
+  for (i = 0, len = exports.names.length; i < len; i++) {
+    if (exports.names[i].test(name)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Coerce `val`.
+ *
+ * @param {Mixed} val
+ * @return {Mixed}
+ * @api private
+ */
+
+function coerce(val) {
+  if (val instanceof Error) return val.stack || val.message;
+  return val;
+}
+
+},{"ms":152}],118:[function(require,module,exports){
+'use strict';
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.default = activeElement;
+
+var _ownerDocument = require('./ownerDocument');
+
+var _ownerDocument2 = _interopRequireDefault(_ownerDocument);
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+function activeElement() {
+  var doc = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : (0, _ownerDocument2.default)();
+
+  try {
+    return doc.activeElement;
+  } catch (e) {/* ie throws if no active element */}
+}
 module.exports = exports['default'];
-},{"./ownerDocument":125,"./util/babelHelpers.js":138}],117:[function(require,module,exports){
-'use strict';
-var hasClass = require('./hasClass');
-
-module.exports = function addClass(element, className) {
-  if (element.classList) element.classList.add(className);else if (!hasClass(element)) element.className = element.className + ' ' + className;
-};
-},{"./hasClass":118}],118:[function(require,module,exports){
-'use strict';
-module.exports = function hasClass(element, className) {
-  if (element.classList) return !!className && element.classList.contains(className);else return (' ' + element.className + ' ').indexOf(' ' + className + ' ') !== -1;
-};
-},{}],119:[function(require,module,exports){
+},{"./ownerDocument":128}],119:[function(require,module,exports){
 'use strict';
 
-module.exports = {
-  addClass: require('./addClass'),
-  removeClass: require('./removeClass'),
-  hasClass: require('./hasClass')
-};
-},{"./addClass":117,"./hasClass":118,"./removeClass":120}],120:[function(require,module,exports){
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.default = addClass;
+
+var _hasClass = require('./hasClass');
+
+var _hasClass2 = _interopRequireDefault(_hasClass);
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+function addClass(element, className) {
+  if (element.classList) element.classList.add(className);else if (!(0, _hasClass2.default)(element)) element.className = element.className + ' ' + className;
+}
+module.exports = exports['default'];
+},{"./hasClass":120}],120:[function(require,module,exports){
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.default = hasClass;
+function hasClass(element, className) {
+  if (element.classList) return !!className && element.classList.contains(className);else return (" " + element.className + " ").indexOf(" " + className + " ") !== -1;
+}
+module.exports = exports["default"];
+},{}],121:[function(require,module,exports){
+'use strict';
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.hasClass = exports.removeClass = exports.addClass = undefined;
+
+var _addClass = require('./addClass');
+
+var _addClass2 = _interopRequireDefault(_addClass);
+
+var _removeClass = require('./removeClass');
+
+var _removeClass2 = _interopRequireDefault(_removeClass);
+
+var _hasClass = require('./hasClass');
+
+var _hasClass2 = _interopRequireDefault(_hasClass);
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+exports.addClass = _addClass2.default;
+exports.removeClass = _removeClass2.default;
+exports.hasClass = _hasClass2.default;
+exports.default = { addClass: _addClass2.default, removeClass: _removeClass2.default, hasClass: _hasClass2.default };
+},{"./addClass":119,"./hasClass":120,"./removeClass":122}],122:[function(require,module,exports){
 'use strict';
 
 module.exports = function removeClass(element, className) {
   if (element.classList) element.classList.remove(className);else element.className = element.className.replace(new RegExp('(^|\\s)' + className + '(?:\\s|$)', 'g'), '$1').replace(/\s+/g, ' ').replace(/^\s*|\s*$/g, '');
 };
-},{}],121:[function(require,module,exports){
+},{}],123:[function(require,module,exports){
 'use strict';
 
-var contains = require('../query/contains'),
-    qsa = require('../query/querySelectorAll');
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.default = filterEvents;
 
-module.exports = function (selector, handler) {
-  return function (e) {
+var _contains = require('../query/contains');
+
+var _contains2 = _interopRequireDefault(_contains);
+
+var _querySelectorAll = require('../query/querySelectorAll');
+
+var _querySelectorAll2 = _interopRequireDefault(_querySelectorAll);
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+function filterEvents(selector, handler) {
+  return function filterHandler(e) {
     var top = e.currentTarget,
         target = e.target,
-        matches = qsa(top, selector);
+        matches = (0, _querySelectorAll2.default)(top, selector);
 
     if (matches.some(function (match) {
-      return contains(match, target);
+      return (0, _contains2.default)(match, target);
     })) handler.call(this, e);
   };
-};
-},{"../query/contains":126,"../query/querySelectorAll":131}],122:[function(require,module,exports){
+}
+module.exports = exports['default'];
+},{"../query/contains":129,"../query/querySelectorAll":134}],124:[function(require,module,exports){
 'use strict';
-var on = require('./on'),
-    off = require('./off'),
-    filter = require('./filter');
 
-module.exports = { on: on, off: off, filter: filter };
-},{"./filter":121,"./off":123,"./on":124}],123:[function(require,module,exports){
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.listen = exports.filter = exports.off = exports.on = undefined;
+
+var _on = require('./on');
+
+var _on2 = _interopRequireDefault(_on);
+
+var _off = require('./off');
+
+var _off2 = _interopRequireDefault(_off);
+
+var _filter = require('./filter');
+
+var _filter2 = _interopRequireDefault(_filter);
+
+var _listen = require('./listen');
+
+var _listen2 = _interopRequireDefault(_listen);
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+exports.on = _on2.default;
+exports.off = _off2.default;
+exports.filter = _filter2.default;
+exports.listen = _listen2.default;
+exports.default = { on: _on2.default, off: _off2.default, filter: _filter2.default, listen: _listen2.default };
+},{"./filter":123,"./listen":125,"./off":126,"./on":127}],125:[function(require,module,exports){
 'use strict';
-var canUseDOM = require('../util/inDOM');
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+
+var _inDOM = require('../util/inDOM');
+
+var _inDOM2 = _interopRequireDefault(_inDOM);
+
+var _on = require('./on');
+
+var _on2 = _interopRequireDefault(_on);
+
+var _off = require('./off');
+
+var _off2 = _interopRequireDefault(_off);
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+var listen = function listen() {};
+
+if (_inDOM2.default) {
+  listen = function listen(node, eventName, handler, capture) {
+    (0, _on2.default)(node, eventName, handler, capture);
+    return function () {
+      (0, _off2.default)(node, eventName, handler, capture);
+    };
+  };
+}
+
+exports.default = listen;
+module.exports = exports['default'];
+},{"../util/inDOM":146,"./off":126,"./on":127}],126:[function(require,module,exports){
+'use strict';
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+
+var _inDOM = require('../util/inDOM');
+
+var _inDOM2 = _interopRequireDefault(_inDOM);
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
 var off = function off() {};
-
-if (canUseDOM) {
-
-  off = (function () {
-
+if (_inDOM2.default) {
+  off = function () {
     if (document.addEventListener) return function (node, eventName, handler, capture) {
       return node.removeEventListener(eventName, handler, capture || false);
     };else if (document.attachEvent) return function (node, eventName, handler) {
       return node.detachEvent('on' + eventName, handler);
     };
-  })();
+  }();
 }
 
-module.exports = off;
-},{"../util/inDOM":143}],124:[function(require,module,exports){
+exports.default = off;
+module.exports = exports['default'];
+},{"../util/inDOM":146}],127:[function(require,module,exports){
 'use strict';
-var canUseDOM = require('../util/inDOM');
-var on = function on() {};
 
-if (canUseDOM) {
-  on = (function () {
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+
+var _inDOM = require('../util/inDOM');
+
+var _inDOM2 = _interopRequireDefault(_inDOM);
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+var on = function on() {};
+if (_inDOM2.default) {
+  on = function () {
 
     if (document.addEventListener) return function (node, eventName, handler, capture) {
       return node.addEventListener(eventName, handler, capture || false);
     };else if (document.attachEvent) return function (node, eventName, handler) {
-      return node.attachEvent('on' + eventName, handler);
+      return node.attachEvent('on' + eventName, function (e) {
+        e = e || window.event;
+        e.target = e.target || e.srcElement;
+        e.currentTarget = node;
+        handler.call(node, e);
+      });
     };
-  })();
+  }();
 }
 
-module.exports = on;
-},{"../util/inDOM":143}],125:[function(require,module,exports){
+exports.default = on;
+module.exports = exports['default'];
+},{"../util/inDOM":146}],128:[function(require,module,exports){
 "use strict";
 
-exports.__esModule = true;
-exports["default"] = ownerDocument;
-
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.default = ownerDocument;
 function ownerDocument(node) {
   return node && node.ownerDocument || document;
 }
-
 module.exports = exports["default"];
-},{}],126:[function(require,module,exports){
-'use strict';
-var canUseDOM = require('../util/inDOM');
-
-var contains = (function () {
-  var root = canUseDOM && document.documentElement;
-
-  return root && root.contains ? function (context, node) {
-    return context.contains(node);
-  } : root && root.compareDocumentPosition ? function (context, node) {
-    return context === node || !!(context.compareDocumentPosition(node) & 16);
-  } : function (context, node) {
-    if (node) do {
-      if (node === context) return true;
-    } while (node = node.parentNode);
-
-    return false;
-  };
-})();
-
-module.exports = contains;
-},{"../util/inDOM":143}],127:[function(require,module,exports){
+},{}],129:[function(require,module,exports){
 'use strict';
 
-module.exports = function getWindow(node) {
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+
+var _inDOM = require('../util/inDOM');
+
+var _inDOM2 = _interopRequireDefault(_inDOM);
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+exports.default = function () {
+  // HTML DOM and SVG DOM may have different support levels,
+  // so we need to check on context instead of a document root element.
+  return _inDOM2.default ? function (context, node) {
+    if (context.contains) {
+      return context.contains(node);
+    } else if (context.compareDocumentPosition) {
+      return context === node || !!(context.compareDocumentPosition(node) & 16);
+    } else {
+      return fallback(context, node);
+    }
+  } : fallback;
+}();
+
+function fallback(context, node) {
+  if (node) do {
+    if (node === context) return true;
+  } while (node = node.parentNode);
+
+  return false;
+}
+module.exports = exports['default'];
+},{"../util/inDOM":146}],130:[function(require,module,exports){
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.default = getWindow;
+function getWindow(node) {
   return node === node.window ? node : node.nodeType === 9 ? node.defaultView || node.parentWindow : false;
-};
-},{}],128:[function(require,module,exports){
+}
+module.exports = exports["default"];
+},{}],131:[function(require,module,exports){
 'use strict';
-var contains = require('./contains'),
-    getWindow = require('./isWindow'),
-    ownerDocument = require('../ownerDocument');
 
-module.exports = function offset(node) {
-  var doc = ownerDocument(node),
-      win = getWindow(doc),
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.default = offset;
+
+var _contains = require('./contains');
+
+var _contains2 = _interopRequireDefault(_contains);
+
+var _isWindow = require('./isWindow');
+
+var _isWindow2 = _interopRequireDefault(_isWindow);
+
+var _ownerDocument = require('../ownerDocument');
+
+var _ownerDocument2 = _interopRequireDefault(_ownerDocument);
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+function offset(node) {
+  var doc = (0, _ownerDocument2.default)(node),
+      win = (0, _isWindow2.default)(doc),
       docElem = doc && doc.documentElement,
       box = { top: 0, left: 0, height: 0, width: 0 };
 
   if (!doc) return;
 
   // Make sure it's not a disconnected DOM node
-  if (!contains(docElem, node)) return box;
+  if (!(0, _contains2.default)(docElem, node)) return box;
 
   if (node.getBoundingClientRect !== undefined) box = node.getBoundingClientRect();
 
-  if (box.width || box.height) {
-
-    box = {
-      top: box.top + (win.pageYOffset || docElem.scrollTop) - (docElem.clientTop || 0),
-      left: box.left + (win.pageXOffset || docElem.scrollLeft) - (docElem.clientLeft || 0),
-      width: (box.width == null ? node.offsetWidth : box.width) || 0,
-      height: (box.height == null ? node.offsetHeight : box.height) || 0
-    };
-  }
+  // IE8 getBoundingClientRect doesn't support width & height
+  box = {
+    top: box.top + (win.pageYOffset || docElem.scrollTop) - (docElem.clientTop || 0),
+    left: box.left + (win.pageXOffset || docElem.scrollLeft) - (docElem.clientLeft || 0),
+    width: (box.width == null ? node.offsetWidth : box.width) || 0,
+    height: (box.height == null ? node.offsetHeight : box.height) || 0
+  };
 
   return box;
-};
-},{"../ownerDocument":125,"./contains":126,"./isWindow":127}],129:[function(require,module,exports){
+}
+module.exports = exports['default'];
+},{"../ownerDocument":128,"./contains":129,"./isWindow":130}],132:[function(require,module,exports){
 'use strict';
 
-var babelHelpers = require('../util/babelHelpers.js');
-
-exports.__esModule = true;
-exports['default'] = offsetParent;
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.default = offsetParent;
 
 var _ownerDocument = require('../ownerDocument');
 
-var _ownerDocument2 = babelHelpers.interopRequireDefault(_ownerDocument);
+var _ownerDocument2 = _interopRequireDefault(_ownerDocument);
 
 var _style = require('../style');
 
-var _style2 = babelHelpers.interopRequireDefault(_style);
+var _style2 = _interopRequireDefault(_style);
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
 function nodeName(node) {
   return node.nodeName && node.nodeName.toLowerCase();
 }
 
 function offsetParent(node) {
-  var doc = (0, _ownerDocument2['default'])(node),
+  var doc = (0, _ownerDocument2.default)(node),
       offsetParent = node && node.offsetParent;
 
-  while (offsetParent && nodeName(node) !== 'html' && (0, _style2['default'])(offsetParent, 'position') === 'static') {
+  while (offsetParent && nodeName(node) !== 'html' && (0, _style2.default)(offsetParent, 'position') === 'static') {
     offsetParent = offsetParent.offsetParent;
   }
 
   return offsetParent || doc.documentElement;
 }
-
 module.exports = exports['default'];
-},{"../ownerDocument":125,"../style":135,"../util/babelHelpers.js":138}],130:[function(require,module,exports){
+},{"../ownerDocument":128,"../style":138}],133:[function(require,module,exports){
 'use strict';
 
-var babelHelpers = require('../util/babelHelpers.js');
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
 
-exports.__esModule = true;
-exports['default'] = position;
+var _extends = Object.assign || function (target) { for (var i = 1; i < arguments.length; i++) { var source = arguments[i]; for (var key in source) { if (Object.prototype.hasOwnProperty.call(source, key)) { target[key] = source[key]; } } } return target; };
+
+exports.default = position;
 
 var _offset = require('./offset');
 
-var _offset2 = babelHelpers.interopRequireDefault(_offset);
+var _offset2 = _interopRequireDefault(_offset);
 
 var _offsetParent = require('./offsetParent');
 
-var _offsetParent2 = babelHelpers.interopRequireDefault(_offsetParent);
+var _offsetParent2 = _interopRequireDefault(_offsetParent);
 
 var _scrollTop = require('./scrollTop');
 
-var _scrollTop2 = babelHelpers.interopRequireDefault(_scrollTop);
+var _scrollTop2 = _interopRequireDefault(_scrollTop);
 
 var _scrollLeft = require('./scrollLeft');
 
-var _scrollLeft2 = babelHelpers.interopRequireDefault(_scrollLeft);
+var _scrollLeft2 = _interopRequireDefault(_scrollLeft);
 
 var _style = require('../style');
 
-var _style2 = babelHelpers.interopRequireDefault(_style);
+var _style2 = _interopRequireDefault(_style);
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
 function nodeName(node) {
   return node.nodeName && node.nodeName.toLowerCase();
@@ -2129,35 +2821,39 @@ function position(node, offsetParent) {
 
   // Fixed elements are offset from window (parentOffset = {top:0, left: 0},
   // because it is its only offset parent
-  if ((0, _style2['default'])(node, 'position') === 'fixed') {
+  if ((0, _style2.default)(node, 'position') === 'fixed') {
     offset = node.getBoundingClientRect();
   } else {
-    offsetParent = offsetParent || (0, _offsetParent2['default'])(node);
-    offset = (0, _offset2['default'])(node);
+    offsetParent = offsetParent || (0, _offsetParent2.default)(node);
+    offset = (0, _offset2.default)(node);
 
-    if (nodeName(offsetParent) !== 'html') parentOffset = (0, _offset2['default'])(offsetParent);
+    if (nodeName(offsetParent) !== 'html') parentOffset = (0, _offset2.default)(offsetParent);
 
-    parentOffset.top += parseInt((0, _style2['default'])(offsetParent, 'borderTopWidth'), 10) - (0, _scrollTop2['default'])(offsetParent) || 0;
-    parentOffset.left += parseInt((0, _style2['default'])(offsetParent, 'borderLeftWidth'), 10) - (0, _scrollLeft2['default'])(offsetParent) || 0;
+    parentOffset.top += parseInt((0, _style2.default)(offsetParent, 'borderTopWidth'), 10) - (0, _scrollTop2.default)(offsetParent) || 0;
+    parentOffset.left += parseInt((0, _style2.default)(offsetParent, 'borderLeftWidth'), 10) - (0, _scrollLeft2.default)(offsetParent) || 0;
   }
 
   // Subtract parent offsets and node margins
-  return babelHelpers._extends({}, offset, {
-    top: offset.top - parentOffset.top - (parseInt((0, _style2['default'])(node, 'marginTop'), 10) || 0),
-    left: offset.left - parentOffset.left - (parseInt((0, _style2['default'])(node, 'marginLeft'), 10) || 0)
+  return _extends({}, offset, {
+    top: offset.top - parentOffset.top - (parseInt((0, _style2.default)(node, 'marginTop'), 10) || 0),
+    left: offset.left - parentOffset.left - (parseInt((0, _style2.default)(node, 'marginLeft'), 10) || 0)
   });
 }
-
 module.exports = exports['default'];
-},{"../style":135,"../util/babelHelpers.js":138,"./offset":128,"./offsetParent":129,"./scrollLeft":132,"./scrollTop":133}],131:[function(require,module,exports){
+},{"../style":138,"./offset":131,"./offsetParent":132,"./scrollLeft":135,"./scrollTop":136}],134:[function(require,module,exports){
 'use strict';
-//     Zepto.js
-//     (c) 2010-2015 Thomas Fuchs
-//     Zepto.js may be freely distributed under the MIT license.
-var simpleSelectorRE = /^[\w-]*$/,
-    toArray = Function.prototype.bind.call(Function.prototype.call, [].slice);
 
-module.exports = function qsa(element, selector) {
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.default = qsa;
+// Zepto.js
+// (c) 2010-2015 Thomas Fuchs
+// Zepto.js may be freely distributed under the MIT license.
+var simpleSelectorRE = /^[\w-]*$/;
+var toArray = Function.prototype.bind.call(Function.prototype.call, [].slice);
+
+function qsa(element, selector) {
   var maybeID = selector[0] === '#',
       maybeClass = selector[0] === '.',
       nameOnly = maybeID || maybeClass ? selector.slice(1) : selector,
@@ -2176,50 +2872,79 @@ module.exports = function qsa(element, selector) {
   }
 
   return toArray(element.querySelectorAll(selector));
-};
-},{}],132:[function(require,module,exports){
+}
+module.exports = exports['default'];
+},{}],135:[function(require,module,exports){
 'use strict';
-var getWindow = require('./isWindow');
 
-module.exports = function scrollTop(node, val) {
-  var win = getWindow(node);
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.default = scrollTop;
+
+var _isWindow = require('./isWindow');
+
+var _isWindow2 = _interopRequireDefault(_isWindow);
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+function scrollTop(node, val) {
+  var win = (0, _isWindow2.default)(node);
 
   if (val === undefined) return win ? 'pageXOffset' in win ? win.pageXOffset : win.document.documentElement.scrollLeft : node.scrollLeft;
 
   if (win) win.scrollTo(val, 'pageYOffset' in win ? win.pageYOffset : win.document.documentElement.scrollTop);else node.scrollLeft = val;
-};
-},{"./isWindow":127}],133:[function(require,module,exports){
+}
+module.exports = exports['default'];
+},{"./isWindow":130}],136:[function(require,module,exports){
 'use strict';
-var getWindow = require('./isWindow');
 
-module.exports = function scrollTop(node, val) {
-  var win = getWindow(node);
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.default = scrollTop;
+
+var _isWindow = require('./isWindow');
+
+var _isWindow2 = _interopRequireDefault(_isWindow);
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+function scrollTop(node, val) {
+  var win = (0, _isWindow2.default)(node);
 
   if (val === undefined) return win ? 'pageYOffset' in win ? win.pageYOffset : win.document.documentElement.scrollTop : node.scrollTop;
 
   if (win) win.scrollTo('pageXOffset' in win ? win.pageXOffset : win.document.documentElement.scrollLeft, val);else node.scrollTop = val;
-};
-},{"./isWindow":127}],134:[function(require,module,exports){
+}
+module.exports = exports['default'];
+},{"./isWindow":130}],137:[function(require,module,exports){
 'use strict';
 
-var babelHelpers = require('../util/babelHelpers.js');
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.default = _getComputedStyle;
 
-var _utilCamelizeStyle = require('../util/camelizeStyle');
+var _camelizeStyle = require('../util/camelizeStyle');
 
-var _utilCamelizeStyle2 = babelHelpers.interopRequireDefault(_utilCamelizeStyle);
+var _camelizeStyle2 = _interopRequireDefault(_camelizeStyle);
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
 var rposition = /^(top|right|bottom|left)$/;
 var rnumnonpx = /^([+-]?(?:\d*\.|)\d+(?:[eE][+-]?\d+|))(?!px)[a-z%]+$/i;
 
-module.exports = function _getComputedStyle(node) {
+function _getComputedStyle(node) {
   if (!node) throw new TypeError('No Element passed to `getComputedStyle()`');
   var doc = node.ownerDocument;
 
-  return 'defaultView' in doc ? doc.defaultView.opener ? node.ownerDocument.defaultView.getComputedStyle(node, null) : window.getComputedStyle(node, null) : { //ie 8 "magic" from: https://github.com/jquery/jquery/blob/1.11-stable/src/css/curCSS.js#L72
+  return 'defaultView' in doc ? doc.defaultView.opener ? node.ownerDocument.defaultView.getComputedStyle(node, null) : window.getComputedStyle(node, null) : {
+    //ie 8 "magic" from: https://github.com/jquery/jquery/blob/1.11-stable/src/css/curCSS.js#L72
     getPropertyValue: function getPropertyValue(prop) {
       var style = node.style;
 
-      prop = (0, _utilCamelizeStyle2['default'])(prop);
+      prop = (0, _camelizeStyle2.default)(prop);
 
       if (prop == 'float') prop = 'styleFloat';
 
@@ -2247,186 +2972,300 @@ module.exports = function _getComputedStyle(node) {
       return current;
     }
   };
-};
-},{"../util/babelHelpers.js":138,"../util/camelizeStyle":140}],135:[function(require,module,exports){
+}
+module.exports = exports['default'];
+},{"../util/camelizeStyle":143}],138:[function(require,module,exports){
 'use strict';
 
-var camelize = require('../util/camelizeStyle'),
-    hyphenate = require('../util/hyphenateStyle'),
-    _getComputedStyle = require('./getComputedStyle'),
-    removeStyle = require('./removeStyle');
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.default = style;
 
-var has = Object.prototype.hasOwnProperty;
+var _camelizeStyle = require('../util/camelizeStyle');
 
-module.exports = function style(node, property, value) {
-  var css = '',
-      props = property;
+var _camelizeStyle2 = _interopRequireDefault(_camelizeStyle);
+
+var _hyphenateStyle = require('../util/hyphenateStyle');
+
+var _hyphenateStyle2 = _interopRequireDefault(_hyphenateStyle);
+
+var _getComputedStyle2 = require('./getComputedStyle');
+
+var _getComputedStyle3 = _interopRequireDefault(_getComputedStyle2);
+
+var _removeStyle = require('./removeStyle');
+
+var _removeStyle2 = _interopRequireDefault(_removeStyle);
+
+var _properties = require('../transition/properties');
+
+var _isTransform = require('../transition/isTransform');
+
+var _isTransform2 = _interopRequireDefault(_isTransform);
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+function style(node, property, value) {
+  var css = '';
+  var transforms = '';
+  var props = property;
 
   if (typeof property === 'string') {
-
-    if (value === undefined) return node.style[camelize(property)] || _getComputedStyle(node).getPropertyValue(hyphenate(property));else (props = {})[property] = value;
+    if (value === undefined) {
+      return node.style[(0, _camelizeStyle2.default)(property)] || (0, _getComputedStyle3.default)(node).getPropertyValue((0, _hyphenateStyle2.default)(property));
+    } else {
+      (props = {})[property] = value;
+    }
   }
 
-  for (var key in props) if (has.call(props, key)) {
-    !props[key] && props[key] !== 0 ? removeStyle(node, hyphenate(key)) : css += hyphenate(key) + ':' + props[key] + ';';
+  Object.keys(props).forEach(function (key) {
+    var value = props[key];
+    if (!value && value !== 0) {
+      (0, _removeStyle2.default)(node, (0, _hyphenateStyle2.default)(key));
+    } else if ((0, _isTransform2.default)(key)) {
+      transforms += key + '(' + value + ') ';
+    } else {
+      css += (0, _hyphenateStyle2.default)(key) + ': ' + value + ';';
+    }
+  });
+
+  if (transforms) {
+    css += _properties.transform + ': ' + transforms + ';';
   }
 
   node.style.cssText += ';' + css;
-};
-},{"../util/camelizeStyle":140,"../util/hyphenateStyle":142,"./getComputedStyle":134,"./removeStyle":136}],136:[function(require,module,exports){
+}
+module.exports = exports['default'];
+},{"../transition/isTransform":140,"../transition/properties":141,"../util/camelizeStyle":143,"../util/hyphenateStyle":145,"./getComputedStyle":137,"./removeStyle":139}],139:[function(require,module,exports){
 'use strict';
 
-module.exports = function removeStyle(node, key) {
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.default = removeStyle;
+function removeStyle(node, key) {
   return 'removeProperty' in node.style ? node.style.removeProperty(key) : node.style.removeAttribute(key);
-};
-},{}],137:[function(require,module,exports){
+}
+module.exports = exports['default'];
+},{}],140:[function(require,module,exports){
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.default = isTransform;
+var supportedTransforms = /^((translate|rotate|scale)(X|Y|Z|3d)?|matrix(3d)?|perspective|skew(X|Y)?)$/i;
+
+function isTransform(property) {
+  return !!(property && supportedTransforms.test(property));
+}
+module.exports = exports["default"];
+},{}],141:[function(require,module,exports){
 'use strict';
-var canUseDOM = require('../util/inDOM');
 
-var has = Object.prototype.hasOwnProperty,
-    transform = 'transform',
-    transition = {},
-    transitionTiming,
-    transitionDuration,
-    transitionProperty,
-    transitionDelay;
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.animationEnd = exports.animationDelay = exports.animationTiming = exports.animationDuration = exports.animationName = exports.transitionEnd = exports.transitionDuration = exports.transitionDelay = exports.transitionTiming = exports.transitionProperty = exports.transform = undefined;
 
-if (canUseDOM) {
-  transition = getTransitionProperties();
+var _inDOM = require('../util/inDOM');
 
-  transform = transition.prefix + transform;
+var _inDOM2 = _interopRequireDefault(_inDOM);
 
-  transitionProperty = transition.prefix + 'transition-property';
-  transitionDuration = transition.prefix + 'transition-duration';
-  transitionDelay = transition.prefix + 'transition-delay';
-  transitionTiming = transition.prefix + 'transition-timing-function';
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+var transform = 'transform';
+var prefix = void 0,
+    transitionEnd = void 0,
+    animationEnd = void 0;
+var transitionProperty = void 0,
+    transitionDuration = void 0,
+    transitionTiming = void 0,
+    transitionDelay = void 0;
+var animationName = void 0,
+    animationDuration = void 0,
+    animationTiming = void 0,
+    animationDelay = void 0;
+
+if (_inDOM2.default) {
+  var _getTransitionPropert = getTransitionProperties();
+
+  prefix = _getTransitionPropert.prefix;
+  exports.transitionEnd = transitionEnd = _getTransitionPropert.transitionEnd;
+  exports.animationEnd = animationEnd = _getTransitionPropert.animationEnd;
+
+
+  exports.transform = transform = prefix + '-' + transform;
+  exports.transitionProperty = transitionProperty = prefix + '-transition-property';
+  exports.transitionDuration = transitionDuration = prefix + '-transition-duration';
+  exports.transitionDelay = transitionDelay = prefix + '-transition-delay';
+  exports.transitionTiming = transitionTiming = prefix + '-transition-timing-function';
+
+  exports.animationName = animationName = prefix + '-animation-name';
+  exports.animationDuration = animationDuration = prefix + '-animation-duration';
+  exports.animationTiming = animationTiming = prefix + '-animation-delay';
+  exports.animationDelay = animationDelay = prefix + '-animation-timing-function';
 }
 
-module.exports = {
+exports.transform = transform;
+exports.transitionProperty = transitionProperty;
+exports.transitionTiming = transitionTiming;
+exports.transitionDelay = transitionDelay;
+exports.transitionDuration = transitionDuration;
+exports.transitionEnd = transitionEnd;
+exports.animationName = animationName;
+exports.animationDuration = animationDuration;
+exports.animationTiming = animationTiming;
+exports.animationDelay = animationDelay;
+exports.animationEnd = animationEnd;
+exports.default = {
   transform: transform,
-  end: transition.end,
+  end: transitionEnd,
   property: transitionProperty,
   timing: transitionTiming,
   delay: transitionDelay,
   duration: transitionDuration
 };
 
+
 function getTransitionProperties() {
-  var endEvent,
-      prefix = '',
-      transitions = {
-    O: 'otransitionend',
-    Moz: 'transitionend',
-    Webkit: 'webkitTransitionEnd',
-    ms: 'MSTransitionEnd'
+  var style = document.createElement('div').style;
+
+  var vendorMap = {
+    O: function O(e) {
+      return 'o' + e.toLowerCase();
+    },
+    Moz: function Moz(e) {
+      return e.toLowerCase();
+    },
+    Webkit: function Webkit(e) {
+      return 'webkit' + e;
+    },
+    ms: function ms(e) {
+      return 'MS' + e;
+    }
   };
 
-  var element = document.createElement('div');
+  var vendors = Object.keys(vendorMap);
 
-  for (var vendor in transitions) if (has.call(transitions, vendor)) {
-    if (element.style[vendor + 'TransitionProperty'] !== undefined) {
-      prefix = '-' + vendor.toLowerCase() + '-';
-      endEvent = transitions[vendor];
+  var transitionEnd = void 0,
+      animationEnd = void 0;
+  var prefix = '';
+
+  for (var i = 0; i < vendors.length; i++) {
+    var vendor = vendors[i];
+
+    if (vendor + 'TransitionProperty' in style) {
+      prefix = '-' + vendor.toLowerCase();
+      transitionEnd = vendorMap[vendor]('TransitionEnd');
+      animationEnd = vendorMap[vendor]('AnimationEnd');
       break;
     }
   }
 
-  if (!endEvent && element.style.transitionProperty !== undefined) endEvent = 'transitionend';
+  if (!transitionEnd && 'transitionProperty' in style) transitionEnd = 'transitionend';
 
-  return { end: endEvent, prefix: prefix };
+  if (!animationEnd && 'animationName' in style) animationEnd = 'animationend';
+
+  style = null;
+
+  return { animationEnd: animationEnd, transitionEnd: transitionEnd, prefix: prefix };
 }
-},{"../util/inDOM":143}],138:[function(require,module,exports){
-(function (root, factory) {
-  if (typeof define === "function" && define.amd) {
-    define(["exports"], factory);
-  } else if (typeof exports === "object") {
-    factory(exports);
-  } else {
-    factory(root.babelHelpers = {});
-  }
-})(this, function (global) {
-  var babelHelpers = global;
-
-  babelHelpers.interopRequireDefault = function (obj) {
-    return obj && obj.__esModule ? obj : {
-      "default": obj
-    };
-  };
-
-  babelHelpers._extends = Object.assign || function (target) {
-    for (var i = 1; i < arguments.length; i++) {
-      var source = arguments[i];
-
-      for (var key in source) {
-        if (Object.prototype.hasOwnProperty.call(source, key)) {
-          target[key] = source[key];
-        }
-      }
-    }
-
-    return target;
-  };
-})
-},{}],139:[function(require,module,exports){
+},{"../util/inDOM":146}],142:[function(require,module,exports){
 "use strict";
 
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.default = camelize;
 var rHyphen = /-(.)/g;
 
-module.exports = function camelize(string) {
+function camelize(string) {
   return string.replace(rHyphen, function (_, chr) {
     return chr.toUpperCase();
   });
-};
-},{}],140:[function(require,module,exports){
-/**
- * Copyright 2014-2015, Facebook, Inc.
- * All rights reserved.
- * https://github.com/facebook/react/blob/2aeb8a2a6beb00617a4217f7f8284924fa2ad819/src/vendor/core/camelizeStyleName.js
- */
-
+}
+module.exports = exports["default"];
+},{}],143:[function(require,module,exports){
 'use strict';
-var camelize = require('./camelize');
-var msPattern = /^-ms-/;
 
-module.exports = function camelizeStyleName(string) {
-  return camelize(string.replace(msPattern, 'ms-'));
-};
-},{"./camelize":139}],141:[function(require,module,exports){
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.default = camelizeStyleName;
+
+var _camelize = require('./camelize');
+
+var _camelize2 = _interopRequireDefault(_camelize);
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+var msPattern = /^-ms-/; /**
+                          * Copyright 2014-2015, Facebook, Inc.
+                          * All rights reserved.
+                          * https://github.com/facebook/react/blob/2aeb8a2a6beb00617a4217f7f8284924fa2ad819/src/vendor/core/camelizeStyleName.js
+                          */
+function camelizeStyleName(string) {
+  return (0, _camelize2.default)(string.replace(msPattern, 'ms-'));
+}
+module.exports = exports['default'];
+},{"./camelize":142}],144:[function(require,module,exports){
 'use strict';
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.default = hyphenate;
 
 var rUpper = /([A-Z])/g;
 
-module.exports = function hyphenate(string) {
+function hyphenate(string) {
   return string.replace(rUpper, '-$1').toLowerCase();
-};
-},{}],142:[function(require,module,exports){
-/**
- * Copyright 2013-2014, Facebook, Inc.
- * All rights reserved.
- * https://github.com/facebook/react/blob/2aeb8a2a6beb00617a4217f7f8284924fa2ad819/src/vendor/core/hyphenateStyleName.js
- */
-
-"use strict";
-
-var hyphenate = require("./hyphenate");
-var msPattern = /^ms-/;
-
-module.exports = function hyphenateStyleName(string) {
-  return hyphenate(string).replace(msPattern, "-ms-");
-};
-},{"./hyphenate":141}],143:[function(require,module,exports){
-'use strict';
-module.exports = !!(typeof window !== 'undefined' && window.document && window.document.createElement);
-},{}],144:[function(require,module,exports){
+}
+module.exports = exports['default'];
+},{}],145:[function(require,module,exports){
 'use strict';
 
-var canUseDOM = require('./inDOM');
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.default = hyphenateStyleName;
 
-var size;
+var _hyphenate = require('./hyphenate');
 
-module.exports = function (recalc) {
+var _hyphenate2 = _interopRequireDefault(_hyphenate);
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+var msPattern = /^ms-/; /**
+                         * Copyright 2013-2014, Facebook, Inc.
+                         * All rights reserved.
+                         * https://github.com/facebook/react/blob/2aeb8a2a6beb00617a4217f7f8284924fa2ad819/src/vendor/core/hyphenateStyleName.js
+                         */
+
+function hyphenateStyleName(string) {
+  return (0, _hyphenate2.default)(string).replace(msPattern, '-ms-');
+}
+module.exports = exports['default'];
+},{"./hyphenate":144}],146:[function(require,module,exports){
+'use strict';
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.default = !!(typeof window !== 'undefined' && window.document && window.document.createElement);
+module.exports = exports['default'];
+},{}],147:[function(require,module,exports){
+'use strict';
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+
+exports.default = function (recalc) {
   if (!size || recalc) {
-    if (canUseDOM) {
+    if (_inDOM2.default) {
       var scrollDiv = document.createElement('div');
 
       scrollDiv.style.position = 'absolute';
@@ -2443,7 +3282,17 @@ module.exports = function (recalc) {
 
   return size;
 };
-},{"./inDOM":143}],145:[function(require,module,exports){
+
+var _inDOM = require('./inDOM');
+
+var _inDOM2 = _interopRequireDefault(_inDOM);
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+var size = void 0;
+
+module.exports = exports['default'];
+},{"./inDOM":146}],148:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-2015, Facebook, Inc.
@@ -2498,19 +3347,19 @@ var invariant = function(condition, format, a, b, c, d, e, f) {
 module.exports = invariant;
 
 }).call(this,require('_process'))
-},{"_process":154}],146:[function(require,module,exports){
+},{"_process":155}],149:[function(require,module,exports){
 /*!
- * jQuery JavaScript Library v3.1.1
+ * jQuery JavaScript Library v3.2.1
  * https://jquery.com/
  *
  * Includes Sizzle.js
  * https://sizzlejs.com/
  *
- * Copyright jQuery Foundation and other contributors
+ * Copyright JS Foundation and other contributors
  * Released under the MIT license
  * https://jquery.org/license
  *
- * Date: 2016-09-22T22:30Z
+ * Date: 2017-03-20T18:59Z
  */
 ( function( global, factory ) {
 
@@ -2589,7 +3438,7 @@ var support = {};
 
 
 var
-	version = "3.1.1",
+	version = "3.2.1",
 
 	// Define a local copy of jQuery
 	jQuery = function( selector, context ) {
@@ -2737,11 +3586,11 @@ jQuery.extend = jQuery.fn.extend = function() {
 
 				// Recurse if we're merging plain objects or arrays
 				if ( deep && copy && ( jQuery.isPlainObject( copy ) ||
-					( copyIsArray = jQuery.isArray( copy ) ) ) ) {
+					( copyIsArray = Array.isArray( copy ) ) ) ) {
 
 					if ( copyIsArray ) {
 						copyIsArray = false;
-						clone = src && jQuery.isArray( src ) ? src : [];
+						clone = src && Array.isArray( src ) ? src : [];
 
 					} else {
 						clone = src && jQuery.isPlainObject( src ) ? src : {};
@@ -2779,8 +3628,6 @@ jQuery.extend( {
 	isFunction: function( obj ) {
 		return jQuery.type( obj ) === "function";
 	},
-
-	isArray: Array.isArray,
 
 	isWindow: function( obj ) {
 		return obj != null && obj === obj.window;
@@ -2854,10 +3701,6 @@ jQuery.extend( {
 	// Microsoft forgot to hump their vendor prefix (#9572)
 	camelCase: function( string ) {
 		return string.replace( rmsPrefix, "ms-" ).replace( rdashAlpha, fcamelCase );
-	},
-
-	nodeName: function( elem, name ) {
-		return elem.nodeName && elem.nodeName.toLowerCase() === name.toLowerCase();
 	},
 
 	each: function( obj, callback ) {
@@ -5344,6 +6187,13 @@ var siblings = function( n, elem ) {
 
 var rneedsContext = jQuery.expr.match.needsContext;
 
+
+
+function nodeName( elem, name ) {
+
+  return elem.nodeName && elem.nodeName.toLowerCase() === name.toLowerCase();
+
+};
 var rsingleTag = ( /^<([a-z][^\/\0>:\x20\t\r\n\f]*)[\x20\t\r\n\f]*\/?>(?:<\/\1>|)$/i );
 
 
@@ -5695,7 +6545,18 @@ jQuery.each( {
 		return siblings( elem.firstChild );
 	},
 	contents: function( elem ) {
-		return elem.contentDocument || jQuery.merge( [], elem.childNodes );
+        if ( nodeName( elem, "iframe" ) ) {
+            return elem.contentDocument;
+        }
+
+        // Support: IE 9 - 11 only, iOS 7 only, Android Browser <=4.3 only
+        // Treat the template element as a regular one in browsers that
+        // don't support it.
+        if ( nodeName( elem, "template" ) ) {
+            elem = elem.content || elem;
+        }
+
+        return jQuery.merge( [], elem.childNodes );
 	}
 }, function( name, fn ) {
 	jQuery.fn[ name ] = function( until, selector ) {
@@ -5793,7 +6654,7 @@ jQuery.Callbacks = function( options ) {
 		fire = function() {
 
 			// Enforce single-firing
-			locked = options.once;
+			locked = locked || options.once;
 
 			// Execute callbacks for all pending executions,
 			// respecting firingIndex overrides and runtime changes
@@ -5962,7 +6823,7 @@ function Thrower( ex ) {
 	throw ex;
 }
 
-function adoptValue( value, resolve, reject ) {
+function adoptValue( value, resolve, reject, noValue ) {
 	var method;
 
 	try {
@@ -5978,9 +6839,10 @@ function adoptValue( value, resolve, reject ) {
 		// Other non-thenables
 		} else {
 
-			// Support: Android 4.0 only
-			// Strict mode functions invoked without .call/.apply get global-object context
-			resolve.call( undefined, value );
+			// Control `resolve` arguments by letting Array#slice cast boolean `noValue` to integer:
+			// * false: [ value ].slice( 0 ) => resolve( value )
+			// * true: [ value ].slice( 1 ) => resolve()
+			resolve.apply( undefined, [ value ].slice( noValue ) );
 		}
 
 	// For Promises/A+, convert exceptions into rejections
@@ -5990,7 +6852,7 @@ function adoptValue( value, resolve, reject ) {
 
 		// Support: Android 4.0 only
 		// Strict mode functions invoked without .call/.apply get global-object context
-		reject.call( undefined, value );
+		reject.apply( undefined, [ value ] );
 	}
 }
 
@@ -6315,7 +7177,8 @@ jQuery.extend( {
 
 		// Single- and empty arguments are adopted like Promise.resolve
 		if ( remaining <= 1 ) {
-			adoptValue( singleValue, master.done( updateFunc( i ) ).resolve, master.reject );
+			adoptValue( singleValue, master.done( updateFunc( i ) ).resolve, master.reject,
+				!remaining );
 
 			// Use .then() to unwrap secondary thenables (cf. gh-3000)
 			if ( master.state() === "pending" ||
@@ -6386,15 +7249,6 @@ jQuery.extend( {
 	// A counter to track how many items to wait for before
 	// the ready event fires. See #6781
 	readyWait: 1,
-
-	// Hold (or release) the ready event
-	holdReady: function( hold ) {
-		if ( hold ) {
-			jQuery.readyWait++;
-		} else {
-			jQuery.ready( true );
-		}
-	},
 
 	// Handle when the DOM is ready
 	ready: function( wait ) {
@@ -6631,7 +7485,7 @@ Data.prototype = {
 		if ( key !== undefined ) {
 
 			// Support array or space separated string of keys
-			if ( jQuery.isArray( key ) ) {
+			if ( Array.isArray( key ) ) {
 
 				// If key is an array of keys...
 				// We always set camelCase keys, so remove that.
@@ -6857,7 +7711,7 @@ jQuery.extend( {
 
 			// Speed up dequeue by getting out quickly if this is just a lookup
 			if ( data ) {
-				if ( !queue || jQuery.isArray( data ) ) {
+				if ( !queue || Array.isArray( data ) ) {
 					queue = dataPriv.access( elem, type, jQuery.makeArray( data ) );
 				} else {
 					queue.push( data );
@@ -7234,7 +8088,7 @@ function getAll( context, tag ) {
 		ret = [];
 	}
 
-	if ( tag === undefined || tag && jQuery.nodeName( context, tag ) ) {
+	if ( tag === undefined || tag && nodeName( context, tag ) ) {
 		return jQuery.merge( [ context ], ret );
 	}
 
@@ -7841,7 +8695,7 @@ jQuery.event = {
 
 			// For checkbox, fire native event so checked state will be right
 			trigger: function() {
-				if ( this.type === "checkbox" && this.click && jQuery.nodeName( this, "input" ) ) {
+				if ( this.type === "checkbox" && this.click && nodeName( this, "input" ) ) {
 					this.click();
 					return false;
 				}
@@ -7849,7 +8703,7 @@ jQuery.event = {
 
 			// For cross-browser consistency, don't fire native .click() on links
 			_default: function( event ) {
-				return jQuery.nodeName( event.target, "a" );
+				return nodeName( event.target, "a" );
 			}
 		},
 
@@ -8126,11 +8980,12 @@ var
 	rscriptTypeMasked = /^true\/(.*)/,
 	rcleanScript = /^\s*<!(?:\[CDATA\[|--)|(?:\]\]|--)>\s*$/g;
 
+// Prefer a tbody over its parent table for containing new rows
 function manipulationTarget( elem, content ) {
-	if ( jQuery.nodeName( elem, "table" ) &&
-		jQuery.nodeName( content.nodeType !== 11 ? content : content.firstChild, "tr" ) ) {
+	if ( nodeName( elem, "table" ) &&
+		nodeName( content.nodeType !== 11 ? content : content.firstChild, "tr" ) ) {
 
-		return elem.getElementsByTagName( "tbody" )[ 0 ] || elem;
+		return jQuery( ">tbody", elem )[ 0 ] || elem;
 	}
 
 	return elem;
@@ -8660,12 +9515,18 @@ var getStyles = function( elem ) {
 
 function curCSS( elem, name, computed ) {
 	var width, minWidth, maxWidth, ret,
+
+		// Support: Firefox 51+
+		// Retrieving style before computed somehow
+		// fixes an issue with getting wrong values
+		// on detached elements
 		style = elem.style;
 
 	computed = computed || getStyles( elem );
 
-	// Support: IE <=9 only
-	// getPropertyValue is only needed for .css('filter') (#12537)
+	// getPropertyValue is needed for:
+	//   .css('filter') (IE 9 only, #12537)
+	//   .css('--customProperty) (#3144)
 	if ( computed ) {
 		ret = computed.getPropertyValue( name ) || computed[ name ];
 
@@ -8731,6 +9592,7 @@ var
 	// except "table", "table-cell", or "table-caption"
 	// See here for display values: https://developer.mozilla.org/en-US/docs/CSS/display
 	rdisplayswap = /^(none|table(?!-c[ea]).+)/,
+	rcustomProp = /^--/,
 	cssShow = { position: "absolute", visibility: "hidden", display: "block" },
 	cssNormalTransform = {
 		letterSpacing: "0",
@@ -8758,6 +9620,16 @@ function vendorPropName( name ) {
 			return name;
 		}
 	}
+}
+
+// Return a property mapped along what jQuery.cssProps suggests or to
+// a vendor prefixed property.
+function finalPropName( name ) {
+	var ret = jQuery.cssProps[ name ];
+	if ( !ret ) {
+		ret = jQuery.cssProps[ name ] = vendorPropName( name ) || name;
+	}
+	return ret;
 }
 
 function setPositiveNumber( elem, value, subtract ) {
@@ -8820,43 +9692,30 @@ function augmentWidthOrHeight( elem, name, extra, isBorderBox, styles ) {
 
 function getWidthOrHeight( elem, name, extra ) {
 
-	// Start with offset property, which is equivalent to the border-box value
-	var val,
-		valueIsBorderBox = true,
+	// Start with computed style
+	var valueIsBorderBox,
 		styles = getStyles( elem ),
+		val = curCSS( elem, name, styles ),
 		isBorderBox = jQuery.css( elem, "boxSizing", false, styles ) === "border-box";
 
-	// Support: IE <=11 only
-	// Running getBoundingClientRect on a disconnected node
-	// in IE throws an error.
-	if ( elem.getClientRects().length ) {
-		val = elem.getBoundingClientRect()[ name ];
+	// Computed unit is not pixels. Stop here and return.
+	if ( rnumnonpx.test( val ) ) {
+		return val;
 	}
 
-	// Some non-html elements return undefined for offsetWidth, so check for null/undefined
-	// svg - https://bugzilla.mozilla.org/show_bug.cgi?id=649285
-	// MathML - https://bugzilla.mozilla.org/show_bug.cgi?id=491668
-	if ( val <= 0 || val == null ) {
+	// Check for style in case a browser which returns unreliable values
+	// for getComputedStyle silently falls back to the reliable elem.style
+	valueIsBorderBox = isBorderBox &&
+		( support.boxSizingReliable() || val === elem.style[ name ] );
 
-		// Fall back to computed then uncomputed css if necessary
-		val = curCSS( elem, name, styles );
-		if ( val < 0 || val == null ) {
-			val = elem.style[ name ];
-		}
-
-		// Computed unit is not pixels. Stop here and return.
-		if ( rnumnonpx.test( val ) ) {
-			return val;
-		}
-
-		// Check for style in case a browser which returns unreliable values
-		// for getComputedStyle silently falls back to the reliable elem.style
-		valueIsBorderBox = isBorderBox &&
-			( support.boxSizingReliable() || val === elem.style[ name ] );
-
-		// Normalize "", auto, and prepare for extra
-		val = parseFloat( val ) || 0;
+	// Fall back to offsetWidth/Height when value is "auto"
+	// This happens for inline elements with no explicit setting (gh-3571)
+	if ( val === "auto" ) {
+		val = elem[ "offset" + name[ 0 ].toUpperCase() + name.slice( 1 ) ];
 	}
+
+	// Normalize "", auto, and prepare for extra
+	val = parseFloat( val ) || 0;
 
 	// Use the active box-sizing model to add/subtract irrelevant styles
 	return ( val +
@@ -8921,10 +9780,15 @@ jQuery.extend( {
 		// Make sure that we're working with the right name
 		var ret, type, hooks,
 			origName = jQuery.camelCase( name ),
+			isCustomProp = rcustomProp.test( name ),
 			style = elem.style;
 
-		name = jQuery.cssProps[ origName ] ||
-			( jQuery.cssProps[ origName ] = vendorPropName( origName ) || origName );
+		// Make sure that we're working with the right name. We don't
+		// want to query the value if it is a CSS custom property
+		// since they are user-defined.
+		if ( !isCustomProp ) {
+			name = finalPropName( origName );
+		}
 
 		// Gets hook for the prefixed version, then unprefixed version
 		hooks = jQuery.cssHooks[ name ] || jQuery.cssHooks[ origName ];
@@ -8960,7 +9824,11 @@ jQuery.extend( {
 			if ( !hooks || !( "set" in hooks ) ||
 				( value = hooks.set( elem, value, extra ) ) !== undefined ) {
 
-				style[ name ] = value;
+				if ( isCustomProp ) {
+					style.setProperty( name, value );
+				} else {
+					style[ name ] = value;
+				}
 			}
 
 		} else {
@@ -8979,11 +9847,15 @@ jQuery.extend( {
 
 	css: function( elem, name, extra, styles ) {
 		var val, num, hooks,
-			origName = jQuery.camelCase( name );
+			origName = jQuery.camelCase( name ),
+			isCustomProp = rcustomProp.test( name );
 
-		// Make sure that we're working with the right name
-		name = jQuery.cssProps[ origName ] ||
-			( jQuery.cssProps[ origName ] = vendorPropName( origName ) || origName );
+		// Make sure that we're working with the right name. We don't
+		// want to modify the value if it is a CSS custom property
+		// since they are user-defined.
+		if ( !isCustomProp ) {
+			name = finalPropName( origName );
+		}
 
 		// Try prefixed name followed by the unprefixed name
 		hooks = jQuery.cssHooks[ name ] || jQuery.cssHooks[ origName ];
@@ -9008,6 +9880,7 @@ jQuery.extend( {
 			num = parseFloat( val );
 			return extra === true || isFinite( num ) ? num || 0 : val;
 		}
+
 		return val;
 	}
 } );
@@ -9107,7 +9980,7 @@ jQuery.fn.extend( {
 				map = {},
 				i = 0;
 
-			if ( jQuery.isArray( name ) ) {
+			if ( Array.isArray( name ) ) {
 				styles = getStyles( elem );
 				len = name.length;
 
@@ -9245,13 +10118,18 @@ jQuery.fx.step = {};
 
 
 var
-	fxNow, timerId,
+	fxNow, inProgress,
 	rfxtypes = /^(?:toggle|show|hide)$/,
 	rrun = /queueHooks$/;
 
-function raf() {
-	if ( timerId ) {
-		window.requestAnimationFrame( raf );
+function schedule() {
+	if ( inProgress ) {
+		if ( document.hidden === false && window.requestAnimationFrame ) {
+			window.requestAnimationFrame( schedule );
+		} else {
+			window.setTimeout( schedule, jQuery.fx.interval );
+		}
+
 		jQuery.fx.tick();
 	}
 }
@@ -9478,7 +10356,7 @@ function propFilter( props, specialEasing ) {
 		name = jQuery.camelCase( index );
 		easing = specialEasing[ name ];
 		value = props[ index ];
-		if ( jQuery.isArray( value ) ) {
+		if ( Array.isArray( value ) ) {
 			easing = value[ 1 ];
 			value = props[ index ] = value[ 0 ];
 		}
@@ -9537,12 +10415,19 @@ function Animation( elem, properties, options ) {
 
 			deferred.notifyWith( elem, [ animation, percent, remaining ] );
 
+			// If there's more to do, yield
 			if ( percent < 1 && length ) {
 				return remaining;
-			} else {
-				deferred.resolveWith( elem, [ animation ] );
-				return false;
 			}
+
+			// If this was an empty animation, synthesize a final progress notification
+			if ( !length ) {
+				deferred.notifyWith( elem, [ animation, 1, 0 ] );
+			}
+
+			// Resolve the animation and report its conclusion
+			deferred.resolveWith( elem, [ animation ] );
+			return false;
 		},
 		animation = deferred.promise( {
 			elem: elem,
@@ -9607,6 +10492,13 @@ function Animation( elem, properties, options ) {
 		animation.opts.start.call( elem, animation );
 	}
 
+	// Attach callbacks from options
+	animation
+		.progress( animation.opts.progress )
+		.done( animation.opts.done, animation.opts.complete )
+		.fail( animation.opts.fail )
+		.always( animation.opts.always );
+
 	jQuery.fx.timer(
 		jQuery.extend( tick, {
 			elem: elem,
@@ -9615,11 +10507,7 @@ function Animation( elem, properties, options ) {
 		} )
 	);
 
-	// attach callbacks from options
-	return animation.progress( animation.opts.progress )
-		.done( animation.opts.done, animation.opts.complete )
-		.fail( animation.opts.fail )
-		.always( animation.opts.always );
+	return animation;
 }
 
 jQuery.Animation = jQuery.extend( Animation, {
@@ -9670,8 +10558,8 @@ jQuery.speed = function( speed, easing, fn ) {
 		easing: fn && easing || easing && !jQuery.isFunction( easing ) && easing
 	};
 
-	// Go to the end state if fx are off or if document is hidden
-	if ( jQuery.fx.off || document.hidden ) {
+	// Go to the end state if fx are off
+	if ( jQuery.fx.off ) {
 		opt.duration = 0;
 
 	} else {
@@ -9863,7 +10751,7 @@ jQuery.fx.tick = function() {
 	for ( ; i < timers.length; i++ ) {
 		timer = timers[ i ];
 
-		// Checks the timer has not already been removed
+		// Run the timer and safely remove it when done (allowing for external removal)
 		if ( !timer() && timers[ i ] === timer ) {
 			timers.splice( i--, 1 );
 		}
@@ -9877,30 +10765,21 @@ jQuery.fx.tick = function() {
 
 jQuery.fx.timer = function( timer ) {
 	jQuery.timers.push( timer );
-	if ( timer() ) {
-		jQuery.fx.start();
-	} else {
-		jQuery.timers.pop();
-	}
+	jQuery.fx.start();
 };
 
 jQuery.fx.interval = 13;
 jQuery.fx.start = function() {
-	if ( !timerId ) {
-		timerId = window.requestAnimationFrame ?
-			window.requestAnimationFrame( raf ) :
-			window.setInterval( jQuery.fx.tick, jQuery.fx.interval );
+	if ( inProgress ) {
+		return;
 	}
+
+	inProgress = true;
+	schedule();
 };
 
 jQuery.fx.stop = function() {
-	if ( window.cancelAnimationFrame ) {
-		window.cancelAnimationFrame( timerId );
-	} else {
-		window.clearInterval( timerId );
-	}
-
-	timerId = null;
+	inProgress = null;
 };
 
 jQuery.fx.speeds = {
@@ -10017,7 +10896,7 @@ jQuery.extend( {
 		type: {
 			set: function( elem, value ) {
 				if ( !support.radioValue && value === "radio" &&
-					jQuery.nodeName( elem, "input" ) ) {
+					nodeName( elem, "input" ) ) {
 					var val = elem.value;
 					elem.setAttribute( "type", value );
 					if ( val ) {
@@ -10448,7 +11327,7 @@ jQuery.fn.extend( {
 			} else if ( typeof val === "number" ) {
 				val += "";
 
-			} else if ( jQuery.isArray( val ) ) {
+			} else if ( Array.isArray( val ) ) {
 				val = jQuery.map( val, function( value ) {
 					return value == null ? "" : value + "";
 				} );
@@ -10507,7 +11386,7 @@ jQuery.extend( {
 							// Don't return options that are disabled or in a disabled optgroup
 							!option.disabled &&
 							( !option.parentNode.disabled ||
-								!jQuery.nodeName( option.parentNode, "optgroup" ) ) ) {
+								!nodeName( option.parentNode, "optgroup" ) ) ) {
 
 						// Get the specific value for the option
 						value = jQuery( option ).val();
@@ -10559,7 +11438,7 @@ jQuery.extend( {
 jQuery.each( [ "radio", "checkbox" ], function() {
 	jQuery.valHooks[ this ] = {
 		set: function( elem, value ) {
-			if ( jQuery.isArray( value ) ) {
+			if ( Array.isArray( value ) ) {
 				return ( elem.checked = jQuery.inArray( jQuery( elem ).val(), value ) > -1 );
 			}
 		}
@@ -10854,7 +11733,7 @@ var
 function buildParams( prefix, obj, traditional, add ) {
 	var name;
 
-	if ( jQuery.isArray( obj ) ) {
+	if ( Array.isArray( obj ) ) {
 
 		// Serialize array item.
 		jQuery.each( obj, function( i, v ) {
@@ -10906,7 +11785,7 @@ jQuery.param = function( a, traditional ) {
 		};
 
 	// If an array was passed in, assume that it is an array of form elements.
-	if ( jQuery.isArray( a ) || ( a.jquery && !jQuery.isPlainObject( a ) ) ) {
+	if ( Array.isArray( a ) || ( a.jquery && !jQuery.isPlainObject( a ) ) ) {
 
 		// Serialize the form elements
 		jQuery.each( a, function() {
@@ -10952,7 +11831,7 @@ jQuery.fn.extend( {
 				return null;
 			}
 
-			if ( jQuery.isArray( val ) ) {
+			if ( Array.isArray( val ) ) {
 				return jQuery.map( val, function( val ) {
 					return { name: elem.name, value: val.replace( rCRLF, "\r\n" ) };
 				} );
@@ -12377,13 +13256,6 @@ jQuery.expr.pseudos.animated = function( elem ) {
 
 
 
-/**
- * Gets a window from an element
- */
-function getWindow( elem ) {
-	return jQuery.isWindow( elem ) ? elem : elem.nodeType === 9 && elem.defaultView;
-}
-
 jQuery.offset = {
 	setOffset: function( elem, options, i ) {
 		var curPosition, curLeft, curCSSTop, curTop, curOffset, curCSSLeft, calculatePosition,
@@ -12448,13 +13320,14 @@ jQuery.fn.extend( {
 				} );
 		}
 
-		var docElem, win, rect, doc,
+		var doc, docElem, rect, win,
 			elem = this[ 0 ];
 
 		if ( !elem ) {
 			return;
 		}
 
+		// Return zeros for disconnected and hidden (display: none) elements (gh-2310)
 		// Support: IE <=11 only
 		// Running getBoundingClientRect on a
 		// disconnected node in IE throws an error
@@ -12464,20 +13337,14 @@ jQuery.fn.extend( {
 
 		rect = elem.getBoundingClientRect();
 
-		// Make sure element is not hidden (display: none)
-		if ( rect.width || rect.height ) {
-			doc = elem.ownerDocument;
-			win = getWindow( doc );
-			docElem = doc.documentElement;
+		doc = elem.ownerDocument;
+		docElem = doc.documentElement;
+		win = doc.defaultView;
 
-			return {
-				top: rect.top + win.pageYOffset - docElem.clientTop,
-				left: rect.left + win.pageXOffset - docElem.clientLeft
-			};
-		}
-
-		// Return zeros for disconnected and hidden elements (gh-2310)
-		return rect;
+		return {
+			top: rect.top + win.pageYOffset - docElem.clientTop,
+			left: rect.left + win.pageXOffset - docElem.clientLeft
+		};
 	},
 
 	position: function() {
@@ -12503,7 +13370,7 @@ jQuery.fn.extend( {
 
 			// Get correct offsets
 			offset = this.offset();
-			if ( !jQuery.nodeName( offsetParent[ 0 ], "html" ) ) {
+			if ( !nodeName( offsetParent[ 0 ], "html" ) ) {
 				parentOffset = offsetParent.offset();
 			}
 
@@ -12550,7 +13417,14 @@ jQuery.each( { scrollLeft: "pageXOffset", scrollTop: "pageYOffset" }, function( 
 
 	jQuery.fn[ method ] = function( val ) {
 		return access( this, function( elem, method, val ) {
-			var win = getWindow( elem );
+
+			// Coalesce documents and windows
+			var win;
+			if ( jQuery.isWindow( elem ) ) {
+				win = elem;
+			} else if ( elem.nodeType === 9 ) {
+				win = elem.defaultView;
+			}
 
 			if ( val === undefined ) {
 				return win ? win[ prop ] : elem[ method ];
@@ -12659,7 +13533,16 @@ jQuery.fn.extend( {
 	}
 } );
 
+jQuery.holdReady = function( hold ) {
+	if ( hold ) {
+		jQuery.readyWait++;
+	} else {
+		jQuery.ready( true );
+	}
+};
+jQuery.isArray = Array.isArray;
 jQuery.parseJSON = JSON.parse;
+jQuery.nodeName = nodeName;
 
 
 
@@ -12716,11 +13599,10 @@ if ( !noGlobal ) {
 
 
 
-
 return jQuery;
 } );
 
-},{}],147:[function(require,module,exports){
+},{}],150:[function(require,module,exports){
 /**
  * Module dependencies
  */
@@ -12819,508 +13701,7 @@ function jsonp(url, opts, fn){
   return cancel;
 }
 
-},{"debug":148}],148:[function(require,module,exports){
-
-/**
- * This is the web browser implementation of `debug()`.
- *
- * Expose `debug()` as the module.
- */
-
-exports = module.exports = require('./debug');
-exports.log = log;
-exports.formatArgs = formatArgs;
-exports.save = save;
-exports.load = load;
-exports.useColors = useColors;
-
-/**
- * Use chrome.storage.local if we are in an app
- */
-
-var storage;
-
-if (typeof chrome !== 'undefined' && typeof chrome.storage !== 'undefined')
-  storage = chrome.storage.local;
-else
-  storage = localstorage();
-
-/**
- * Colors.
- */
-
-exports.colors = [
-  'lightseagreen',
-  'forestgreen',
-  'goldenrod',
-  'dodgerblue',
-  'darkorchid',
-  'crimson'
-];
-
-/**
- * Currently only WebKit-based Web Inspectors, Firefox >= v31,
- * and the Firebug extension (any Firefox version) are known
- * to support "%c" CSS customizations.
- *
- * TODO: add a `localStorage` variable to explicitly enable/disable colors
- */
-
-function useColors() {
-  // is webkit? http://stackoverflow.com/a/16459606/376773
-  return ('WebkitAppearance' in document.documentElement.style) ||
-    // is firebug? http://stackoverflow.com/a/398120/376773
-    (window.console && (console.firebug || (console.exception && console.table))) ||
-    // is firefox >= v31?
-    // https://developer.mozilla.org/en-US/docs/Tools/Web_Console#Styling_messages
-    (navigator.userAgent.toLowerCase().match(/firefox\/(\d+)/) && parseInt(RegExp.$1, 10) >= 31);
-}
-
-/**
- * Map %j to `JSON.stringify()`, since no Web Inspectors do that by default.
- */
-
-exports.formatters.j = function(v) {
-  return JSON.stringify(v);
-};
-
-
-/**
- * Colorize log arguments if enabled.
- *
- * @api public
- */
-
-function formatArgs() {
-  var args = arguments;
-  var useColors = this.useColors;
-
-  args[0] = (useColors ? '%c' : '')
-    + this.namespace
-    + (useColors ? ' %c' : ' ')
-    + args[0]
-    + (useColors ? '%c ' : ' ')
-    + '+' + exports.humanize(this.diff);
-
-  if (!useColors) return args;
-
-  var c = 'color: ' + this.color;
-  args = [args[0], c, 'color: inherit'].concat(Array.prototype.slice.call(args, 1));
-
-  // the final "%c" is somewhat tricky, because there could be other
-  // arguments passed either before or after the %c, so we need to
-  // figure out the correct index to insert the CSS into
-  var index = 0;
-  var lastC = 0;
-  args[0].replace(/%[a-z%]/g, function(match) {
-    if ('%%' === match) return;
-    index++;
-    if ('%c' === match) {
-      // we only are interested in the *last* %c
-      // (the user may have provided their own)
-      lastC = index;
-    }
-  });
-
-  args.splice(lastC, 0, c);
-  return args;
-}
-
-/**
- * Invokes `console.log()` when available.
- * No-op when `console.log` is not a "function".
- *
- * @api public
- */
-
-function log() {
-  // this hackery is required for IE8/9, where
-  // the `console.log` function doesn't have 'apply'
-  return 'object' === typeof console
-    && console.log
-    && Function.prototype.apply.call(console.log, console, arguments);
-}
-
-/**
- * Save `namespaces`.
- *
- * @param {String} namespaces
- * @api private
- */
-
-function save(namespaces) {
-  try {
-    if (null == namespaces) {
-      storage.removeItem('debug');
-    } else {
-      storage.debug = namespaces;
-    }
-  } catch(e) {}
-}
-
-/**
- * Load `namespaces`.
- *
- * @return {String} returns the previously persisted debug modes
- * @api private
- */
-
-function load() {
-  var r;
-  try {
-    r = storage.debug;
-  } catch(e) {}
-  return r;
-}
-
-/**
- * Enable namespaces listed in `localStorage.debug` initially.
- */
-
-exports.enable(load());
-
-/**
- * Localstorage attempts to return the localstorage.
- *
- * This is necessary because safari throws
- * when a user disables cookies/localstorage
- * and you attempt to access it.
- *
- * @return {LocalStorage}
- * @api private
- */
-
-function localstorage(){
-  try {
-    return window.localStorage;
-  } catch (e) {}
-}
-
-},{"./debug":149}],149:[function(require,module,exports){
-
-/**
- * This is the common logic for both the Node.js and web browser
- * implementations of `debug()`.
- *
- * Expose `debug()` as the module.
- */
-
-exports = module.exports = debug;
-exports.coerce = coerce;
-exports.disable = disable;
-exports.enable = enable;
-exports.enabled = enabled;
-exports.humanize = require('ms');
-
-/**
- * The currently active debug mode names, and names to skip.
- */
-
-exports.names = [];
-exports.skips = [];
-
-/**
- * Map of special "%n" handling functions, for the debug "format" argument.
- *
- * Valid key names are a single, lowercased letter, i.e. "n".
- */
-
-exports.formatters = {};
-
-/**
- * Previously assigned color.
- */
-
-var prevColor = 0;
-
-/**
- * Previous log timestamp.
- */
-
-var prevTime;
-
-/**
- * Select a color.
- *
- * @return {Number}
- * @api private
- */
-
-function selectColor() {
-  return exports.colors[prevColor++ % exports.colors.length];
-}
-
-/**
- * Create a debugger with the given `namespace`.
- *
- * @param {String} namespace
- * @return {Function}
- * @api public
- */
-
-function debug(namespace) {
-
-  // define the `disabled` version
-  function disabled() {
-  }
-  disabled.enabled = false;
-
-  // define the `enabled` version
-  function enabled() {
-
-    var self = enabled;
-
-    // set `diff` timestamp
-    var curr = +new Date();
-    var ms = curr - (prevTime || curr);
-    self.diff = ms;
-    self.prev = prevTime;
-    self.curr = curr;
-    prevTime = curr;
-
-    // add the `color` if not set
-    if (null == self.useColors) self.useColors = exports.useColors();
-    if (null == self.color && self.useColors) self.color = selectColor();
-
-    var args = Array.prototype.slice.call(arguments);
-
-    args[0] = exports.coerce(args[0]);
-
-    if ('string' !== typeof args[0]) {
-      // anything else let's inspect with %o
-      args = ['%o'].concat(args);
-    }
-
-    // apply any `formatters` transformations
-    var index = 0;
-    args[0] = args[0].replace(/%([a-z%])/g, function(match, format) {
-      // if we encounter an escaped % then don't increase the array index
-      if (match === '%%') return match;
-      index++;
-      var formatter = exports.formatters[format];
-      if ('function' === typeof formatter) {
-        var val = args[index];
-        match = formatter.call(self, val);
-
-        // now we need to remove `args[index]` since it's inlined in the `format`
-        args.splice(index, 1);
-        index--;
-      }
-      return match;
-    });
-
-    if ('function' === typeof exports.formatArgs) {
-      args = exports.formatArgs.apply(self, args);
-    }
-    var logFn = enabled.log || exports.log || console.log.bind(console);
-    logFn.apply(self, args);
-  }
-  enabled.enabled = true;
-
-  var fn = exports.enabled(namespace) ? enabled : disabled;
-
-  fn.namespace = namespace;
-
-  return fn;
-}
-
-/**
- * Enables a debug mode by namespaces. This can include modes
- * separated by a colon and wildcards.
- *
- * @param {String} namespaces
- * @api public
- */
-
-function enable(namespaces) {
-  exports.save(namespaces);
-
-  var split = (namespaces || '').split(/[\s,]+/);
-  var len = split.length;
-
-  for (var i = 0; i < len; i++) {
-    if (!split[i]) continue; // ignore empty strings
-    namespaces = split[i].replace(/\*/g, '.*?');
-    if (namespaces[0] === '-') {
-      exports.skips.push(new RegExp('^' + namespaces.substr(1) + '$'));
-    } else {
-      exports.names.push(new RegExp('^' + namespaces + '$'));
-    }
-  }
-}
-
-/**
- * Disable debug output.
- *
- * @api public
- */
-
-function disable() {
-  exports.enable('');
-}
-
-/**
- * Returns true if the given mode name is enabled, false otherwise.
- *
- * @param {String} name
- * @return {Boolean}
- * @api public
- */
-
-function enabled(name) {
-  var i, len;
-  for (i = 0, len = exports.skips.length; i < len; i++) {
-    if (exports.skips[i].test(name)) {
-      return false;
-    }
-  }
-  for (i = 0, len = exports.names.length; i < len; i++) {
-    if (exports.names[i].test(name)) {
-      return true;
-    }
-  }
-  return false;
-}
-
-/**
- * Coerce `val`.
- *
- * @param {Mixed} val
- * @return {Mixed}
- * @api private
- */
-
-function coerce(val) {
-  if (val instanceof Error) return val.stack || val.message;
-  return val;
-}
-
-},{"ms":150}],150:[function(require,module,exports){
-/**
- * Helpers.
- */
-
-var s = 1000;
-var m = s * 60;
-var h = m * 60;
-var d = h * 24;
-var y = d * 365.25;
-
-/**
- * Parse or format the given `val`.
- *
- * Options:
- *
- *  - `long` verbose formatting [false]
- *
- * @param {String|Number} val
- * @param {Object} options
- * @return {String|Number}
- * @api public
- */
-
-module.exports = function(val, options){
-  options = options || {};
-  if ('string' == typeof val) return parse(val);
-  return options.long
-    ? long(val)
-    : short(val);
-};
-
-/**
- * Parse the given `str` and return milliseconds.
- *
- * @param {String} str
- * @return {Number}
- * @api private
- */
-
-function parse(str) {
-  var match = /^((?:\d+)?\.?\d+) *(milliseconds?|msecs?|ms|seconds?|secs?|s|minutes?|mins?|m|hours?|hrs?|h|days?|d|years?|yrs?|y)?$/i.exec(str);
-  if (!match) return;
-  var n = parseFloat(match[1]);
-  var type = (match[2] || 'ms').toLowerCase();
-  switch (type) {
-    case 'years':
-    case 'year':
-    case 'yrs':
-    case 'yr':
-    case 'y':
-      return n * y;
-    case 'days':
-    case 'day':
-    case 'd':
-      return n * d;
-    case 'hours':
-    case 'hour':
-    case 'hrs':
-    case 'hr':
-    case 'h':
-      return n * h;
-    case 'minutes':
-    case 'minute':
-    case 'mins':
-    case 'min':
-    case 'm':
-      return n * m;
-    case 'seconds':
-    case 'second':
-    case 'secs':
-    case 'sec':
-    case 's':
-      return n * s;
-    case 'milliseconds':
-    case 'millisecond':
-    case 'msecs':
-    case 'msec':
-    case 'ms':
-      return n;
-  }
-}
-
-/**
- * Short format for `ms`.
- *
- * @param {Number} ms
- * @return {String}
- * @api private
- */
-
-function short(ms) {
-  if (ms >= d) return Math.round(ms / d) + 'd';
-  if (ms >= h) return Math.round(ms / h) + 'h';
-  if (ms >= m) return Math.round(ms / m) + 'm';
-  if (ms >= s) return Math.round(ms / s) + 's';
-  return ms + 'ms';
-}
-
-/**
- * Long format for `ms`.
- *
- * @param {Number} ms
- * @return {String}
- * @api private
- */
-
-function long(ms) {
-  return plural(ms, d, 'day')
-    || plural(ms, h, 'hour')
-    || plural(ms, m, 'minute')
-    || plural(ms, s, 'second')
-    || ms + ' ms';
-}
-
-/**
- * Pluralization helper.
- */
-
-function plural(ms, n, name) {
-  if (ms < n) return;
-  if (ms < n * 1.5) return Math.floor(ms / n) + ' ' + name;
-  return Math.ceil(ms / n) + ' ' + name + 's';
-}
-
-},{}],151:[function(require,module,exports){
+},{"debug":116}],151:[function(require,module,exports){
 // Source: http://jsfiddle.net/vWx8V/
 // http://stackoverflow.com/questions/5603195/full-list-of-javascript-keycodes
 
@@ -13469,8 +13850,169 @@ for (var alias in aliases) {
 }
 
 },{}],152:[function(require,module,exports){
+/**
+ * Helpers.
+ */
+
+var s = 1000;
+var m = s * 60;
+var h = m * 60;
+var d = h * 24;
+var y = d * 365.25;
+
+/**
+ * Parse or format the given `val`.
+ *
+ * Options:
+ *
+ *  - `long` verbose formatting [false]
+ *
+ * @param {String|Number} val
+ * @param {Object} [options]
+ * @throws {Error} throw an error if val is not a non-empty string or a number
+ * @return {String|Number}
+ * @api public
+ */
+
+module.exports = function(val, options) {
+  options = options || {};
+  var type = typeof val;
+  if (type === 'string' && val.length > 0) {
+    return parse(val);
+  } else if (type === 'number' && isNaN(val) === false) {
+    return options.long ? fmtLong(val) : fmtShort(val);
+  }
+  throw new Error(
+    'val is not a non-empty string or a valid number. val=' +
+      JSON.stringify(val)
+  );
+};
+
+/**
+ * Parse the given `str` and return milliseconds.
+ *
+ * @param {String} str
+ * @return {Number}
+ * @api private
+ */
+
+function parse(str) {
+  str = String(str);
+  if (str.length > 100) {
+    return;
+  }
+  var match = /^((?:\d+)?\.?\d+) *(milliseconds?|msecs?|ms|seconds?|secs?|s|minutes?|mins?|m|hours?|hrs?|h|days?|d|years?|yrs?|y)?$/i.exec(
+    str
+  );
+  if (!match) {
+    return;
+  }
+  var n = parseFloat(match[1]);
+  var type = (match[2] || 'ms').toLowerCase();
+  switch (type) {
+    case 'years':
+    case 'year':
+    case 'yrs':
+    case 'yr':
+    case 'y':
+      return n * y;
+    case 'days':
+    case 'day':
+    case 'd':
+      return n * d;
+    case 'hours':
+    case 'hour':
+    case 'hrs':
+    case 'hr':
+    case 'h':
+      return n * h;
+    case 'minutes':
+    case 'minute':
+    case 'mins':
+    case 'min':
+    case 'm':
+      return n * m;
+    case 'seconds':
+    case 'second':
+    case 'secs':
+    case 'sec':
+    case 's':
+      return n * s;
+    case 'milliseconds':
+    case 'millisecond':
+    case 'msecs':
+    case 'msec':
+    case 'ms':
+      return n;
+    default:
+      return undefined;
+  }
+}
+
+/**
+ * Short format for `ms`.
+ *
+ * @param {Number} ms
+ * @return {String}
+ * @api private
+ */
+
+function fmtShort(ms) {
+  if (ms >= d) {
+    return Math.round(ms / d) + 'd';
+  }
+  if (ms >= h) {
+    return Math.round(ms / h) + 'h';
+  }
+  if (ms >= m) {
+    return Math.round(ms / m) + 'm';
+  }
+  if (ms >= s) {
+    return Math.round(ms / s) + 's';
+  }
+  return ms + 'ms';
+}
+
+/**
+ * Long format for `ms`.
+ *
+ * @param {Number} ms
+ * @return {String}
+ * @api private
+ */
+
+function fmtLong(ms) {
+  return plural(ms, d, 'day') ||
+    plural(ms, h, 'hour') ||
+    plural(ms, m, 'minute') ||
+    plural(ms, s, 'second') ||
+    ms + ' ms';
+}
+
+/**
+ * Pluralization helper.
+ */
+
+function plural(ms, n, name) {
+  if (ms < n) {
+    return;
+  }
+  if (ms < n * 1.5) {
+    return Math.floor(ms / n) + ' ' + name;
+  }
+  return Math.ceil(ms / n) + ' ' + name + 's';
+}
+
+},{}],153:[function(require,module,exports){
+/*
+object-assign
+(c) Sindre Sorhus
+@license MIT
+*/
+
 'use strict';
 /* eslint-disable no-unused-vars */
+var getOwnPropertySymbols = Object.getOwnPropertySymbols;
 var hasOwnProperty = Object.prototype.hasOwnProperty;
 var propIsEnumerable = Object.prototype.propertyIsEnumerable;
 
@@ -13491,7 +14033,7 @@ function shouldUseNative() {
 		// Detect buggy property enumeration order in older V8 versions.
 
 		// https://bugs.chromium.org/p/v8/issues/detail?id=4118
-		var test1 = new String('abc');  // eslint-disable-line
+		var test1 = new String('abc');  // eslint-disable-line no-new-wrappers
 		test1[5] = 'de';
 		if (Object.getOwnPropertyNames(test1)[0] === '5') {
 			return false;
@@ -13520,7 +14062,7 @@ function shouldUseNative() {
 		}
 
 		return true;
-	} catch (e) {
+	} catch (err) {
 		// We don't expect any of the above to throw, but better to be safe.
 		return false;
 	}
@@ -13540,8 +14082,8 @@ module.exports = shouldUseNative() ? Object.assign : function (target, source) {
 			}
 		}
 
-		if (Object.getOwnPropertySymbols) {
-			symbols = Object.getOwnPropertySymbols(from);
+		if (getOwnPropertySymbols) {
+			symbols = getOwnPropertySymbols(from);
 			for (var i = 0; i < symbols.length; i++) {
 				if (propIsEnumerable.call(from, symbols[i])) {
 					to[symbols[i]] = from[symbols[i]];
@@ -13553,7 +14095,7 @@ module.exports = shouldUseNative() ? Object.assign : function (target, source) {
 	return to;
 };
 
-},{}],153:[function(require,module,exports){
+},{}],154:[function(require,module,exports){
 (function (global){
 /*!
  * Platform.js <https://mths.be/platform>
@@ -13641,9 +14183,9 @@ module.exports = shouldUseNative() ? Object.assign : function (target, source) {
       '6.4':  '10 Technical Preview',
       '6.3':  '8.1',
       '6.2':  '8',
-      '6.1':  '7 / Server 2008 R2',
-      '6.0':  'Vista / Server 2008',
-      '5.2':  'XP 64-bit / Server 2003',
+      '6.1':  'Server 2008 R2 / 7',
+      '6.0':  'Server 2008 / Vista',
+      '5.2':  'Server 2003 / XP 64-bit',
       '5.1':  'XP',
       '5.01': '2000 SP1',
       '5.0':  '2000',
@@ -13891,7 +14433,7 @@ module.exports = shouldUseNative() ? Object.assign : function (target, source) {
     /** The browser/environment version. */
     var version = useFeatures && opera && typeof opera.version == 'function' && opera.version();
 
-    /** A flag to indicate if the OS begins with "Name Version /". */
+    /** A flag to indicate if the OS ends with "/ Version" */
     var isSpecialCasedOS;
 
     /* Detectable layout engines (order is important). */
@@ -13914,6 +14456,7 @@ module.exports = shouldUseNative() ? Object.assign : function (target, source) {
       'Avant Browser',
       'Breach',
       'Camino',
+      'Electron',
       'Epiphany',
       'Fennec',
       'Flock',
@@ -13933,6 +14476,7 @@ module.exports = shouldUseNative() ? Object.assign : function (target, source) {
       'Raven',
       'Rekonq',
       'RockMelt',
+      { 'label': 'Samsung Internet', 'pattern': 'SamsungBrowser' },
       'SeaMonkey',
       { 'label': 'Silk', 'pattern': '(?:Cloud9|Silk-Accelerated)' },
       'Sleipnir',
@@ -13940,6 +14484,7 @@ module.exports = shouldUseNative() ? Object.assign : function (target, source) {
       { 'label': 'SRWare Iron', 'pattern': 'Iron' },
       'Sunrise',
       'Swiftfox',
+      'Waterfox',
       'WebPositive',
       'Opera Mini',
       { 'label': 'Opera Mini', 'pattern': 'OPiOS' },
@@ -13962,6 +14507,11 @@ module.exports = shouldUseNative() ? Object.assign : function (target, source) {
       { 'label': 'Galaxy S2', 'pattern': 'GT-I9100' },
       { 'label': 'Galaxy S3', 'pattern': 'GT-I9300' },
       { 'label': 'Galaxy S4', 'pattern': 'GT-I9500' },
+      { 'label': 'Galaxy S5', 'pattern': 'SM-G900' },
+      { 'label': 'Galaxy S6', 'pattern': 'SM-G920' },
+      { 'label': 'Galaxy S6 Edge', 'pattern': 'SM-G925' },
+      { 'label': 'Galaxy S7', 'pattern': 'SM-G930' },
+      { 'label': 'Galaxy S7 Edge', 'pattern': 'SM-G935' },
       'Google TV',
       'Lumia',
       'iPad',
@@ -13972,9 +14522,8 @@ module.exports = shouldUseNative() ? Object.assign : function (target, source) {
       'Nexus',
       'Nook',
       'PlayBook',
-      'PlayStation 3',
-      'PlayStation 4',
       'PlayStation Vita',
+      'PlayStation',
       'TouchPad',
       'Transformer',
       { 'label': 'Wii U', 'pattern': 'WiiU' },
@@ -14001,7 +14550,7 @@ module.exports = shouldUseNative() ? Object.assign : function (target, source) {
       'Nintendo': { 'Wii U': 1,  'Wii': 1 },
       'Nokia': { 'Lumia': 1 },
       'Samsung': { 'Galaxy S': 1, 'Galaxy S2': 1, 'Galaxy S3': 1, 'Galaxy S4': 1 },
-      'Sony': { 'PlayStation 4': 1, 'PlayStation 3': 1, 'PlayStation Vita': 1 }
+      'Sony': { 'PlayStation': 1, 'PlayStation Vita': 1 }
     });
 
     /* Detectable operating systems (order is important). */
@@ -14028,6 +14577,7 @@ module.exports = shouldUseNative() ? Object.assign : function (target, source) {
       'webOS ',
       'webOS',
       'Tablet OS',
+      'Tizen',
       'Linux',
       'Mac OS X',
       'Macintosh',
@@ -14117,6 +14667,7 @@ module.exports = shouldUseNative() ? Object.assign : function (target, source) {
         var pattern = guess.pattern || qualify(guess);
         if (!result && (result =
               RegExp('\\b' + pattern + ' *\\d+[.\\w_]*', 'i').exec(ua) ||
+              RegExp('\\b' + pattern + ' *\\w+-[\\w]*', 'i').exec(ua) ||
               RegExp('\\b' + pattern + '(?:; *(?:[a-z]+[_-])?[a-z]+\\d+|[^ ();-]*)', 'i').exec(ua)
             )) {
           // Split by forward slash and append product version if needed.
@@ -14236,10 +14787,14 @@ module.exports = shouldUseNative() ? Object.assign : function (target, source) {
         name = /[a-z]+(?: Hat)?/i.exec(/\bAndroid\b/.test(os) ? os : data) + ' Browser';
       }
     }
+    // Add Chrome version to description for Electron.
+    else if (name == 'Electron' && (data = (/\bChrome\/([\d.]+)\b/.exec(ua) || 0)[1])) {
+      description.push('Chromium ' + data);
+    }
     // Detect non-Opera (Presto-based) versions (order is important).
     if (!version) {
       version = getVersion([
-        '(?:Cloud9|CriOS|CrMo|Edge|FxiOS|IEMobile|Iron|Opera ?Mini|OPiOS|OPR|Raven|Silk(?!/[\\d.]+$))',
+        '(?:Cloud9|CriOS|CrMo|Edge|FxiOS|IEMobile|Iron|Opera ?Mini|OPiOS|OPR|Raven|SamsungBrowser|Silk(?!/[\\d.]+$))',
         'Version',
         qualify(name),
         '(?:Firefox|Minefield|NetFront)'
@@ -14268,7 +14823,7 @@ module.exports = shouldUseNative() ? Object.assign : function (target, source) {
       description.unshift('desktop mode');
       version || (version = (/\brv:([\d.]+)/.exec(ua) || 0)[1]);
     }
-    // Detect IE 11.
+    // Detect IE 11 identifying as other browsers.
     else if (name != 'IE' && layout == 'Trident' && (data = /\brv:([\d.]+)/.exec(ua))) {
       if (name) {
         description.push('identifying as ' + name + (version ? ' ' + version : ''));
@@ -14302,10 +14857,23 @@ module.exports = shouldUseNative() ? Object.assign : function (target, source) {
           typeof context.process == 'object' && !context.process.browser &&
           (data = context.process)
         ) {
-          name = 'Node.js';
-          arch = data.arch;
-          os = data.platform;
-          version = /[\d.]+/.exec(data.version)[0];
+          if (typeof data.versions == 'object') {
+            if (typeof data.versions.electron == 'string') {
+              description.push('Node ' + data.versions.node);
+              name = 'Electron';
+              version = data.versions.electron;
+            } else if (typeof data.versions.nw == 'string') {
+              description.push('Chromium ' + version, 'Node ' + data.versions.node);
+              name = 'NW.js';
+              version = data.versions.nw;
+            }
+          } else {
+            name = 'Node.js';
+            arch = data.arch;
+            os = data.platform;
+            version = /[\d.]+/.exec(data.version)
+            version = version ? version[0] : 'unknown';
+          }
         }
         else if (rhino) {
           name = 'Rhino';
@@ -14333,6 +14901,14 @@ module.exports = shouldUseNative() ? Object.assign : function (target, source) {
         }
         version = name == 'IE' ? String(version[1].toFixed(1)) : version[0];
       }
+      // Detect IE 11 masking as other browsers.
+      else if (typeof doc.documentMode == 'number' && /^(?:Chrome|Firefox)\b/.test(name)) {
+        description.push('masking as ' + name + ' ' + version);
+        name = 'IE';
+        version = '11.0';
+        layout = ['Trident'];
+        os = 'Windows';
+      }
       os = os && format(os);
     }
     // Detect prerelease phases.
@@ -14355,7 +14931,9 @@ module.exports = shouldUseNative() ? Object.assign : function (target, source) {
     }
     // Detect Xbox 360 and Xbox One.
     else if (/\bXbox\b/i.test(product)) {
-      os = null;
+      if (product == 'Xbox 360') {
+        os = null;
+      }
       if (product == 'Xbox 360' && /\bIEMobile\b/.test(ua)) {
         description.unshift('mobile mode');
       }
@@ -14366,8 +14944,14 @@ module.exports = shouldUseNative() ? Object.assign : function (target, source) {
       name += ' Mobile';
     }
     // Detect IE platform preview.
-    else if (name == 'IE' && useFeatures && context.external === null) {
-      description.unshift('platform preview');
+    else if (name == 'IE' && useFeatures) {
+      try {
+        if (context.external === null) {
+          description.unshift('platform preview');
+        }
+      } catch(e) {
+        description.unshift('embedded');
+      }
     }
     // Detect BlackBerry OS version.
     // http://docs.blackberry.com/en/developers/deliverables/18169/HTTP_headers_sent_by_BB_Browser_1234911_11.jsp
@@ -14489,7 +15073,7 @@ module.exports = shouldUseNative() ? Object.assign : function (target, source) {
     if (layout && !/\b(?:Avant|Nook)\b/.test(name) && (
         /Browser|Lunascape|Maxthon/.test(name) ||
         name != 'Safari' && /^iOS/.test(os) && /\bSafari\b/.test(layout[1]) ||
-        /^(?:Adobe|Arora|Breach|Midori|Opera|Phantom|Rekonq|Rock|Sleipnir|Web)/.test(name) && layout[1])) {
+        /^(?:Adobe|Arora|Breach|Midori|Opera|Phantom|Rekonq|Rock|Samsung Internet|Sleipnir|Web)/.test(name) && layout[1])) {
       // Don't add layout details to description if they are falsey.
       (data = layout[layout.length - 1]) && description.push(data);
     }
@@ -14507,9 +15091,8 @@ module.exports = shouldUseNative() ? Object.assign : function (target, source) {
     }
     // Parse the OS into an object.
     if (os) {
-      data =
-        / ([\d.+]+)$/.exec(os) ||
-        (isSpecialCasedOS = /^[a-z]+ ([\d.+]+) \//i.exec(os));
+      data = / ([\d.+]+)$/.exec(os);
+      isSpecialCasedOS = data && os.charAt(os.length - data[0].length - 1) == '/';
       os = {
         'architecture': 32,
         'family': (data && !isSpecialCasedOS) ? os.replace(data[0], '') : os,
@@ -14564,6 +15147,9 @@ module.exports = shouldUseNative() ? Object.assign : function (target, source) {
     /**
      * The name of the browser's layout engine.
      *
+     * The list of common layout engines include:
+     * "Blink", "EdgeHTML", "Gecko", "Trident" and "WebKit"
+     *
      * @memberOf platform
      * @type string|null
      */
@@ -14572,6 +15158,11 @@ module.exports = shouldUseNative() ? Object.assign : function (target, source) {
     /**
      * The name of the product's manufacturer.
      *
+     * The list of manufacturers include:
+     * "Apple", "Archos", "Amazon", "Asus", "Barnes & Noble", "BlackBerry",
+     * "Google", "HP", "HTC", "LG", "Microsoft", "Motorola", "Nintendo",
+     * "Nokia", "Samsung" and "Sony"
+     *
      * @memberOf platform
      * @type string|null
      */
@@ -14579,6 +15170,14 @@ module.exports = shouldUseNative() ? Object.assign : function (target, source) {
 
     /**
      * The name of the browser/environment.
+     *
+     * The list of common browser names include:
+     * "Chrome", "Electron", "Firefox", "Firefox for iOS", "IE",
+     * "Microsoft Edge", "PhantomJS", "Safari", "SeaMonkey", "Silk",
+     * "Opera Mini" and "Opera"
+     *
+     * Mobile versions of some browsers have "Mobile" appended to their name:
+     * eg. "Chrome Mobile", "Firefox Mobile", "IE Mobile" and "Opera Mobile"
      *
      * @memberOf platform
      * @type string|null
@@ -14595,6 +15194,11 @@ module.exports = shouldUseNative() ? Object.assign : function (target, source) {
 
     /**
      * The name of the product hosting the browser.
+     *
+     * The list of common products include:
+     *
+     * "BlackBerry", "Galaxy S4", "Lumia", "iPad", "iPod", "iPhone", "Kindle",
+     * "Kindle Fire", "Nexus", "Nook", "PlayBook", "TouchPad" and "Transformer"
      *
      * @memberOf platform
      * @type string|null
@@ -14637,7 +15241,7 @@ module.exports = shouldUseNative() ? Object.assign : function (target, source) {
        * The family of the OS.
        *
        * Common values include:
-       * "Windows", "Windows 7 / Server 2008 R2", "Windows Vista / Server 2008",
+       * "Windows", "Windows Server 2008 R2 / 7", "Windows Server 2008 / Vista",
        * "Windows XP", "OS X", "Ubuntu", "Debian", "Fedora", "Red Hat", "SuSE",
        * "Android", "iOS" and "Windows Phone"
        *
@@ -14712,7 +15316,7 @@ module.exports = shouldUseNative() ? Object.assign : function (target, source) {
 }.call(this));
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{}],154:[function(require,module,exports){
+},{}],155:[function(require,module,exports){
 // shim for using process in browser
 var process = module.exports = {};
 
@@ -14883,6 +15487,10 @@ process.off = noop;
 process.removeListener = noop;
 process.removeAllListeners = noop;
 process.emit = noop;
+process.prependListener = noop;
+process.prependOnceListener = noop;
+
+process.listeners = function (name) { return [] }
 
 process.binding = function (name) {
     throw new Error('process.binding is not supported');
@@ -14894,11 +15502,869 @@ process.chdir = function (dir) {
 };
 process.umask = function() { return 0; };
 
-},{}],155:[function(require,module,exports){
+},{}],156:[function(require,module,exports){
+(function (process){
+/**
+ * Copyright 2013-present, Facebook, Inc.
+ * All rights reserved.
+ *
+ * This source code is licensed under the BSD-style license found in the
+ * LICENSE file in the root directory of this source tree. An additional grant
+ * of patent rights can be found in the PATENTS file in the same directory.
+ */
+
+'use strict';
+
+if (process.env.NODE_ENV !== 'production') {
+  var invariant = require('fbjs/lib/invariant');
+  var warning = require('fbjs/lib/warning');
+  var ReactPropTypesSecret = require('./lib/ReactPropTypesSecret');
+  var loggedTypeFailures = {};
+}
+
+/**
+ * Assert that the values match with the type specs.
+ * Error messages are memorized and will only be shown once.
+ *
+ * @param {object} typeSpecs Map of name to a ReactPropType
+ * @param {object} values Runtime values that need to be type-checked
+ * @param {string} location e.g. "prop", "context", "child context"
+ * @param {string} componentName Name of the component for error messages.
+ * @param {?Function} getStack Returns the component stack.
+ * @private
+ */
+function checkPropTypes(typeSpecs, values, location, componentName, getStack) {
+  if (process.env.NODE_ENV !== 'production') {
+    for (var typeSpecName in typeSpecs) {
+      if (typeSpecs.hasOwnProperty(typeSpecName)) {
+        var error;
+        // Prop type validation may throw. In case they do, we don't want to
+        // fail the render phase where it didn't fail before. So we log it.
+        // After these have been cleaned up, we'll let them throw.
+        try {
+          // This is intentionally an invariant that gets caught. It's the same
+          // behavior as without this statement except with a better message.
+          invariant(typeof typeSpecs[typeSpecName] === 'function', '%s: %s type `%s` is invalid; it must be a function, usually from ' + 'React.PropTypes.', componentName || 'React class', location, typeSpecName);
+          error = typeSpecs[typeSpecName](values, typeSpecName, componentName, location, null, ReactPropTypesSecret);
+        } catch (ex) {
+          error = ex;
+        }
+        warning(!error || error instanceof Error, '%s: type specification of %s `%s` is invalid; the type checker ' + 'function must return `null` or an `Error` but returned a %s. ' + 'You may have forgotten to pass an argument to the type checker ' + 'creator (arrayOf, instanceOf, objectOf, oneOf, oneOfType, and ' + 'shape all require an argument).', componentName || 'React class', location, typeSpecName, typeof error);
+        if (error instanceof Error && !(error.message in loggedTypeFailures)) {
+          // Only monitor this failure once because there tends to be a lot of the
+          // same error.
+          loggedTypeFailures[error.message] = true;
+
+          var stack = getStack ? getStack() : '';
+
+          warning(false, 'Failed %s type: %s%s', location, error.message, stack != null ? stack : '');
+        }
+      }
+    }
+  }
+}
+
+module.exports = checkPropTypes;
+
+}).call(this,require('_process'))
+},{"./lib/ReactPropTypesSecret":160,"_process":155,"fbjs/lib/invariant":162,"fbjs/lib/warning":163}],157:[function(require,module,exports){
+/**
+ * Copyright 2013-present, Facebook, Inc.
+ * All rights reserved.
+ *
+ * This source code is licensed under the BSD-style license found in the
+ * LICENSE file in the root directory of this source tree. An additional grant
+ * of patent rights can be found in the PATENTS file in the same directory.
+ */
+
+'use strict';
+
+var emptyFunction = require('fbjs/lib/emptyFunction');
+var invariant = require('fbjs/lib/invariant');
+var ReactPropTypesSecret = require('./lib/ReactPropTypesSecret');
+
+module.exports = function() {
+  function shim(props, propName, componentName, location, propFullName, secret) {
+    if (secret === ReactPropTypesSecret) {
+      // It is still safe when called from React.
+      return;
+    }
+    invariant(
+      false,
+      'Calling PropTypes validators directly is not supported by the `prop-types` package. ' +
+      'Use PropTypes.checkPropTypes() to call them. ' +
+      'Read more at http://fb.me/use-check-prop-types'
+    );
+  };
+  shim.isRequired = shim;
+  function getShim() {
+    return shim;
+  };
+  // Important!
+  // Keep this list in sync with production version in `./factoryWithTypeCheckers.js`.
+  var ReactPropTypes = {
+    array: shim,
+    bool: shim,
+    func: shim,
+    number: shim,
+    object: shim,
+    string: shim,
+    symbol: shim,
+
+    any: shim,
+    arrayOf: getShim,
+    element: shim,
+    instanceOf: getShim,
+    node: shim,
+    objectOf: getShim,
+    oneOf: getShim,
+    oneOfType: getShim,
+    shape: getShim
+  };
+
+  ReactPropTypes.checkPropTypes = emptyFunction;
+  ReactPropTypes.PropTypes = ReactPropTypes;
+
+  return ReactPropTypes;
+};
+
+},{"./lib/ReactPropTypesSecret":160,"fbjs/lib/emptyFunction":161,"fbjs/lib/invariant":162}],158:[function(require,module,exports){
+(function (process){
+/**
+ * Copyright 2013-present, Facebook, Inc.
+ * All rights reserved.
+ *
+ * This source code is licensed under the BSD-style license found in the
+ * LICENSE file in the root directory of this source tree. An additional grant
+ * of patent rights can be found in the PATENTS file in the same directory.
+ */
+
+'use strict';
+
+var emptyFunction = require('fbjs/lib/emptyFunction');
+var invariant = require('fbjs/lib/invariant');
+var warning = require('fbjs/lib/warning');
+
+var ReactPropTypesSecret = require('./lib/ReactPropTypesSecret');
+var checkPropTypes = require('./checkPropTypes');
+
+module.exports = function(isValidElement, throwOnDirectAccess) {
+  /* global Symbol */
+  var ITERATOR_SYMBOL = typeof Symbol === 'function' && Symbol.iterator;
+  var FAUX_ITERATOR_SYMBOL = '@@iterator'; // Before Symbol spec.
+
+  /**
+   * Returns the iterator method function contained on the iterable object.
+   *
+   * Be sure to invoke the function with the iterable as context:
+   *
+   *     var iteratorFn = getIteratorFn(myIterable);
+   *     if (iteratorFn) {
+   *       var iterator = iteratorFn.call(myIterable);
+   *       ...
+   *     }
+   *
+   * @param {?object} maybeIterable
+   * @return {?function}
+   */
+  function getIteratorFn(maybeIterable) {
+    var iteratorFn = maybeIterable && (ITERATOR_SYMBOL && maybeIterable[ITERATOR_SYMBOL] || maybeIterable[FAUX_ITERATOR_SYMBOL]);
+    if (typeof iteratorFn === 'function') {
+      return iteratorFn;
+    }
+  }
+
+  /**
+   * Collection of methods that allow declaration and validation of props that are
+   * supplied to React components. Example usage:
+   *
+   *   var Props = require('ReactPropTypes');
+   *   var MyArticle = React.createClass({
+   *     propTypes: {
+   *       // An optional string prop named "description".
+   *       description: Props.string,
+   *
+   *       // A required enum prop named "category".
+   *       category: Props.oneOf(['News','Photos']).isRequired,
+   *
+   *       // A prop named "dialog" that requires an instance of Dialog.
+   *       dialog: Props.instanceOf(Dialog).isRequired
+   *     },
+   *     render: function() { ... }
+   *   });
+   *
+   * A more formal specification of how these methods are used:
+   *
+   *   type := array|bool|func|object|number|string|oneOf([...])|instanceOf(...)
+   *   decl := ReactPropTypes.{type}(.isRequired)?
+   *
+   * Each and every declaration produces a function with the same signature. This
+   * allows the creation of custom validation functions. For example:
+   *
+   *  var MyLink = React.createClass({
+   *    propTypes: {
+   *      // An optional string or URI prop named "href".
+   *      href: function(props, propName, componentName) {
+   *        var propValue = props[propName];
+   *        if (propValue != null && typeof propValue !== 'string' &&
+   *            !(propValue instanceof URI)) {
+   *          return new Error(
+   *            'Expected a string or an URI for ' + propName + ' in ' +
+   *            componentName
+   *          );
+   *        }
+   *      }
+   *    },
+   *    render: function() {...}
+   *  });
+   *
+   * @internal
+   */
+
+  var ANONYMOUS = '<<anonymous>>';
+
+  // Important!
+  // Keep this list in sync with production version in `./factoryWithThrowingShims.js`.
+  var ReactPropTypes = {
+    array: createPrimitiveTypeChecker('array'),
+    bool: createPrimitiveTypeChecker('boolean'),
+    func: createPrimitiveTypeChecker('function'),
+    number: createPrimitiveTypeChecker('number'),
+    object: createPrimitiveTypeChecker('object'),
+    string: createPrimitiveTypeChecker('string'),
+    symbol: createPrimitiveTypeChecker('symbol'),
+
+    any: createAnyTypeChecker(),
+    arrayOf: createArrayOfTypeChecker,
+    element: createElementTypeChecker(),
+    instanceOf: createInstanceTypeChecker,
+    node: createNodeChecker(),
+    objectOf: createObjectOfTypeChecker,
+    oneOf: createEnumTypeChecker,
+    oneOfType: createUnionTypeChecker,
+    shape: createShapeTypeChecker
+  };
+
+  /**
+   * inlined Object.is polyfill to avoid requiring consumers ship their own
+   * https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/is
+   */
+  /*eslint-disable no-self-compare*/
+  function is(x, y) {
+    // SameValue algorithm
+    if (x === y) {
+      // Steps 1-5, 7-10
+      // Steps 6.b-6.e: +0 != -0
+      return x !== 0 || 1 / x === 1 / y;
+    } else {
+      // Step 6.a: NaN == NaN
+      return x !== x && y !== y;
+    }
+  }
+  /*eslint-enable no-self-compare*/
+
+  /**
+   * We use an Error-like object for backward compatibility as people may call
+   * PropTypes directly and inspect their output. However, we don't use real
+   * Errors anymore. We don't inspect their stack anyway, and creating them
+   * is prohibitively expensive if they are created too often, such as what
+   * happens in oneOfType() for any type before the one that matched.
+   */
+  function PropTypeError(message) {
+    this.message = message;
+    this.stack = '';
+  }
+  // Make `instanceof Error` still work for returned errors.
+  PropTypeError.prototype = Error.prototype;
+
+  function createChainableTypeChecker(validate) {
+    if (process.env.NODE_ENV !== 'production') {
+      var manualPropTypeCallCache = {};
+      var manualPropTypeWarningCount = 0;
+    }
+    function checkType(isRequired, props, propName, componentName, location, propFullName, secret) {
+      componentName = componentName || ANONYMOUS;
+      propFullName = propFullName || propName;
+
+      if (secret !== ReactPropTypesSecret) {
+        if (throwOnDirectAccess) {
+          // New behavior only for users of `prop-types` package
+          invariant(
+            false,
+            'Calling PropTypes validators directly is not supported by the `prop-types` package. ' +
+            'Use `PropTypes.checkPropTypes()` to call them. ' +
+            'Read more at http://fb.me/use-check-prop-types'
+          );
+        } else if (process.env.NODE_ENV !== 'production' && typeof console !== 'undefined') {
+          // Old behavior for people using React.PropTypes
+          var cacheKey = componentName + ':' + propName;
+          if (
+            !manualPropTypeCallCache[cacheKey] &&
+            // Avoid spamming the console because they are often not actionable except for lib authors
+            manualPropTypeWarningCount < 3
+          ) {
+            warning(
+              false,
+              'You are manually calling a React.PropTypes validation ' +
+              'function for the `%s` prop on `%s`. This is deprecated ' +
+              'and will throw in the standalone `prop-types` package. ' +
+              'You may be seeing this warning due to a third-party PropTypes ' +
+              'library. See https://fb.me/react-warning-dont-call-proptypes ' + 'for details.',
+              propFullName,
+              componentName
+            );
+            manualPropTypeCallCache[cacheKey] = true;
+            manualPropTypeWarningCount++;
+          }
+        }
+      }
+      if (props[propName] == null) {
+        if (isRequired) {
+          if (props[propName] === null) {
+            return new PropTypeError('The ' + location + ' `' + propFullName + '` is marked as required ' + ('in `' + componentName + '`, but its value is `null`.'));
+          }
+          return new PropTypeError('The ' + location + ' `' + propFullName + '` is marked as required in ' + ('`' + componentName + '`, but its value is `undefined`.'));
+        }
+        return null;
+      } else {
+        return validate(props, propName, componentName, location, propFullName);
+      }
+    }
+
+    var chainedCheckType = checkType.bind(null, false);
+    chainedCheckType.isRequired = checkType.bind(null, true);
+
+    return chainedCheckType;
+  }
+
+  function createPrimitiveTypeChecker(expectedType) {
+    function validate(props, propName, componentName, location, propFullName, secret) {
+      var propValue = props[propName];
+      var propType = getPropType(propValue);
+      if (propType !== expectedType) {
+        // `propValue` being instance of, say, date/regexp, pass the 'object'
+        // check, but we can offer a more precise error message here rather than
+        // 'of type `object`'.
+        var preciseType = getPreciseType(propValue);
+
+        return new PropTypeError('Invalid ' + location + ' `' + propFullName + '` of type ' + ('`' + preciseType + '` supplied to `' + componentName + '`, expected ') + ('`' + expectedType + '`.'));
+      }
+      return null;
+    }
+    return createChainableTypeChecker(validate);
+  }
+
+  function createAnyTypeChecker() {
+    return createChainableTypeChecker(emptyFunction.thatReturnsNull);
+  }
+
+  function createArrayOfTypeChecker(typeChecker) {
+    function validate(props, propName, componentName, location, propFullName) {
+      if (typeof typeChecker !== 'function') {
+        return new PropTypeError('Property `' + propFullName + '` of component `' + componentName + '` has invalid PropType notation inside arrayOf.');
+      }
+      var propValue = props[propName];
+      if (!Array.isArray(propValue)) {
+        var propType = getPropType(propValue);
+        return new PropTypeError('Invalid ' + location + ' `' + propFullName + '` of type ' + ('`' + propType + '` supplied to `' + componentName + '`, expected an array.'));
+      }
+      for (var i = 0; i < propValue.length; i++) {
+        var error = typeChecker(propValue, i, componentName, location, propFullName + '[' + i + ']', ReactPropTypesSecret);
+        if (error instanceof Error) {
+          return error;
+        }
+      }
+      return null;
+    }
+    return createChainableTypeChecker(validate);
+  }
+
+  function createElementTypeChecker() {
+    function validate(props, propName, componentName, location, propFullName) {
+      var propValue = props[propName];
+      if (!isValidElement(propValue)) {
+        var propType = getPropType(propValue);
+        return new PropTypeError('Invalid ' + location + ' `' + propFullName + '` of type ' + ('`' + propType + '` supplied to `' + componentName + '`, expected a single ReactElement.'));
+      }
+      return null;
+    }
+    return createChainableTypeChecker(validate);
+  }
+
+  function createInstanceTypeChecker(expectedClass) {
+    function validate(props, propName, componentName, location, propFullName) {
+      if (!(props[propName] instanceof expectedClass)) {
+        var expectedClassName = expectedClass.name || ANONYMOUS;
+        var actualClassName = getClassName(props[propName]);
+        return new PropTypeError('Invalid ' + location + ' `' + propFullName + '` of type ' + ('`' + actualClassName + '` supplied to `' + componentName + '`, expected ') + ('instance of `' + expectedClassName + '`.'));
+      }
+      return null;
+    }
+    return createChainableTypeChecker(validate);
+  }
+
+  function createEnumTypeChecker(expectedValues) {
+    if (!Array.isArray(expectedValues)) {
+      process.env.NODE_ENV !== 'production' ? warning(false, 'Invalid argument supplied to oneOf, expected an instance of array.') : void 0;
+      return emptyFunction.thatReturnsNull;
+    }
+
+    function validate(props, propName, componentName, location, propFullName) {
+      var propValue = props[propName];
+      for (var i = 0; i < expectedValues.length; i++) {
+        if (is(propValue, expectedValues[i])) {
+          return null;
+        }
+      }
+
+      var valuesString = JSON.stringify(expectedValues);
+      return new PropTypeError('Invalid ' + location + ' `' + propFullName + '` of value `' + propValue + '` ' + ('supplied to `' + componentName + '`, expected one of ' + valuesString + '.'));
+    }
+    return createChainableTypeChecker(validate);
+  }
+
+  function createObjectOfTypeChecker(typeChecker) {
+    function validate(props, propName, componentName, location, propFullName) {
+      if (typeof typeChecker !== 'function') {
+        return new PropTypeError('Property `' + propFullName + '` of component `' + componentName + '` has invalid PropType notation inside objectOf.');
+      }
+      var propValue = props[propName];
+      var propType = getPropType(propValue);
+      if (propType !== 'object') {
+        return new PropTypeError('Invalid ' + location + ' `' + propFullName + '` of type ' + ('`' + propType + '` supplied to `' + componentName + '`, expected an object.'));
+      }
+      for (var key in propValue) {
+        if (propValue.hasOwnProperty(key)) {
+          var error = typeChecker(propValue, key, componentName, location, propFullName + '.' + key, ReactPropTypesSecret);
+          if (error instanceof Error) {
+            return error;
+          }
+        }
+      }
+      return null;
+    }
+    return createChainableTypeChecker(validate);
+  }
+
+  function createUnionTypeChecker(arrayOfTypeCheckers) {
+    if (!Array.isArray(arrayOfTypeCheckers)) {
+      process.env.NODE_ENV !== 'production' ? warning(false, 'Invalid argument supplied to oneOfType, expected an instance of array.') : void 0;
+      return emptyFunction.thatReturnsNull;
+    }
+
+    for (var i = 0; i < arrayOfTypeCheckers.length; i++) {
+      var checker = arrayOfTypeCheckers[i];
+      if (typeof checker !== 'function') {
+        warning(
+          false,
+          'Invalid argument supplid to oneOfType. Expected an array of check functions, but ' +
+          'received %s at index %s.',
+          getPostfixForTypeWarning(checker),
+          i
+        );
+        return emptyFunction.thatReturnsNull;
+      }
+    }
+
+    function validate(props, propName, componentName, location, propFullName) {
+      for (var i = 0; i < arrayOfTypeCheckers.length; i++) {
+        var checker = arrayOfTypeCheckers[i];
+        if (checker(props, propName, componentName, location, propFullName, ReactPropTypesSecret) == null) {
+          return null;
+        }
+      }
+
+      return new PropTypeError('Invalid ' + location + ' `' + propFullName + '` supplied to ' + ('`' + componentName + '`.'));
+    }
+    return createChainableTypeChecker(validate);
+  }
+
+  function createNodeChecker() {
+    function validate(props, propName, componentName, location, propFullName) {
+      if (!isNode(props[propName])) {
+        return new PropTypeError('Invalid ' + location + ' `' + propFullName + '` supplied to ' + ('`' + componentName + '`, expected a ReactNode.'));
+      }
+      return null;
+    }
+    return createChainableTypeChecker(validate);
+  }
+
+  function createShapeTypeChecker(shapeTypes) {
+    function validate(props, propName, componentName, location, propFullName) {
+      var propValue = props[propName];
+      var propType = getPropType(propValue);
+      if (propType !== 'object') {
+        return new PropTypeError('Invalid ' + location + ' `' + propFullName + '` of type `' + propType + '` ' + ('supplied to `' + componentName + '`, expected `object`.'));
+      }
+      for (var key in shapeTypes) {
+        var checker = shapeTypes[key];
+        if (!checker) {
+          continue;
+        }
+        var error = checker(propValue, key, componentName, location, propFullName + '.' + key, ReactPropTypesSecret);
+        if (error) {
+          return error;
+        }
+      }
+      return null;
+    }
+    return createChainableTypeChecker(validate);
+  }
+
+  function isNode(propValue) {
+    switch (typeof propValue) {
+      case 'number':
+      case 'string':
+      case 'undefined':
+        return true;
+      case 'boolean':
+        return !propValue;
+      case 'object':
+        if (Array.isArray(propValue)) {
+          return propValue.every(isNode);
+        }
+        if (propValue === null || isValidElement(propValue)) {
+          return true;
+        }
+
+        var iteratorFn = getIteratorFn(propValue);
+        if (iteratorFn) {
+          var iterator = iteratorFn.call(propValue);
+          var step;
+          if (iteratorFn !== propValue.entries) {
+            while (!(step = iterator.next()).done) {
+              if (!isNode(step.value)) {
+                return false;
+              }
+            }
+          } else {
+            // Iterator will provide entry [k,v] tuples rather than values.
+            while (!(step = iterator.next()).done) {
+              var entry = step.value;
+              if (entry) {
+                if (!isNode(entry[1])) {
+                  return false;
+                }
+              }
+            }
+          }
+        } else {
+          return false;
+        }
+
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  function isSymbol(propType, propValue) {
+    // Native Symbol.
+    if (propType === 'symbol') {
+      return true;
+    }
+
+    // 19.4.3.5 Symbol.prototype[@@toStringTag] === 'Symbol'
+    if (propValue['@@toStringTag'] === 'Symbol') {
+      return true;
+    }
+
+    // Fallback for non-spec compliant Symbols which are polyfilled.
+    if (typeof Symbol === 'function' && propValue instanceof Symbol) {
+      return true;
+    }
+
+    return false;
+  }
+
+  // Equivalent of `typeof` but with special handling for array and regexp.
+  function getPropType(propValue) {
+    var propType = typeof propValue;
+    if (Array.isArray(propValue)) {
+      return 'array';
+    }
+    if (propValue instanceof RegExp) {
+      // Old webkits (at least until Android 4.0) return 'function' rather than
+      // 'object' for typeof a RegExp. We'll normalize this here so that /bla/
+      // passes PropTypes.object.
+      return 'object';
+    }
+    if (isSymbol(propType, propValue)) {
+      return 'symbol';
+    }
+    return propType;
+  }
+
+  // This handles more types than `getPropType`. Only used for error messages.
+  // See `createPrimitiveTypeChecker`.
+  function getPreciseType(propValue) {
+    if (typeof propValue === 'undefined' || propValue === null) {
+      return '' + propValue;
+    }
+    var propType = getPropType(propValue);
+    if (propType === 'object') {
+      if (propValue instanceof Date) {
+        return 'date';
+      } else if (propValue instanceof RegExp) {
+        return 'regexp';
+      }
+    }
+    return propType;
+  }
+
+  // Returns a string that is postfixed to a warning about an invalid type.
+  // For example, "undefined" or "of type array"
+  function getPostfixForTypeWarning(value) {
+    var type = getPreciseType(value);
+    switch (type) {
+      case 'array':
+      case 'object':
+        return 'an ' + type;
+      case 'boolean':
+      case 'date':
+      case 'regexp':
+        return 'a ' + type;
+      default:
+        return type;
+    }
+  }
+
+  // Returns class name of the object, if any.
+  function getClassName(propValue) {
+    if (!propValue.constructor || !propValue.constructor.name) {
+      return ANONYMOUS;
+    }
+    return propValue.constructor.name;
+  }
+
+  ReactPropTypes.checkPropTypes = checkPropTypes;
+  ReactPropTypes.PropTypes = ReactPropTypes;
+
+  return ReactPropTypes;
+};
+
+}).call(this,require('_process'))
+},{"./checkPropTypes":156,"./lib/ReactPropTypesSecret":160,"_process":155,"fbjs/lib/emptyFunction":161,"fbjs/lib/invariant":162,"fbjs/lib/warning":163}],159:[function(require,module,exports){
+(function (process){
+/**
+ * Copyright 2013-present, Facebook, Inc.
+ * All rights reserved.
+ *
+ * This source code is licensed under the BSD-style license found in the
+ * LICENSE file in the root directory of this source tree. An additional grant
+ * of patent rights can be found in the PATENTS file in the same directory.
+ */
+
+if (process.env.NODE_ENV !== 'production') {
+  var REACT_ELEMENT_TYPE = (typeof Symbol === 'function' &&
+    Symbol.for &&
+    Symbol.for('react.element')) ||
+    0xeac7;
+
+  var isValidElement = function(object) {
+    return typeof object === 'object' &&
+      object !== null &&
+      object.$$typeof === REACT_ELEMENT_TYPE;
+  };
+
+  // By explicitly using `prop-types` you are opting into new development behavior.
+  // http://fb.me/prop-types-in-prod
+  var throwOnDirectAccess = true;
+  module.exports = require('./factoryWithTypeCheckers')(isValidElement, throwOnDirectAccess);
+} else {
+  // By explicitly using `prop-types` you are opting into new production behavior.
+  // http://fb.me/prop-types-in-prod
+  module.exports = require('./factoryWithThrowingShims')();
+}
+
+}).call(this,require('_process'))
+},{"./factoryWithThrowingShims":157,"./factoryWithTypeCheckers":158,"_process":155}],160:[function(require,module,exports){
+/**
+ * Copyright 2013-present, Facebook, Inc.
+ * All rights reserved.
+ *
+ * This source code is licensed under the BSD-style license found in the
+ * LICENSE file in the root directory of this source tree. An additional grant
+ * of patent rights can be found in the PATENTS file in the same directory.
+ */
+
+'use strict';
+
+var ReactPropTypesSecret = 'SECRET_DO_NOT_PASS_THIS_OR_YOU_WILL_BE_FIRED';
+
+module.exports = ReactPropTypesSecret;
+
+},{}],161:[function(require,module,exports){
+"use strict";
+
+/**
+ * Copyright (c) 2013-present, Facebook, Inc.
+ * All rights reserved.
+ *
+ * This source code is licensed under the BSD-style license found in the
+ * LICENSE file in the root directory of this source tree. An additional grant
+ * of patent rights can be found in the PATENTS file in the same directory.
+ *
+ * 
+ */
+
+function makeEmptyFunction(arg) {
+  return function () {
+    return arg;
+  };
+}
+
+/**
+ * This function accepts and discards inputs; it has no side effects. This is
+ * primarily useful idiomatically for overridable function endpoints which
+ * always need to be callable, since JS lacks a null-call idiom ala Cocoa.
+ */
+var emptyFunction = function emptyFunction() {};
+
+emptyFunction.thatReturns = makeEmptyFunction;
+emptyFunction.thatReturnsFalse = makeEmptyFunction(false);
+emptyFunction.thatReturnsTrue = makeEmptyFunction(true);
+emptyFunction.thatReturnsNull = makeEmptyFunction(null);
+emptyFunction.thatReturnsThis = function () {
+  return this;
+};
+emptyFunction.thatReturnsArgument = function (arg) {
+  return arg;
+};
+
+module.exports = emptyFunction;
+},{}],162:[function(require,module,exports){
+(function (process){
+/**
+ * Copyright (c) 2013-present, Facebook, Inc.
+ * All rights reserved.
+ *
+ * This source code is licensed under the BSD-style license found in the
+ * LICENSE file in the root directory of this source tree. An additional grant
+ * of patent rights can be found in the PATENTS file in the same directory.
+ *
+ */
+
+'use strict';
+
+/**
+ * Use invariant() to assert state which your program assumes to be true.
+ *
+ * Provide sprintf-style format (only %s is supported) and arguments
+ * to provide information about what broke and what you were
+ * expecting.
+ *
+ * The invariant message will be stripped in production, but the invariant
+ * will remain to ensure logic does not differ in production.
+ */
+
+var validateFormat = function validateFormat(format) {};
+
+if (process.env.NODE_ENV !== 'production') {
+  validateFormat = function validateFormat(format) {
+    if (format === undefined) {
+      throw new Error('invariant requires an error message argument');
+    }
+  };
+}
+
+function invariant(condition, format, a, b, c, d, e, f) {
+  validateFormat(format);
+
+  if (!condition) {
+    var error;
+    if (format === undefined) {
+      error = new Error('Minified exception occurred; use the non-minified dev environment ' + 'for the full error message and additional helpful warnings.');
+    } else {
+      var args = [a, b, c, d, e, f];
+      var argIndex = 0;
+      error = new Error(format.replace(/%s/g, function () {
+        return args[argIndex++];
+      }));
+      error.name = 'Invariant Violation';
+    }
+
+    error.framesToPop = 1; // we don't care about invariant's own frame
+    throw error;
+  }
+}
+
+module.exports = invariant;
+}).call(this,require('_process'))
+},{"_process":155}],163:[function(require,module,exports){
+(function (process){
+/**
+ * Copyright 2014-2015, Facebook, Inc.
+ * All rights reserved.
+ *
+ * This source code is licensed under the BSD-style license found in the
+ * LICENSE file in the root directory of this source tree. An additional grant
+ * of patent rights can be found in the PATENTS file in the same directory.
+ *
+ */
+
+'use strict';
+
+var emptyFunction = require('./emptyFunction');
+
+/**
+ * Similar to invariant but only logs a warning if the condition is not met.
+ * This can be used to log issues in development environments in critical
+ * paths. Removing the logging code for production environments will keep the
+ * same logic and follow the same code paths.
+ */
+
+var warning = emptyFunction;
+
+if (process.env.NODE_ENV !== 'production') {
+  (function () {
+    var printWarning = function printWarning(format) {
+      for (var _len = arguments.length, args = Array(_len > 1 ? _len - 1 : 0), _key = 1; _key < _len; _key++) {
+        args[_key - 1] = arguments[_key];
+      }
+
+      var argIndex = 0;
+      var message = 'Warning: ' + format.replace(/%s/g, function () {
+        return args[argIndex++];
+      });
+      if (typeof console !== 'undefined') {
+        console.error(message);
+      }
+      try {
+        // --- Welcome to debugging React ---
+        // This error was thrown as a convenience so that you can use this stack
+        // to find the callsite that caused this warning to fire.
+        throw new Error(message);
+      } catch (x) {}
+    };
+
+    warning = function warning(condition, format) {
+      if (format === undefined) {
+        throw new Error('`warning(condition, format, ...args)` requires a warning ' + 'message argument');
+      }
+
+      if (format.indexOf('Failed Composite propType: ') === 0) {
+        return; // Ignore CompositeComponent proptype check.
+      }
+
+      if (!condition) {
+        for (var _len2 = arguments.length, args = Array(_len2 > 2 ? _len2 - 2 : 0), _key2 = 2; _key2 < _len2; _key2++) {
+          args[_key2 - 2] = arguments[_key2];
+        }
+
+        printWarning.apply(undefined, [format].concat(args));
+      }
+    };
+  })();
+}
+
+module.exports = warning;
+}).call(this,require('_process'))
+},{"./emptyFunction":161,"_process":155}],164:[function(require,module,exports){
 module.exports = require('react/lib/ReactCSSTransitionGroup');
-},{"react/lib/ReactCSSTransitionGroup":309}],156:[function(require,module,exports){
+},{"react/lib/ReactCSSTransitionGroup":318}],165:[function(require,module,exports){
 module.exports = require('react/lib/update');
-},{"react/lib/update":428}],157:[function(require,module,exports){
+},{"react/lib/update":434}],166:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -14950,7 +16416,7 @@ var Accordion = function (_React$Component) {
 
 exports['default'] = Accordion;
 module.exports = exports['default'];
-},{"./PanelGroup":225,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/possibleConstructorReturn":19,"react":456}],158:[function(require,module,exports){
+},{"./PanelGroup":234,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/possibleConstructorReturn":19,"react":463}],167:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -14987,6 +16453,10 @@ var _react = require('react');
 
 var _react2 = _interopRequireDefault(_react);
 
+var _propTypes = require('prop-types');
+
+var _propTypes2 = _interopRequireDefault(_propTypes);
+
 var _bootstrapUtils = require('./utils/bootstrapUtils');
 
 var _StyleConfig = require('./utils/StyleConfig');
@@ -14994,8 +16464,8 @@ var _StyleConfig = require('./utils/StyleConfig');
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'default': obj }; }
 
 var propTypes = {
-  onDismiss: _react2['default'].PropTypes.func,
-  closeLabel: _react2['default'].PropTypes.string
+  onDismiss: _propTypes2['default'].func,
+  closeLabel: _propTypes2['default'].string
 };
 
 var defaultProps = {
@@ -15043,18 +16513,16 @@ var Alert = function (_React$Component) {
   Alert.prototype.render = function render() {
     var _extends2;
 
-    var _props = this.props;
-    var onDismiss = _props.onDismiss;
-    var closeLabel = _props.closeLabel;
-    var className = _props.className;
-    var children = _props.children;
-    var props = (0, _objectWithoutProperties3['default'])(_props, ['onDismiss', 'closeLabel', 'className', 'children']);
+    var _props = this.props,
+        onDismiss = _props.onDismiss,
+        closeLabel = _props.closeLabel,
+        className = _props.className,
+        children = _props.children,
+        props = (0, _objectWithoutProperties3['default'])(_props, ['onDismiss', 'closeLabel', 'className', 'children']);
 
-    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props);
-
-    var bsProps = _splitBsProps[0];
-    var elementProps = _splitBsProps[1];
-
+    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props),
+        bsProps = _splitBsProps[0],
+        elementProps = _splitBsProps[1];
 
     var dismissable = !!onDismiss;
     var classes = (0, _extends4['default'])({}, (0, _bootstrapUtils.getClassSet)(bsProps), (_extends2 = {}, _extends2[(0, _bootstrapUtils.prefix)(bsProps, 'dismissable')] = dismissable, _extends2));
@@ -15079,7 +16547,7 @@ Alert.defaultProps = defaultProps;
 
 exports['default'] = (0, _bootstrapUtils.bsStyles)((0, _values2['default'])(_StyleConfig.State), _StyleConfig.State.INFO, (0, _bootstrapUtils.bsClass)('alert', Alert));
 module.exports = exports['default'];
-},{"./utils/StyleConfig":245,"./utils/bootstrapUtils":248,"babel-runtime/core-js/object/values":11,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":456}],159:[function(require,module,exports){
+},{"./utils/StyleConfig":254,"./utils/bootstrapUtils":257,"babel-runtime/core-js/object/values":11,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"prop-types":159,"react":463}],168:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -15112,6 +16580,10 @@ var _react = require('react');
 
 var _react2 = _interopRequireDefault(_react);
 
+var _propTypes = require('prop-types');
+
+var _propTypes2 = _interopRequireDefault(_propTypes);
+
 var _bootstrapUtils = require('./utils/bootstrapUtils');
 
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'default': obj }; }
@@ -15119,7 +16591,7 @@ function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'd
 // TODO: `pullRight` doesn't belong here. There's no special handling here.
 
 var propTypes = {
-  pullRight: _react2['default'].PropTypes.bool
+  pullRight: _propTypes2['default'].bool
 };
 
 var defaultProps = {
@@ -15151,17 +16623,15 @@ var Badge = function (_React$Component) {
   };
 
   Badge.prototype.render = function render() {
-    var _props = this.props;
-    var pullRight = _props.pullRight;
-    var className = _props.className;
-    var children = _props.children;
-    var props = (0, _objectWithoutProperties3['default'])(_props, ['pullRight', 'className', 'children']);
+    var _props = this.props,
+        pullRight = _props.pullRight,
+        className = _props.className,
+        children = _props.children,
+        props = (0, _objectWithoutProperties3['default'])(_props, ['pullRight', 'className', 'children']);
 
-    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props);
-
-    var bsProps = _splitBsProps[0];
-    var elementProps = _splitBsProps[1];
-
+    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props),
+        bsProps = _splitBsProps[0],
+        elementProps = _splitBsProps[1];
 
     var classes = (0, _extends3['default'])({}, (0, _bootstrapUtils.getClassSet)(bsProps), {
       'pull-right': pullRight,
@@ -15187,7 +16657,7 @@ Badge.defaultProps = defaultProps;
 
 exports['default'] = (0, _bootstrapUtils.bsClass)('badge', Badge);
 module.exports = exports['default'];
-},{"./utils/bootstrapUtils":248,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":456}],160:[function(require,module,exports){
+},{"./utils/bootstrapUtils":257,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"prop-types":159,"react":463}],169:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -15237,15 +16707,13 @@ var Breadcrumb = function (_React$Component) {
   }
 
   Breadcrumb.prototype.render = function render() {
-    var _props = this.props;
-    var className = _props.className;
-    var props = (0, _objectWithoutProperties3['default'])(_props, ['className']);
+    var _props = this.props,
+        className = _props.className,
+        props = (0, _objectWithoutProperties3['default'])(_props, ['className']);
 
-    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props);
-
-    var bsProps = _splitBsProps[0];
-    var elementProps = _splitBsProps[1];
-
+    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props),
+        bsProps = _splitBsProps[0],
+        elementProps = _splitBsProps[1];
 
     var classes = (0, _bootstrapUtils.getClassSet)(bsProps);
 
@@ -15263,7 +16731,7 @@ Breadcrumb.Item = _BreadcrumbItem2['default'];
 
 exports['default'] = (0, _bootstrapUtils.bsClass)('breadcrumb', Breadcrumb);
 module.exports = exports['default'];
-},{"./BreadcrumbItem":161,"./utils/bootstrapUtils":248,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":456}],161:[function(require,module,exports){
+},{"./BreadcrumbItem":170,"./utils/bootstrapUtils":257,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":463}],170:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -15296,6 +16764,10 @@ var _react = require('react');
 
 var _react2 = _interopRequireDefault(_react);
 
+var _propTypes = require('prop-types');
+
+var _propTypes2 = _interopRequireDefault(_propTypes);
+
 var _SafeAnchor = require('./SafeAnchor');
 
 var _SafeAnchor2 = _interopRequireDefault(_SafeAnchor);
@@ -15306,19 +16778,19 @@ var propTypes = {
   /**
    * If set to true, renders `span` instead of `a`
    */
-  active: _react2['default'].PropTypes.bool,
+  active: _propTypes2['default'].bool,
   /**
    * `href` attribute for the inner `a` element
    */
-  href: _react2['default'].PropTypes.string,
+  href: _propTypes2['default'].string,
   /**
    * `title` attribute for the inner `a` element
    */
-  title: _react2['default'].PropTypes.node,
+  title: _propTypes2['default'].node,
   /**
    * `target` attribute for the inner `a` element
    */
-  target: _react2['default'].PropTypes.string
+  target: _propTypes2['default'].string
 };
 
 var defaultProps = {
@@ -15334,13 +16806,13 @@ var BreadcrumbItem = function (_React$Component) {
   }
 
   BreadcrumbItem.prototype.render = function render() {
-    var _props = this.props;
-    var active = _props.active;
-    var href = _props.href;
-    var title = _props.title;
-    var target = _props.target;
-    var className = _props.className;
-    var props = (0, _objectWithoutProperties3['default'])(_props, ['active', 'href', 'title', 'target', 'className']);
+    var _props = this.props,
+        active = _props.active,
+        href = _props.href,
+        title = _props.title,
+        target = _props.target,
+        className = _props.className,
+        props = (0, _objectWithoutProperties3['default'])(_props, ['active', 'href', 'title', 'target', 'className']);
 
     // Don't try to render these props on non-active <span>.
 
@@ -15361,7 +16833,7 @@ BreadcrumbItem.defaultProps = defaultProps;
 
 exports['default'] = BreadcrumbItem;
 module.exports = exports['default'];
-},{"./SafeAnchor":231,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":456}],162:[function(require,module,exports){
+},{"./SafeAnchor":240,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"prop-types":159,"react":463}],171:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -15398,6 +16870,10 @@ var _react = require('react');
 
 var _react2 = _interopRequireDefault(_react);
 
+var _propTypes = require('prop-types');
+
+var _propTypes2 = _interopRequireDefault(_propTypes);
+
 var _elementType = require('react-prop-types/lib/elementType');
 
 var _elementType2 = _interopRequireDefault(_elementType);
@@ -15413,17 +16889,17 @@ var _SafeAnchor2 = _interopRequireDefault(_SafeAnchor);
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'default': obj }; }
 
 var propTypes = {
-  active: _react2['default'].PropTypes.bool,
-  disabled: _react2['default'].PropTypes.bool,
-  block: _react2['default'].PropTypes.bool,
-  onClick: _react2['default'].PropTypes.func,
+  active: _propTypes2['default'].bool,
+  disabled: _propTypes2['default'].bool,
+  block: _propTypes2['default'].bool,
+  onClick: _propTypes2['default'].func,
   componentClass: _elementType2['default'],
-  href: _react2['default'].PropTypes.string,
+  href: _propTypes2['default'].string,
   /**
    * Defines HTML button type attribute
    * @defaultValue 'button'
    */
-  type: _react2['default'].PropTypes.oneOf(['button', 'reset', 'submit'])
+  type: _propTypes2['default'].oneOf(['button', 'reset', 'submit'])
 };
 
 var defaultProps = {
@@ -15447,8 +16923,8 @@ var Button = function (_React$Component) {
   };
 
   Button.prototype.renderButton = function renderButton(_ref, className) {
-    var componentClass = _ref.componentClass;
-    var elementProps = (0, _objectWithoutProperties3['default'])(_ref, ['componentClass']);
+    var componentClass = _ref.componentClass,
+        elementProps = (0, _objectWithoutProperties3['default'])(_ref, ['componentClass']);
 
     var Component = componentClass || 'button';
 
@@ -15461,17 +16937,15 @@ var Button = function (_React$Component) {
   Button.prototype.render = function render() {
     var _extends2;
 
-    var _props = this.props;
-    var active = _props.active;
-    var block = _props.block;
-    var className = _props.className;
-    var props = (0, _objectWithoutProperties3['default'])(_props, ['active', 'block', 'className']);
+    var _props = this.props,
+        active = _props.active,
+        block = _props.block,
+        className = _props.className,
+        props = (0, _objectWithoutProperties3['default'])(_props, ['active', 'block', 'className']);
 
-    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props);
-
-    var bsProps = _splitBsProps[0];
-    var elementProps = _splitBsProps[1];
-
+    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props),
+        bsProps = _splitBsProps[0],
+        elementProps = _splitBsProps[1];
 
     var classes = (0, _extends4['default'])({}, (0, _bootstrapUtils.getClassSet)(bsProps), (_extends2 = {
       active: active
@@ -15493,7 +16967,7 @@ Button.defaultProps = defaultProps;
 
 exports['default'] = (0, _bootstrapUtils.bsClass)('btn', (0, _bootstrapUtils.bsSizes)([_StyleConfig.Size.LARGE, _StyleConfig.Size.SMALL, _StyleConfig.Size.XSMALL], (0, _bootstrapUtils.bsStyles)([].concat((0, _values2['default'])(_StyleConfig.State), [_StyleConfig.Style.DEFAULT, _StyleConfig.Style.PRIMARY, _StyleConfig.Style.LINK]), _StyleConfig.Style.DEFAULT, Button)));
 module.exports = exports['default'];
-},{"./SafeAnchor":231,"./utils/StyleConfig":245,"./utils/bootstrapUtils":248,"babel-runtime/core-js/object/values":11,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":456,"react-prop-types/lib/elementType":271}],163:[function(require,module,exports){
+},{"./SafeAnchor":240,"./utils/StyleConfig":254,"./utils/bootstrapUtils":257,"babel-runtime/core-js/object/values":11,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"prop-types":159,"react":463,"react-prop-types/lib/elementType":280}],172:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -15526,6 +17000,10 @@ var _react = require('react');
 
 var _react2 = _interopRequireDefault(_react);
 
+var _propTypes = require('prop-types');
+
+var _propTypes2 = _interopRequireDefault(_propTypes);
+
 var _all = require('react-prop-types/lib/all');
 
 var _all2 = _interopRequireDefault(_all);
@@ -15539,16 +17017,16 @@ var _bootstrapUtils = require('./utils/bootstrapUtils');
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'default': obj }; }
 
 var propTypes = {
-  vertical: _react2['default'].PropTypes.bool,
-  justified: _react2['default'].PropTypes.bool,
+  vertical: _propTypes2['default'].bool,
+  justified: _propTypes2['default'].bool,
 
   /**
    * Display block buttons; only useful when used with the "vertical" prop.
    * @type {bool}
    */
-  block: (0, _all2['default'])(_react2['default'].PropTypes.bool, function (_ref) {
-    var block = _ref.block;
-    var vertical = _ref.vertical;
+  block: (0, _all2['default'])(_propTypes2['default'].bool, function (_ref) {
+    var block = _ref.block,
+        vertical = _ref.vertical;
     return block && !vertical ? new Error('`block` requires `vertical` to be set to have any effect') : null;
   })
 };
@@ -15570,18 +17048,16 @@ var ButtonGroup = function (_React$Component) {
   ButtonGroup.prototype.render = function render() {
     var _extends2;
 
-    var _props = this.props;
-    var block = _props.block;
-    var justified = _props.justified;
-    var vertical = _props.vertical;
-    var className = _props.className;
-    var props = (0, _objectWithoutProperties3['default'])(_props, ['block', 'justified', 'vertical', 'className']);
+    var _props = this.props,
+        block = _props.block,
+        justified = _props.justified,
+        vertical = _props.vertical,
+        className = _props.className,
+        props = (0, _objectWithoutProperties3['default'])(_props, ['block', 'justified', 'vertical', 'className']);
 
-    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props);
-
-    var bsProps = _splitBsProps[0];
-    var elementProps = _splitBsProps[1];
-
+    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props),
+        bsProps = _splitBsProps[0],
+        elementProps = _splitBsProps[1];
 
     var classes = (0, _extends4['default'])({}, (0, _bootstrapUtils.getClassSet)(bsProps), (_extends2 = {}, _extends2[(0, _bootstrapUtils.prefix)(bsProps)] = !vertical, _extends2[(0, _bootstrapUtils.prefix)(bsProps, 'vertical')] = vertical, _extends2[(0, _bootstrapUtils.prefix)(bsProps, 'justified')] = justified, _extends2[(0, _bootstrapUtils.prefix)(_Button2['default'].defaultProps, 'block')] = block, _extends2));
 
@@ -15598,7 +17074,7 @@ ButtonGroup.defaultProps = defaultProps;
 
 exports['default'] = (0, _bootstrapUtils.bsClass)('btn-group', ButtonGroup);
 module.exports = exports['default'];
-},{"./Button":162,"./utils/bootstrapUtils":248,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":456,"react-prop-types/lib/all":269}],164:[function(require,module,exports){
+},{"./Button":171,"./utils/bootstrapUtils":257,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"prop-types":159,"react":463,"react-prop-types/lib/all":278}],173:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -15648,15 +17124,13 @@ var ButtonToolbar = function (_React$Component) {
   }
 
   ButtonToolbar.prototype.render = function render() {
-    var _props = this.props;
-    var className = _props.className;
-    var props = (0, _objectWithoutProperties3['default'])(_props, ['className']);
+    var _props = this.props,
+        className = _props.className,
+        props = (0, _objectWithoutProperties3['default'])(_props, ['className']);
 
-    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props);
-
-    var bsProps = _splitBsProps[0];
-    var elementProps = _splitBsProps[1];
-
+    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props),
+        bsProps = _splitBsProps[0],
+        elementProps = _splitBsProps[1];
 
     var classes = (0, _bootstrapUtils.getClassSet)(bsProps);
 
@@ -15671,7 +17145,7 @@ var ButtonToolbar = function (_React$Component) {
 
 exports['default'] = (0, _bootstrapUtils.bsClass)('btn-toolbar', (0, _bootstrapUtils.bsSizes)(_Button2['default'].SIZES, ButtonToolbar));
 module.exports = exports['default'];
-},{"./Button":162,"./utils/bootstrapUtils":248,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":456}],165:[function(require,module,exports){
+},{"./Button":171,"./utils/bootstrapUtils":257,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":463}],174:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -15704,6 +17178,10 @@ var _react = require('react');
 
 var _react2 = _interopRequireDefault(_react);
 
+var _propTypes = require('prop-types');
+
+var _propTypes2 = _interopRequireDefault(_propTypes);
+
 var _CarouselCaption = require('./CarouselCaption');
 
 var _CarouselCaption2 = _interopRequireDefault(_CarouselCaption);
@@ -15733,12 +17211,12 @@ function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'd
 // TODO: Use uncontrollable.
 
 var propTypes = {
-  slide: _react2['default'].PropTypes.bool,
-  indicators: _react2['default'].PropTypes.bool,
-  interval: _react2['default'].PropTypes.number,
-  controls: _react2['default'].PropTypes.bool,
-  pauseOnHover: _react2['default'].PropTypes.bool,
-  wrap: _react2['default'].PropTypes.bool,
+  slide: _propTypes2['default'].bool,
+  indicators: _propTypes2['default'].bool,
+  interval: _propTypes2['default'].number,
+  controls: _propTypes2['default'].bool,
+  pauseOnHover: _propTypes2['default'].bool,
+  wrap: _propTypes2['default'].bool,
   /**
    * Callback fired when the active item changes.
    *
@@ -15750,13 +17228,25 @@ var propTypes = {
    * be a persisted event object with `direction` set to the direction of the
    * transition.
    */
-  onSelect: _react2['default'].PropTypes.func,
-  onSlideEnd: _react2['default'].PropTypes.func,
-  activeIndex: _react2['default'].PropTypes.number,
-  defaultActiveIndex: _react2['default'].PropTypes.number,
-  direction: _react2['default'].PropTypes.oneOf(['prev', 'next']),
-  prevIcon: _react2['default'].PropTypes.node,
-  nextIcon: _react2['default'].PropTypes.node
+  onSelect: _propTypes2['default'].func,
+  onSlideEnd: _propTypes2['default'].func,
+  activeIndex: _propTypes2['default'].number,
+  defaultActiveIndex: _propTypes2['default'].number,
+  direction: _propTypes2['default'].oneOf(['prev', 'next']),
+  prevIcon: _propTypes2['default'].node,
+  /**
+   * Label shown to screen readers only, can be used to show the previous element
+   * in the carousel.
+   * Set to null to deactivate.
+   */
+  prevLabel: _propTypes2['default'].string,
+  nextIcon: _propTypes2['default'].node,
+  /**
+   * Label shown to screen readers only, can be used to show the next element
+   * in the carousel.
+   * Set to null to deactivate.
+   */
+  nextLabel: _propTypes2['default'].string
 };
 
 var defaultProps = {
@@ -15767,7 +17257,9 @@ var defaultProps = {
   indicators: true,
   controls: true,
   prevIcon: _react2['default'].createElement(_Glyphicon2['default'], { glyph: 'chevron-left' }),
-  nextIcon: _react2['default'].createElement(_Glyphicon2['default'], { glyph: 'chevron-right' })
+  prevLabel: 'Previous',
+  nextIcon: _react2['default'].createElement(_Glyphicon2['default'], { glyph: 'chevron-right' }),
+  nextLabel: 'Next'
 };
 
 var Carousel = function (_React$Component) {
@@ -15895,7 +17387,7 @@ var Carousel = function (_React$Component) {
       return;
     }
 
-    var previousActiveIndex = this.getActiveIndex();
+    var previousActiveIndex = this.props.slide ? this.getActiveIndex() : null;
     direction = direction || this.getDirection(previousActiveIndex, index);
 
     var onSelect = this.props.onSelect;
@@ -15937,10 +17429,10 @@ var Carousel = function (_React$Component) {
   };
 
   Carousel.prototype.waitForNext = function waitForNext() {
-    var _props = this.props;
-    var slide = _props.slide;
-    var interval = _props.interval;
-    var activeIndexProp = _props.activeIndex;
+    var _props = this.props,
+        slide = _props.slide,
+        interval = _props.interval,
+        activeIndexProp = _props.activeIndex;
 
 
     if (!this.isPaused && slide && interval && activeIndexProp == null) {
@@ -15990,7 +17482,16 @@ var Carousel = function (_React$Component) {
     );
   };
 
-  Carousel.prototype.renderControls = function renderControls(wrap, children, activeIndex, prevIcon, nextIcon, bsProps) {
+  Carousel.prototype.renderControls = function renderControls(properties) {
+    var wrap = properties.wrap,
+        children = properties.children,
+        activeIndex = properties.activeIndex,
+        prevIcon = properties.prevIcon,
+        nextIcon = properties.nextIcon,
+        bsProps = properties.bsProps,
+        prevLabel = properties.prevLabel,
+        nextLabel = properties.nextLabel;
+
     var controlClassName = (0, _bootstrapUtils.prefix)(bsProps, 'control');
     var count = _ValidComponentChildren2['default'].count(children);
 
@@ -16001,7 +17502,12 @@ var Carousel = function (_React$Component) {
         className: (0, _classnames2['default'])(controlClassName, 'left'),
         onClick: this.handlePrev
       },
-      prevIcon
+      prevIcon,
+      prevLabel && _react2['default'].createElement(
+        'span',
+        { className: 'sr-only' },
+        prevLabel
+      )
     ), (wrap || activeIndex !== count - 1) && _react2['default'].createElement(
       _SafeAnchor2['default'],
       {
@@ -16009,33 +17515,38 @@ var Carousel = function (_React$Component) {
         className: (0, _classnames2['default'])(controlClassName, 'right'),
         onClick: this.handleNext
       },
-      nextIcon
+      nextIcon,
+      nextLabel && _react2['default'].createElement(
+        'span',
+        { className: 'sr-only' },
+        nextLabel
+      )
     )];
   };
 
   Carousel.prototype.render = function render() {
     var _this4 = this;
 
-    var _props2 = this.props;
-    var slide = _props2.slide;
-    var indicators = _props2.indicators;
-    var controls = _props2.controls;
-    var wrap = _props2.wrap;
-    var prevIcon = _props2.prevIcon;
-    var nextIcon = _props2.nextIcon;
-    var className = _props2.className;
-    var children = _props2.children;
-    var props = (0, _objectWithoutProperties3['default'])(_props2, ['slide', 'indicators', 'controls', 'wrap', 'prevIcon', 'nextIcon', 'className', 'children']);
-    var _state = this.state;
-    var previousActiveIndex = _state.previousActiveIndex;
-    var direction = _state.direction;
+    var _props2 = this.props,
+        slide = _props2.slide,
+        indicators = _props2.indicators,
+        controls = _props2.controls,
+        wrap = _props2.wrap,
+        prevIcon = _props2.prevIcon,
+        prevLabel = _props2.prevLabel,
+        nextIcon = _props2.nextIcon,
+        nextLabel = _props2.nextLabel,
+        className = _props2.className,
+        children = _props2.children,
+        props = (0, _objectWithoutProperties3['default'])(_props2, ['slide', 'indicators', 'controls', 'wrap', 'prevIcon', 'prevLabel', 'nextIcon', 'nextLabel', 'className', 'children']);
+    var _state = this.state,
+        previousActiveIndex = _state.previousActiveIndex,
+        direction = _state.direction;
 
     var _splitBsPropsAndOmit = (0, _bootstrapUtils.splitBsPropsAndOmit)(props, ['interval', 'pauseOnHover', 'onSelect', 'onSlideEnd', 'activeIndex', // Accessed via this.getActiveIndex().
-    'defaultActiveIndex', 'direction']);
-
-    var bsProps = _splitBsPropsAndOmit[0];
-    var elementProps = _splitBsPropsAndOmit[1];
-
+    'defaultActiveIndex', 'direction']),
+        bsProps = _splitBsPropsAndOmit[0],
+        elementProps = _splitBsPropsAndOmit[1];
 
     var activeIndex = this.getActiveIndex();
 
@@ -16068,7 +17579,16 @@ var Carousel = function (_React$Component) {
           });
         })
       ),
-      controls && this.renderControls(wrap, children, activeIndex, prevIcon, nextIcon, bsProps)
+      controls && this.renderControls({
+        wrap: wrap,
+        children: children,
+        activeIndex: activeIndex,
+        prevIcon: prevIcon,
+        prevLabel: prevLabel,
+        nextIcon: nextIcon,
+        nextLabel: nextLabel,
+        bsProps: bsProps
+      })
     );
   };
 
@@ -16083,7 +17603,7 @@ Carousel.Item = _CarouselItem2['default'];
 
 exports['default'] = (0, _bootstrapUtils.bsClass)('carousel', Carousel);
 module.exports = exports['default'];
-},{"./CarouselCaption":166,"./CarouselItem":167,"./Glyphicon":183,"./SafeAnchor":231,"./utils/ValidComponentChildren":247,"./utils/bootstrapUtils":248,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":456}],166:[function(require,module,exports){
+},{"./CarouselCaption":175,"./CarouselItem":176,"./Glyphicon":192,"./SafeAnchor":240,"./utils/ValidComponentChildren":256,"./utils/bootstrapUtils":257,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"prop-types":159,"react":463}],175:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -16141,16 +17661,14 @@ var CarouselCaption = function (_React$Component) {
   }
 
   CarouselCaption.prototype.render = function render() {
-    var _props = this.props;
-    var Component = _props.componentClass;
-    var className = _props.className;
-    var props = (0, _objectWithoutProperties3['default'])(_props, ['componentClass', 'className']);
+    var _props = this.props,
+        Component = _props.componentClass,
+        className = _props.className,
+        props = (0, _objectWithoutProperties3['default'])(_props, ['componentClass', 'className']);
 
-    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props);
-
-    var bsProps = _splitBsProps[0];
-    var elementProps = _splitBsProps[1];
-
+    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props),
+        bsProps = _splitBsProps[0],
+        elementProps = _splitBsProps[1];
 
     var classes = (0, _bootstrapUtils.getClassSet)(bsProps);
 
@@ -16167,7 +17685,7 @@ CarouselCaption.defaultProps = defaultProps;
 
 exports['default'] = (0, _bootstrapUtils.bsClass)('carousel-caption', CarouselCaption);
 module.exports = exports['default'];
-},{"./utils/bootstrapUtils":248,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":456,"react-prop-types/lib/elementType":271}],167:[function(require,module,exports){
+},{"./utils/bootstrapUtils":257,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":463,"react-prop-types/lib/elementType":280}],176:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -16200,6 +17718,10 @@ var _react = require('react');
 
 var _react2 = _interopRequireDefault(_react);
 
+var _propTypes = require('prop-types');
+
+var _propTypes2 = _interopRequireDefault(_propTypes);
+
 var _reactDom = require('react-dom');
 
 var _reactDom2 = _interopRequireDefault(_reactDom);
@@ -16214,12 +17736,12 @@ function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'd
 // not wait until transition end to trigger continuing animations.
 
 var propTypes = {
-  direction: _react2['default'].PropTypes.oneOf(['prev', 'next']),
-  onAnimateOutEnd: _react2['default'].PropTypes.func,
-  active: _react2['default'].PropTypes.bool,
-  animateIn: _react2['default'].PropTypes.bool,
-  animateOut: _react2['default'].PropTypes.bool,
-  index: _react2['default'].PropTypes.number
+  direction: _propTypes2['default'].oneOf(['prev', 'next']),
+  onAnimateOutEnd: _propTypes2['default'].func,
+  active: _propTypes2['default'].bool,
+  animateIn: _propTypes2['default'].bool,
+  animateOut: _propTypes2['default'].bool,
+  index: _propTypes2['default'].number
 };
 
 var defaultProps = {
@@ -16295,13 +17817,13 @@ var CarouselItem = function (_React$Component) {
   };
 
   CarouselItem.prototype.render = function render() {
-    var _props = this.props;
-    var direction = _props.direction;
-    var active = _props.active;
-    var animateIn = _props.animateIn;
-    var animateOut = _props.animateOut;
-    var className = _props.className;
-    var props = (0, _objectWithoutProperties3['default'])(_props, ['direction', 'active', 'animateIn', 'animateOut', 'className']);
+    var _props = this.props,
+        direction = _props.direction,
+        active = _props.active,
+        animateIn = _props.animateIn,
+        animateOut = _props.animateOut,
+        className = _props.className,
+        props = (0, _objectWithoutProperties3['default'])(_props, ['direction', 'active', 'animateIn', 'animateOut', 'className']);
 
 
     delete props.onAnimateOutEnd;
@@ -16331,7 +17853,7 @@ CarouselItem.defaultProps = defaultProps;
 
 exports['default'] = CarouselItem;
 module.exports = exports['default'];
-},{"./utils/TransitionEvents":246,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":456,"react-dom":254}],168:[function(require,module,exports){
+},{"./utils/TransitionEvents":255,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"prop-types":159,"react":463,"react-dom":263}],177:[function(require,module,exports){
 (function (process){
 'use strict';
 
@@ -16365,6 +17887,10 @@ var _react = require('react');
 
 var _react2 = _interopRequireDefault(_react);
 
+var _propTypes = require('prop-types');
+
+var _propTypes2 = _interopRequireDefault(_propTypes);
+
 var _warning = require('warning');
 
 var _warning2 = _interopRequireDefault(_warning);
@@ -16374,12 +17900,12 @@ var _bootstrapUtils = require('./utils/bootstrapUtils');
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'default': obj }; }
 
 var propTypes = {
-  inline: _react2['default'].PropTypes.bool,
-  disabled: _react2['default'].PropTypes.bool,
+  inline: _propTypes2['default'].bool,
+  disabled: _propTypes2['default'].bool,
   /**
    * Only valid if `inline` is not set.
    */
-  validationState: _react2['default'].PropTypes.oneOf(['success', 'warning', 'error']),
+  validationState: _propTypes2['default'].oneOf(['success', 'warning', 'error', null]),
   /**
    * Attaches a ref to the `<input>` element. Only functions can be used here.
    *
@@ -16387,7 +17913,7 @@ var propTypes = {
    * <Checkbox inputRef={ref => { this.input = ref; }} />
    * ```
    */
-  inputRef: _react2['default'].PropTypes.func
+  inputRef: _propTypes2['default'].func
 };
 
 var defaultProps = {
@@ -16404,21 +17930,19 @@ var Checkbox = function (_React$Component) {
   }
 
   Checkbox.prototype.render = function render() {
-    var _props = this.props;
-    var inline = _props.inline;
-    var disabled = _props.disabled;
-    var validationState = _props.validationState;
-    var inputRef = _props.inputRef;
-    var className = _props.className;
-    var style = _props.style;
-    var children = _props.children;
-    var props = (0, _objectWithoutProperties3['default'])(_props, ['inline', 'disabled', 'validationState', 'inputRef', 'className', 'style', 'children']);
+    var _props = this.props,
+        inline = _props.inline,
+        disabled = _props.disabled,
+        validationState = _props.validationState,
+        inputRef = _props.inputRef,
+        className = _props.className,
+        style = _props.style,
+        children = _props.children,
+        props = (0, _objectWithoutProperties3['default'])(_props, ['inline', 'disabled', 'validationState', 'inputRef', 'className', 'style', 'children']);
 
-    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props);
-
-    var bsProps = _splitBsProps[0];
-    var elementProps = _splitBsProps[1];
-
+    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props),
+        bsProps = _splitBsProps[0],
+        elementProps = _splitBsProps[1];
 
     var input = _react2['default'].createElement('input', (0, _extends3['default'])({}, elementProps, {
       ref: inputRef,
@@ -16471,7 +17995,7 @@ Checkbox.defaultProps = defaultProps;
 exports['default'] = (0, _bootstrapUtils.bsClass)('checkbox', Checkbox);
 module.exports = exports['default'];
 }).call(this,require('_process'))
-},{"./utils/bootstrapUtils":248,"_process":154,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":456,"warning":463}],169:[function(require,module,exports){
+},{"./utils/bootstrapUtils":257,"_process":155,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"prop-types":159,"react":463,"warning":470}],178:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -16503,6 +18027,10 @@ var _classnames2 = _interopRequireDefault(_classnames);
 var _react = require('react');
 
 var _react2 = _interopRequireDefault(_react);
+
+var _propTypes = require('prop-types');
+
+var _propTypes2 = _interopRequireDefault(_propTypes);
 
 var _elementType = require('react-prop-types/lib/elementType');
 
@@ -16528,7 +18056,7 @@ var propTypes = {
    *
    * adds class `visible-xs-block`
    */
-  visibleXsBlock: _react2['default'].PropTypes.bool,
+  visibleXsBlock: _propTypes2['default'].bool,
   /**
    * Apply clearfix
    *
@@ -16536,7 +18064,7 @@ var propTypes = {
    *
    * adds class `visible-sm-block`
    */
-  visibleSmBlock: _react2['default'].PropTypes.bool,
+  visibleSmBlock: _propTypes2['default'].bool,
   /**
    * Apply clearfix
    *
@@ -16544,7 +18072,7 @@ var propTypes = {
    *
    * adds class `visible-md-block`
    */
-  visibleMdBlock: _react2['default'].PropTypes.bool,
+  visibleMdBlock: _propTypes2['default'].bool,
   /**
    * Apply clearfix
    *
@@ -16552,7 +18080,7 @@ var propTypes = {
    *
    * adds class `visible-lg-block`
    */
-  visibleLgBlock: _react2['default'].PropTypes.bool
+  visibleLgBlock: _propTypes2['default'].bool
 };
 
 var defaultProps = {
@@ -16568,16 +18096,14 @@ var Clearfix = function (_React$Component) {
   }
 
   Clearfix.prototype.render = function render() {
-    var _props = this.props;
-    var Component = _props.componentClass;
-    var className = _props.className;
-    var props = (0, _objectWithoutProperties3['default'])(_props, ['componentClass', 'className']);
+    var _props = this.props,
+        Component = _props.componentClass,
+        className = _props.className,
+        props = (0, _objectWithoutProperties3['default'])(_props, ['componentClass', 'className']);
 
-    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props);
-
-    var bsProps = _splitBsProps[0];
-    var elementProps = _splitBsProps[1];
-
+    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props),
+        bsProps = _splitBsProps[0],
+        elementProps = _splitBsProps[1];
 
     var classes = (0, _bootstrapUtils.getClassSet)(bsProps);
 
@@ -16603,7 +18129,7 @@ Clearfix.defaultProps = defaultProps;
 
 exports['default'] = (0, _bootstrapUtils.bsClass)('clearfix', Clearfix);
 module.exports = exports['default'];
-},{"./utils/StyleConfig":245,"./utils/bootstrapUtils":248,"./utils/capitalize":249,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":456,"react-prop-types/lib/elementType":271}],170:[function(require,module,exports){
+},{"./utils/StyleConfig":254,"./utils/bootstrapUtils":257,"./utils/capitalize":258,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"prop-types":159,"react":463,"react-prop-types/lib/elementType":280}],179:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -16636,6 +18162,10 @@ var _react = require('react');
 
 var _react2 = _interopRequireDefault(_react);
 
+var _propTypes = require('prop-types');
+
+var _propTypes2 = _interopRequireDefault(_propTypes);
+
 var _elementType = require('react-prop-types/lib/elementType');
 
 var _elementType2 = _interopRequireDefault(_elementType);
@@ -16656,7 +18186,7 @@ var propTypes = {
    *
    * class-prefix `col-xs-`
    */
-  xs: _react2['default'].PropTypes.number,
+  xs: _propTypes2['default'].number,
   /**
    * The number of columns you wish to span
    *
@@ -16664,7 +18194,7 @@ var propTypes = {
    *
    * class-prefix `col-sm-`
    */
-  sm: _react2['default'].PropTypes.number,
+  sm: _propTypes2['default'].number,
   /**
    * The number of columns you wish to span
    *
@@ -16672,7 +18202,7 @@ var propTypes = {
    *
    * class-prefix `col-md-`
    */
-  md: _react2['default'].PropTypes.number,
+  md: _propTypes2['default'].number,
   /**
    * The number of columns you wish to span
    *
@@ -16680,7 +18210,7 @@ var propTypes = {
    *
    * class-prefix `col-lg-`
    */
-  lg: _react2['default'].PropTypes.number,
+  lg: _propTypes2['default'].number,
   /**
    * Hide column
    *
@@ -16688,7 +18218,7 @@ var propTypes = {
    *
    * adds class `hidden-xs`
    */
-  xsHidden: _react2['default'].PropTypes.bool,
+  xsHidden: _propTypes2['default'].bool,
   /**
    * Hide column
    *
@@ -16696,7 +18226,7 @@ var propTypes = {
    *
    * adds class `hidden-sm`
    */
-  smHidden: _react2['default'].PropTypes.bool,
+  smHidden: _propTypes2['default'].bool,
   /**
    * Hide column
    *
@@ -16704,7 +18234,7 @@ var propTypes = {
    *
    * adds class `hidden-md`
    */
-  mdHidden: _react2['default'].PropTypes.bool,
+  mdHidden: _propTypes2['default'].bool,
   /**
    * Hide column
    *
@@ -16712,7 +18242,7 @@ var propTypes = {
    *
    * adds class `hidden-lg`
    */
-  lgHidden: _react2['default'].PropTypes.bool,
+  lgHidden: _propTypes2['default'].bool,
   /**
    * Move columns to the right
    *
@@ -16720,7 +18250,7 @@ var propTypes = {
    *
    * class-prefix `col-xs-offset-`
    */
-  xsOffset: _react2['default'].PropTypes.number,
+  xsOffset: _propTypes2['default'].number,
   /**
    * Move columns to the right
    *
@@ -16728,7 +18258,7 @@ var propTypes = {
    *
    * class-prefix `col-sm-offset-`
    */
-  smOffset: _react2['default'].PropTypes.number,
+  smOffset: _propTypes2['default'].number,
   /**
    * Move columns to the right
    *
@@ -16736,7 +18266,7 @@ var propTypes = {
    *
    * class-prefix `col-md-offset-`
    */
-  mdOffset: _react2['default'].PropTypes.number,
+  mdOffset: _propTypes2['default'].number,
   /**
    * Move columns to the right
    *
@@ -16744,7 +18274,7 @@ var propTypes = {
    *
    * class-prefix `col-lg-offset-`
    */
-  lgOffset: _react2['default'].PropTypes.number,
+  lgOffset: _propTypes2['default'].number,
   /**
    * Change the order of grid columns to the right
    *
@@ -16752,7 +18282,7 @@ var propTypes = {
    *
    * class-prefix `col-xs-push-`
    */
-  xsPush: _react2['default'].PropTypes.number,
+  xsPush: _propTypes2['default'].number,
   /**
    * Change the order of grid columns to the right
    *
@@ -16760,7 +18290,7 @@ var propTypes = {
    *
    * class-prefix `col-sm-push-`
    */
-  smPush: _react2['default'].PropTypes.number,
+  smPush: _propTypes2['default'].number,
   /**
    * Change the order of grid columns to the right
    *
@@ -16768,7 +18298,7 @@ var propTypes = {
    *
    * class-prefix `col-md-push-`
    */
-  mdPush: _react2['default'].PropTypes.number,
+  mdPush: _propTypes2['default'].number,
   /**
    * Change the order of grid columns to the right
    *
@@ -16776,7 +18306,7 @@ var propTypes = {
    *
    * class-prefix `col-lg-push-`
    */
-  lgPush: _react2['default'].PropTypes.number,
+  lgPush: _propTypes2['default'].number,
   /**
    * Change the order of grid columns to the left
    *
@@ -16784,7 +18314,7 @@ var propTypes = {
    *
    * class-prefix `col-xs-pull-`
    */
-  xsPull: _react2['default'].PropTypes.number,
+  xsPull: _propTypes2['default'].number,
   /**
    * Change the order of grid columns to the left
    *
@@ -16792,7 +18322,7 @@ var propTypes = {
    *
    * class-prefix `col-sm-pull-`
    */
-  smPull: _react2['default'].PropTypes.number,
+  smPull: _propTypes2['default'].number,
   /**
    * Change the order of grid columns to the left
    *
@@ -16800,7 +18330,7 @@ var propTypes = {
    *
    * class-prefix `col-md-pull-`
    */
-  mdPull: _react2['default'].PropTypes.number,
+  mdPull: _propTypes2['default'].number,
   /**
    * Change the order of grid columns to the left
    *
@@ -16808,7 +18338,7 @@ var propTypes = {
    *
    * class-prefix `col-lg-pull-`
    */
-  lgPull: _react2['default'].PropTypes.number
+  lgPull: _propTypes2['default'].number
 };
 
 var defaultProps = {
@@ -16824,16 +18354,14 @@ var Col = function (_React$Component) {
   }
 
   Col.prototype.render = function render() {
-    var _props = this.props;
-    var Component = _props.componentClass;
-    var className = _props.className;
-    var props = (0, _objectWithoutProperties3['default'])(_props, ['componentClass', 'className']);
+    var _props = this.props,
+        Component = _props.componentClass,
+        className = _props.className,
+        props = (0, _objectWithoutProperties3['default'])(_props, ['componentClass', 'className']);
 
-    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props);
-
-    var bsProps = _splitBsProps[0];
-    var elementProps = _splitBsProps[1];
-
+    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props),
+        bsProps = _splitBsProps[0],
+        elementProps = _splitBsProps[1];
 
     var classes = [];
 
@@ -16874,7 +18402,7 @@ Col.defaultProps = defaultProps;
 
 exports['default'] = (0, _bootstrapUtils.bsClass)('col', Col);
 module.exports = exports['default'];
-},{"./utils/StyleConfig":245,"./utils/bootstrapUtils":248,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":456,"react-prop-types/lib/elementType":271}],171:[function(require,module,exports){
+},{"./utils/StyleConfig":254,"./utils/bootstrapUtils":257,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"prop-types":159,"react":463,"react-prop-types/lib/elementType":280}],180:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -16910,6 +18438,10 @@ var _style2 = _interopRequireDefault(_style);
 var _react = require('react');
 
 var _react2 = _interopRequireDefault(_react);
+
+var _propTypes = require('prop-types');
+
+var _propTypes2 = _interopRequireDefault(_propTypes);
 
 var _Transition = require('react-overlays/lib/Transition');
 
@@ -16947,50 +18479,55 @@ var propTypes = {
   /**
    * Show the component; triggers the expand or collapse animation
    */
-  'in': _react2['default'].PropTypes.bool,
+  'in': _propTypes2['default'].bool,
+
+  /**
+   * Wait until the first "enter" transition to mount the component (add it to the DOM)
+   */
+  mountOnEnter: _propTypes2['default'].bool,
 
   /**
    * Unmount the component (remove it from the DOM) when it is collapsed
    */
-  unmountOnExit: _react2['default'].PropTypes.bool,
+  unmountOnExit: _propTypes2['default'].bool,
 
   /**
    * Run the expand animation when the component mounts, if it is initially
    * shown
    */
-  transitionAppear: _react2['default'].PropTypes.bool,
+  transitionAppear: _propTypes2['default'].bool,
 
   /**
    * Duration of the collapse animation in milliseconds, to ensure that
    * finishing callbacks are fired even if the original browser transition end
    * events are canceled
    */
-  timeout: _react2['default'].PropTypes.number,
+  timeout: _propTypes2['default'].number,
 
   /**
    * Callback fired before the component expands
    */
-  onEnter: _react2['default'].PropTypes.func,
+  onEnter: _propTypes2['default'].func,
   /**
    * Callback fired after the component starts to expand
    */
-  onEntering: _react2['default'].PropTypes.func,
+  onEntering: _propTypes2['default'].func,
   /**
    * Callback fired after the component has expanded
    */
-  onEntered: _react2['default'].PropTypes.func,
+  onEntered: _propTypes2['default'].func,
   /**
    * Callback fired before the component collapses
    */
-  onExit: _react2['default'].PropTypes.func,
+  onExit: _propTypes2['default'].func,
   /**
    * Callback fired after the component starts to collapse
    */
-  onExiting: _react2['default'].PropTypes.func,
+  onExiting: _propTypes2['default'].func,
   /**
    * Callback fired after the component has collapsed
    */
-  onExited: _react2['default'].PropTypes.func,
+  onExited: _propTypes2['default'].func,
 
   /**
    * The dimension used when collapsing, or a function that returns the
@@ -16999,7 +18536,7 @@ var propTypes = {
    * _Note: Bootstrap only partially supports 'width'!
    * You will need to supply your own CSS animation for the `.width` CSS class._
    */
-  dimension: _react2['default'].PropTypes.oneOfType([_react2['default'].PropTypes.oneOf(['height', 'width']), _react2['default'].PropTypes.func]),
+  dimension: _propTypes2['default'].oneOfType([_propTypes2['default'].oneOf(['height', 'width']), _propTypes2['default'].func]),
 
   /**
    * Function that returns the height or width of the animating DOM node
@@ -17008,17 +18545,18 @@ var propTypes = {
    * should animate in its specified dimension. Called with the current
    * dimension prop value and the DOM node.
    */
-  getDimensionValue: _react2['default'].PropTypes.func,
+  getDimensionValue: _propTypes2['default'].func,
 
   /**
    * ARIA role of collapsible element
    */
-  role: _react2['default'].PropTypes.string
+  role: _propTypes2['default'].string
 };
 
 var defaultProps = {
   'in': false,
   timeout: 300,
+  mountOnEnter: false,
   unmountOnExit: false,
   transitionAppear: false,
 
@@ -17086,14 +18624,14 @@ var Collapse = function (_React$Component) {
   };
 
   Collapse.prototype.render = function render() {
-    var _props = this.props;
-    var onEnter = _props.onEnter;
-    var onEntering = _props.onEntering;
-    var onEntered = _props.onEntered;
-    var onExit = _props.onExit;
-    var onExiting = _props.onExiting;
-    var className = _props.className;
-    var props = (0, _objectWithoutProperties3['default'])(_props, ['onEnter', 'onEntering', 'onEntered', 'onExit', 'onExiting', 'className']);
+    var _props = this.props,
+        onEnter = _props.onEnter,
+        onEntering = _props.onEntering,
+        onEntered = _props.onEntered,
+        onExit = _props.onExit,
+        onExiting = _props.onExiting,
+        className = _props.className,
+        props = (0, _objectWithoutProperties3['default'])(_props, ['onEnter', 'onEntering', 'onEntered', 'onExit', 'onExiting', 'className']);
 
 
     delete props.dimension;
@@ -17132,7 +18670,7 @@ Collapse.defaultProps = defaultProps;
 
 exports['default'] = Collapse;
 module.exports = exports['default'];
-},{"./utils/capitalize":249,"./utils/createChainedFunction":250,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"dom-helpers/style":135,"react":456,"react-overlays/lib/Transition":261}],172:[function(require,module,exports){
+},{"./utils/capitalize":258,"./utils/createChainedFunction":259,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"dom-helpers/style":138,"prop-types":159,"react":463,"react-overlays/lib/Transition":270}],181:[function(require,module,exports){
 (function (process){
 'use strict';
 
@@ -17166,6 +18704,10 @@ var _react = require('react');
 
 var _react2 = _interopRequireDefault(_react);
 
+var _propTypes = require('prop-types');
+
+var _propTypes2 = _interopRequireDefault(_propTypes);
+
 var _warning = require('warning');
 
 var _warning2 = _interopRequireDefault(_warning);
@@ -17178,8 +18720,8 @@ var propTypes = {
   /**
    * Uses `controlId` from `<FormGroup>` if not explicitly specified.
    */
-  htmlFor: _react2['default'].PropTypes.string,
-  srOnly: _react2['default'].PropTypes.bool
+  htmlFor: _propTypes2['default'].string,
+  srOnly: _propTypes2['default'].bool
 };
 
 var defaultProps = {
@@ -17187,7 +18729,7 @@ var defaultProps = {
 };
 
 var contextTypes = {
-  $bs_formGroup: _react2['default'].PropTypes.object
+  $bs_formGroup: _propTypes2['default'].object
 };
 
 var ControlLabel = function (_React$Component) {
@@ -17202,18 +18744,16 @@ var ControlLabel = function (_React$Component) {
     var formGroup = this.context.$bs_formGroup;
     var controlId = formGroup && formGroup.controlId;
 
-    var _props = this.props;
-    var _props$htmlFor = _props.htmlFor;
-    var htmlFor = _props$htmlFor === undefined ? controlId : _props$htmlFor;
-    var srOnly = _props.srOnly;
-    var className = _props.className;
-    var props = (0, _objectWithoutProperties3['default'])(_props, ['htmlFor', 'srOnly', 'className']);
+    var _props = this.props,
+        _props$htmlFor = _props.htmlFor,
+        htmlFor = _props$htmlFor === undefined ? controlId : _props$htmlFor,
+        srOnly = _props.srOnly,
+        className = _props.className,
+        props = (0, _objectWithoutProperties3['default'])(_props, ['htmlFor', 'srOnly', 'className']);
 
-    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props);
-
-    var bsProps = _splitBsProps[0];
-    var elementProps = _splitBsProps[1];
-
+    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props),
+        bsProps = _splitBsProps[0],
+        elementProps = _splitBsProps[1];
 
     process.env.NODE_ENV !== 'production' ? (0, _warning2['default'])(controlId == null || htmlFor === controlId, '`controlId` is ignored on `<ControlLabel>` when `htmlFor` is specified.') : void 0;
 
@@ -17237,7 +18777,7 @@ ControlLabel.contextTypes = contextTypes;
 exports['default'] = (0, _bootstrapUtils.bsClass)('control-label', ControlLabel);
 module.exports = exports['default'];
 }).call(this,require('_process'))
-},{"./utils/bootstrapUtils":248,"_process":154,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":456,"warning":463}],173:[function(require,module,exports){
+},{"./utils/bootstrapUtils":257,"_process":155,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"prop-types":159,"react":463,"warning":470}],182:[function(require,module,exports){
 (function (process){
 'use strict';
 
@@ -17282,6 +18822,10 @@ var _keycode2 = _interopRequireDefault(_keycode);
 var _react = require('react');
 
 var _react2 = _interopRequireDefault(_react);
+
+var _propTypes = require('prop-types');
+
+var _propTypes2 = _interopRequireDefault(_propTypes);
 
 var _reactDom = require('react-dom');
 
@@ -17340,14 +18884,14 @@ var propTypes = {
   /**
    * The menu will open above the dropdown button, instead of below it.
    */
-  dropup: _react2['default'].PropTypes.bool,
+  dropup: _propTypes2['default'].bool,
 
   /**
    * An html id attribute, necessary for assistive technologies, such as screen readers.
    * @type {string|number}
    * @required
    */
-  id: (0, _isRequiredForA11y2['default'])(_react2['default'].PropTypes.oneOfType([_react2['default'].PropTypes.string, _react2['default'].PropTypes.number])),
+  id: (0, _isRequiredForA11y2['default'])(_propTypes2['default'].oneOfType([_propTypes2['default'].string, _propTypes2['default'].number])),
 
   componentClass: _elementType2['default'],
 
@@ -17360,35 +18904,35 @@ var propTypes = {
   /**
    * Whether or not component is disabled.
    */
-  disabled: _react2['default'].PropTypes.bool,
+  disabled: _propTypes2['default'].bool,
 
   /**
    * Align the menu to the right side of the Dropdown toggle
    */
-  pullRight: _react2['default'].PropTypes.bool,
+  pullRight: _propTypes2['default'].bool,
 
   /**
    * Whether or not the Dropdown is visible.
    *
    * @controllable onToggle
    */
-  open: _react2['default'].PropTypes.bool,
+  open: _propTypes2['default'].bool,
 
   /**
    * A callback fired when the Dropdown closes.
    */
-  onClose: _react2['default'].PropTypes.func,
+  onClose: _propTypes2['default'].func,
 
   /**
    * A callback fired when the Dropdown wishes to change visibility. Called with the requested
-   * `open` value.
+   * `open` value, the DOM event, and the source that fired it: `'click'`,`'keydown'`,`'rootClose'`, or `'select'`.
    *
    * ```js
-   * function(Boolean isOpen) {}
+   * function(Boolean isOpen, Object event, { String source }) {}
    * ```
    * @controllable open
    */
-  onToggle: _react2['default'].PropTypes.func,
+  onToggle: _propTypes2['default'].func,
 
   /**
    * A callback fired when a menu item is selected.
@@ -17397,13 +18941,27 @@ var propTypes = {
    * (eventKey: any, event: Object) => any
    * ```
    */
-  onSelect: _react2['default'].PropTypes.func,
+  onSelect: _propTypes2['default'].func,
 
   /**
    * If `'menuitem'`, causes the dropdown to behave like a menu item rather than
    * a menu button.
    */
-  role: _react2['default'].PropTypes.string
+  role: _propTypes2['default'].string,
+
+  /**
+   * Which event when fired outside the component will cause it to be closed
+   */
+  rootCloseEvent: _propTypes2['default'].oneOf(['click', 'mousedown']),
+
+  /**
+   * @private
+   */
+  onMouseEnter: _propTypes2['default'].func,
+  /**
+   * @private
+   */
+  onMouseLeave: _propTypes2['default'].func
 };
 
 var defaultProps = {
@@ -17456,12 +19014,12 @@ var Dropdown = function (_React$Component) {
     }
   };
 
-  Dropdown.prototype.handleClick = function handleClick() {
+  Dropdown.prototype.handleClick = function handleClick(event) {
     if (this.props.disabled) {
       return;
     }
 
-    this.toggleOpen('click');
+    this.toggleOpen(event, { source: 'click' });
   };
 
   Dropdown.prototype.handleKeyDown = function handleKeyDown(event) {
@@ -17472,7 +19030,7 @@ var Dropdown = function (_React$Component) {
     switch (event.keyCode) {
       case _keycode2['default'].codes.down:
         if (!this.props.open) {
-          this.toggleOpen('keydown');
+          this.toggleOpen(event, { source: 'keydown' });
         } else if (this.menu.focusNext) {
           this.menu.focusNext();
         }
@@ -17480,30 +19038,30 @@ var Dropdown = function (_React$Component) {
         break;
       case _keycode2['default'].codes.esc:
       case _keycode2['default'].codes.tab:
-        this.handleClose(event);
+        this.handleClose(event, { source: 'keydown' });
         break;
       default:
     }
   };
 
-  Dropdown.prototype.toggleOpen = function toggleOpen(eventType) {
+  Dropdown.prototype.toggleOpen = function toggleOpen(event, eventDetails) {
     var open = !this.props.open;
 
     if (open) {
-      this.lastOpenEventType = eventType;
+      this.lastOpenEventType = eventDetails.source;
     }
 
     if (this.props.onToggle) {
-      this.props.onToggle(open);
+      this.props.onToggle(open, event, eventDetails);
     }
   };
 
-  Dropdown.prototype.handleClose = function handleClose() {
+  Dropdown.prototype.handleClose = function handleClose(event, eventDetails) {
     if (!this.props.open) {
       return;
     }
 
-    this.toggleOpen(null);
+    this.toggleOpen(event, eventDetails);
   };
 
   Dropdown.prototype.focusNextOnOpen = function focusNextOnOpen() {
@@ -17550,10 +19108,11 @@ var Dropdown = function (_React$Component) {
   Dropdown.prototype.renderMenu = function renderMenu(child, _ref) {
     var _this3 = this;
 
-    var id = _ref.id;
-    var onClose = _ref.onClose;
-    var onSelect = _ref.onSelect;
-    var props = (0, _objectWithoutProperties3['default'])(_ref, ['id', 'onClose', 'onSelect']);
+    var id = _ref.id,
+        onClose = _ref.onClose,
+        onSelect = _ref.onSelect,
+        rootCloseEvent = _ref.rootCloseEvent,
+        props = (0, _objectWithoutProperties3['default'])(_ref, ['id', 'onClose', 'onSelect', 'rootCloseEvent']);
 
     var ref = function ref(c) {
       _this3.menu = c;
@@ -17570,7 +19129,10 @@ var Dropdown = function (_React$Component) {
       labelledBy: id,
       bsClass: (0, _bootstrapUtils.prefix)(props, 'menu'),
       onClose: (0, _createChainedFunction2['default'])(child.props.onClose, onClose, this.handleClose),
-      onSelect: (0, _createChainedFunction2['default'])(child.props.onSelect, onSelect, this.handleClose)
+      onSelect: (0, _createChainedFunction2['default'])(child.props.onSelect, onSelect, function (key, event) {
+        return _this3.handleClose(event, { source: 'select' });
+      }),
+      rootCloseEvent: rootCloseEvent
     }));
   };
 
@@ -17578,20 +19140,21 @@ var Dropdown = function (_React$Component) {
     var _classes,
         _this4 = this;
 
-    var _props = this.props;
-    var Component = _props.componentClass;
-    var id = _props.id;
-    var dropup = _props.dropup;
-    var disabled = _props.disabled;
-    var pullRight = _props.pullRight;
-    var open = _props.open;
-    var onClose = _props.onClose;
-    var onSelect = _props.onSelect;
-    var role = _props.role;
-    var bsClass = _props.bsClass;
-    var className = _props.className;
-    var children = _props.children;
-    var props = (0, _objectWithoutProperties3['default'])(_props, ['componentClass', 'id', 'dropup', 'disabled', 'pullRight', 'open', 'onClose', 'onSelect', 'role', 'bsClass', 'className', 'children']);
+    var _props = this.props,
+        Component = _props.componentClass,
+        id = _props.id,
+        dropup = _props.dropup,
+        disabled = _props.disabled,
+        pullRight = _props.pullRight,
+        open = _props.open,
+        onClose = _props.onClose,
+        onSelect = _props.onSelect,
+        role = _props.role,
+        bsClass = _props.bsClass,
+        className = _props.className,
+        rootCloseEvent = _props.rootCloseEvent,
+        children = _props.children,
+        props = (0, _objectWithoutProperties3['default'])(_props, ['componentClass', 'id', 'dropup', 'disabled', 'pullRight', 'open', 'onClose', 'onSelect', 'role', 'bsClass', 'className', 'rootCloseEvent', 'children']);
 
 
     delete props.onToggle;
@@ -17619,7 +19182,7 @@ var Dropdown = function (_React$Component) {
             });
           case MENU_ROLE:
             return _this4.renderMenu(child, {
-              id: id, open: open, pullRight: pullRight, bsClass: bsClass, onClose: onClose, onSelect: onSelect
+              id: id, open: open, pullRight: pullRight, bsClass: bsClass, onClose: onClose, onSelect: onSelect, rootCloseEvent: rootCloseEvent
             });
           default:
             return child;
@@ -17644,7 +19207,7 @@ UncontrolledDropdown.Menu = _DropdownMenu2['default'];
 exports['default'] = UncontrolledDropdown;
 module.exports = exports['default'];
 }).call(this,require('_process'))
-},{"./ButtonGroup":163,"./DropdownMenu":175,"./DropdownToggle":176,"./utils/PropTypes":244,"./utils/ValidComponentChildren":247,"./utils/bootstrapUtils":248,"./utils/createChainedFunction":250,"_process":154,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"dom-helpers/activeElement":116,"dom-helpers/query/contains":126,"keycode":151,"react":456,"react-dom":254,"react-prop-types/lib/all":269,"react-prop-types/lib/elementType":271,"react-prop-types/lib/isRequiredForA11y":272,"uncontrollable":458,"warning":463}],174:[function(require,module,exports){
+},{"./ButtonGroup":172,"./DropdownMenu":184,"./DropdownToggle":185,"./utils/PropTypes":253,"./utils/ValidComponentChildren":256,"./utils/bootstrapUtils":257,"./utils/createChainedFunction":259,"_process":155,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"dom-helpers/activeElement":118,"dom-helpers/query/contains":129,"keycode":151,"prop-types":159,"react":463,"react-dom":263,"react-prop-types/lib/all":278,"react-prop-types/lib/elementType":280,"react-prop-types/lib/isRequiredForA11y":281,"uncontrollable":465,"warning":470}],183:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -17673,6 +19236,10 @@ var _react = require('react');
 
 var _react2 = _interopRequireDefault(_react);
 
+var _propTypes = require('prop-types');
+
+var _propTypes2 = _interopRequireDefault(_propTypes);
+
 var _Dropdown = require('./Dropdown');
 
 var _Dropdown2 = _interopRequireDefault(_Dropdown);
@@ -17686,16 +19253,16 @@ function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'd
 var propTypes = (0, _extends3['default'])({}, _Dropdown2['default'].propTypes, {
 
   // Toggle props.
-  bsStyle: _react2['default'].PropTypes.string,
-  bsSize: _react2['default'].PropTypes.string,
-  title: _react2['default'].PropTypes.node.isRequired,
-  noCaret: _react2['default'].PropTypes.bool,
+  bsStyle: _propTypes2['default'].string,
+  bsSize: _propTypes2['default'].string,
+  title: _propTypes2['default'].node.isRequired,
+  noCaret: _propTypes2['default'].bool,
 
   // Override generated docs from <Dropdown>.
   /**
    * @private
    */
-  children: _react2['default'].PropTypes.node
+  children: _propTypes2['default'].node
 });
 
 var DropdownButton = function (_React$Component) {
@@ -17707,18 +19274,16 @@ var DropdownButton = function (_React$Component) {
   }
 
   DropdownButton.prototype.render = function render() {
-    var _props = this.props;
-    var bsSize = _props.bsSize;
-    var bsStyle = _props.bsStyle;
-    var title = _props.title;
-    var children = _props.children;
-    var props = (0, _objectWithoutProperties3['default'])(_props, ['bsSize', 'bsStyle', 'title', 'children']);
+    var _props = this.props,
+        bsSize = _props.bsSize,
+        bsStyle = _props.bsStyle,
+        title = _props.title,
+        children = _props.children,
+        props = (0, _objectWithoutProperties3['default'])(_props, ['bsSize', 'bsStyle', 'title', 'children']);
 
-    var _splitComponentProps = (0, _splitComponentProps3['default'])(props, _Dropdown2['default'].ControlledComponent);
-
-    var dropdownProps = _splitComponentProps[0];
-    var toggleProps = _splitComponentProps[1];
-
+    var _splitComponentProps = (0, _splitComponentProps3['default'])(props, _Dropdown2['default'].ControlledComponent),
+        dropdownProps = _splitComponentProps[0],
+        toggleProps = _splitComponentProps[1];
 
     return _react2['default'].createElement(
       _Dropdown2['default'],
@@ -17749,7 +19314,7 @@ DropdownButton.propTypes = propTypes;
 
 exports['default'] = DropdownButton;
 module.exports = exports['default'];
-},{"./Dropdown":173,"./utils/splitComponentProps":253,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"react":456}],175:[function(require,module,exports){
+},{"./Dropdown":182,"./utils/splitComponentProps":262,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"prop-types":159,"react":463}],184:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -17790,6 +19355,10 @@ var _react = require('react');
 
 var _react2 = _interopRequireDefault(_react);
 
+var _propTypes = require('prop-types');
+
+var _propTypes2 = _interopRequireDefault(_propTypes);
+
 var _reactDom = require('react-dom');
 
 var _reactDom2 = _interopRequireDefault(_reactDom);
@@ -17811,11 +19380,12 @@ var _ValidComponentChildren2 = _interopRequireDefault(_ValidComponentChildren);
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'default': obj }; }
 
 var propTypes = {
-  open: _react2['default'].PropTypes.bool,
-  pullRight: _react2['default'].PropTypes.bool,
-  onClose: _react2['default'].PropTypes.func,
-  labelledBy: _react2['default'].PropTypes.oneOfType([_react2['default'].PropTypes.string, _react2['default'].PropTypes.number]),
-  onSelect: _react2['default'].PropTypes.func
+  open: _propTypes2['default'].bool,
+  pullRight: _propTypes2['default'].bool,
+  onClose: _propTypes2['default'].func,
+  labelledBy: _propTypes2['default'].oneOfType([_propTypes2['default'].string, _propTypes2['default'].number]),
+  onSelect: _propTypes2['default'].func,
+  rootCloseEvent: _propTypes2['default'].oneOf(['click', 'mousedown'])
 };
 
 var defaultProps = {
@@ -17831,9 +19401,14 @@ var DropdownMenu = function (_React$Component) {
 
     var _this = (0, _possibleConstructorReturn3['default'])(this, _React$Component.call(this, props));
 
+    _this.handleRootClose = _this.handleRootClose.bind(_this);
     _this.handleKeyDown = _this.handleKeyDown.bind(_this);
     return _this;
   }
+
+  DropdownMenu.prototype.handleRootClose = function handleRootClose(event) {
+    this.props.onClose(event, { source: 'rootClose' });
+  };
 
   DropdownMenu.prototype.handleKeyDown = function handleKeyDown(event) {
     switch (event.keyCode) {
@@ -17847,7 +19422,7 @@ var DropdownMenu = function (_React$Component) {
         break;
       case _keycode2['default'].codes.esc:
       case _keycode2['default'].codes.tab:
-        this.props.onClose(event);
+        this.props.onClose(event, { source: 'keydown' });
         break;
       default:
     }
@@ -17870,10 +19445,9 @@ var DropdownMenu = function (_React$Component) {
   };
 
   DropdownMenu.prototype.focusNext = function focusNext() {
-    var _getItemsAndActiveInd = this.getItemsAndActiveIndex();
-
-    var items = _getItemsAndActiveInd.items;
-    var activeIndex = _getItemsAndActiveInd.activeIndex;
+    var _getItemsAndActiveInd = this.getItemsAndActiveIndex(),
+        items = _getItemsAndActiveInd.items,
+        activeIndex = _getItemsAndActiveInd.activeIndex;
 
     if (items.length === 0) {
       return;
@@ -17884,10 +19458,9 @@ var DropdownMenu = function (_React$Component) {
   };
 
   DropdownMenu.prototype.focusPrevious = function focusPrevious() {
-    var _getItemsAndActiveInd2 = this.getItemsAndActiveIndex();
-
-    var items = _getItemsAndActiveInd2.items;
-    var activeIndex = _getItemsAndActiveInd2.activeIndex;
+    var _getItemsAndActiveInd2 = this.getItemsAndActiveIndex(),
+        items = _getItemsAndActiveInd2.items,
+        activeIndex = _getItemsAndActiveInd2.activeIndex;
 
     if (items.length === 0) {
       return;
@@ -17901,21 +19474,19 @@ var DropdownMenu = function (_React$Component) {
     var _extends2,
         _this2 = this;
 
-    var _props = this.props;
-    var open = _props.open;
-    var pullRight = _props.pullRight;
-    var onClose = _props.onClose;
-    var labelledBy = _props.labelledBy;
-    var onSelect = _props.onSelect;
-    var className = _props.className;
-    var children = _props.children;
-    var props = (0, _objectWithoutProperties3['default'])(_props, ['open', 'pullRight', 'onClose', 'labelledBy', 'onSelect', 'className', 'children']);
+    var _props = this.props,
+        open = _props.open,
+        pullRight = _props.pullRight,
+        labelledBy = _props.labelledBy,
+        onSelect = _props.onSelect,
+        className = _props.className,
+        rootCloseEvent = _props.rootCloseEvent,
+        children = _props.children,
+        props = (0, _objectWithoutProperties3['default'])(_props, ['open', 'pullRight', 'labelledBy', 'onSelect', 'className', 'rootCloseEvent', 'children']);
 
-    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props);
-
-    var bsProps = _splitBsProps[0];
-    var elementProps = _splitBsProps[1];
-
+    var _splitBsPropsAndOmit = (0, _bootstrapUtils.splitBsPropsAndOmit)(props, ['onClose']),
+        bsProps = _splitBsPropsAndOmit[0],
+        elementProps = _splitBsPropsAndOmit[1];
 
     var classes = (0, _extends4['default'])({}, (0, _bootstrapUtils.getClassSet)(bsProps), (_extends2 = {}, _extends2[(0, _bootstrapUtils.prefix)(bsProps, 'right')] = pullRight, _extends2));
 
@@ -17923,7 +19494,8 @@ var DropdownMenu = function (_React$Component) {
       _RootCloseWrapper2['default'],
       {
         disabled: !open,
-        onRootClose: onClose
+        onRootClose: this.handleRootClose,
+        event: rootCloseEvent
       },
       _react2['default'].createElement(
         'ul',
@@ -17950,7 +19522,7 @@ DropdownMenu.defaultProps = defaultProps;
 
 exports['default'] = (0, _bootstrapUtils.bsClass)('dropdown-menu', DropdownMenu);
 module.exports = exports['default'];
-},{"./utils/ValidComponentChildren":247,"./utils/bootstrapUtils":248,"./utils/createChainedFunction":250,"babel-runtime/core-js/array/from":2,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"keycode":151,"react":456,"react-dom":254,"react-overlays/lib/RootCloseWrapper":260}],176:[function(require,module,exports){
+},{"./utils/ValidComponentChildren":256,"./utils/bootstrapUtils":257,"./utils/createChainedFunction":259,"babel-runtime/core-js/array/from":2,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"keycode":151,"prop-types":159,"react":463,"react-dom":263,"react-overlays/lib/RootCloseWrapper":269}],185:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -17979,6 +19551,10 @@ var _react = require('react');
 
 var _react2 = _interopRequireDefault(_react);
 
+var _propTypes = require('prop-types');
+
+var _propTypes2 = _interopRequireDefault(_propTypes);
+
 var _classnames = require('classnames');
 
 var _classnames2 = _interopRequireDefault(_classnames);
@@ -17996,10 +19572,10 @@ var _bootstrapUtils = require('./utils/bootstrapUtils');
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'default': obj }; }
 
 var propTypes = {
-  noCaret: _react2['default'].PropTypes.bool,
-  open: _react2['default'].PropTypes.bool,
-  title: _react2['default'].PropTypes.string,
-  useAnchor: _react2['default'].PropTypes.bool
+  noCaret: _propTypes2['default'].bool,
+  open: _propTypes2['default'].bool,
+  title: _propTypes2['default'].string,
+  useAnchor: _propTypes2['default'].bool
 };
 
 var defaultProps = {
@@ -18017,14 +19593,14 @@ var DropdownToggle = function (_React$Component) {
   }
 
   DropdownToggle.prototype.render = function render() {
-    var _props = this.props;
-    var noCaret = _props.noCaret;
-    var open = _props.open;
-    var useAnchor = _props.useAnchor;
-    var bsClass = _props.bsClass;
-    var className = _props.className;
-    var children = _props.children;
-    var props = (0, _objectWithoutProperties3['default'])(_props, ['noCaret', 'open', 'useAnchor', 'bsClass', 'className', 'children']);
+    var _props = this.props,
+        noCaret = _props.noCaret,
+        open = _props.open,
+        useAnchor = _props.useAnchor,
+        bsClass = _props.bsClass,
+        className = _props.className,
+        children = _props.children,
+        props = (0, _objectWithoutProperties3['default'])(_props, ['noCaret', 'open', 'useAnchor', 'bsClass', 'className', 'children']);
 
 
     delete props.bsRole;
@@ -18059,7 +19635,7 @@ DropdownToggle.defaultProps = defaultProps;
 
 exports['default'] = (0, _bootstrapUtils.bsClass)('dropdown-toggle', DropdownToggle);
 module.exports = exports['default'];
-},{"./Button":162,"./SafeAnchor":231,"./utils/bootstrapUtils":248,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":456}],177:[function(require,module,exports){
+},{"./Button":171,"./SafeAnchor":240,"./utils/bootstrapUtils":257,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"prop-types":159,"react":463}],186:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -18088,6 +19664,10 @@ var _react = require('react');
 
 var _react2 = _interopRequireDefault(_react);
 
+var _propTypes = require('prop-types');
+
+var _propTypes2 = _interopRequireDefault(_propTypes);
+
 var _Transition = require('react-overlays/lib/Transition');
 
 var _Transition2 = _interopRequireDefault(_Transition);
@@ -18098,55 +19678,61 @@ var propTypes = {
   /**
    * Show the component; triggers the fade in or fade out animation
    */
-  'in': _react2['default'].PropTypes.bool,
+  'in': _propTypes2['default'].bool,
+
+  /**
+   * Wait until the first "enter" transition to mount the component (add it to the DOM)
+   */
+  mountOnEnter: _propTypes2['default'].bool,
 
   /**
    * Unmount the component (remove it from the DOM) when it is faded out
    */
-  unmountOnExit: _react2['default'].PropTypes.bool,
+  unmountOnExit: _propTypes2['default'].bool,
 
   /**
    * Run the fade in animation when the component mounts, if it is initially
    * shown
    */
-  transitionAppear: _react2['default'].PropTypes.bool,
+  transitionAppear: _propTypes2['default'].bool,
 
   /**
    * Duration of the fade animation in milliseconds, to ensure that finishing
    * callbacks are fired even if the original browser transition end events are
    * canceled
    */
-  timeout: _react2['default'].PropTypes.number,
+  timeout: _propTypes2['default'].number,
 
   /**
    * Callback fired before the component fades in
    */
-  onEnter: _react2['default'].PropTypes.func,
+  onEnter: _propTypes2['default'].func,
   /**
    * Callback fired after the component starts to fade in
    */
-  onEntering: _react2['default'].PropTypes.func,
+  onEntering: _propTypes2['default'].func,
   /**
    * Callback fired after the has component faded in
    */
-  onEntered: _react2['default'].PropTypes.func,
+  onEntered: _propTypes2['default'].func,
   /**
    * Callback fired before the component fades out
    */
-  onExit: _react2['default'].PropTypes.func,
+  onExit: _propTypes2['default'].func,
   /**
    * Callback fired after the component starts to fade out
    */
-  onExiting: _react2['default'].PropTypes.func,
+  onExiting: _propTypes2['default'].func,
   /**
    * Callback fired after the component has faded out
    */
-  onExited: _react2['default'].PropTypes.func
+  onExited: _propTypes2['default'].func
 };
 
 var defaultProps = {
   'in': false,
   timeout: 300,
+  mountOnEnter: false,
   unmountOnExit: false,
   transitionAppear: false
 };
@@ -18175,7 +19761,7 @@ Fade.defaultProps = defaultProps;
 
 exports['default'] = Fade;
 module.exports = exports['default'];
-},{"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":456,"react-overlays/lib/Transition":261}],178:[function(require,module,exports){
+},{"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"prop-types":159,"react":463,"react-overlays/lib/Transition":270}],187:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -18208,6 +19794,10 @@ var _react = require('react');
 
 var _react2 = _interopRequireDefault(_react);
 
+var _propTypes = require('prop-types');
+
+var _propTypes2 = _interopRequireDefault(_propTypes);
+
 var _elementType = require('react-prop-types/lib/elementType');
 
 var _elementType2 = _interopRequireDefault(_elementType);
@@ -18217,8 +19807,8 @@ var _bootstrapUtils = require('./utils/bootstrapUtils');
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'default': obj }; }
 
 var propTypes = {
-  horizontal: _react2['default'].PropTypes.bool,
-  inline: _react2['default'].PropTypes.bool,
+  horizontal: _propTypes2['default'].bool,
+  inline: _propTypes2['default'].bool,
   componentClass: _elementType2['default']
 };
 
@@ -18237,18 +19827,16 @@ var Form = function (_React$Component) {
   }
 
   Form.prototype.render = function render() {
-    var _props = this.props;
-    var horizontal = _props.horizontal;
-    var inline = _props.inline;
-    var Component = _props.componentClass;
-    var className = _props.className;
-    var props = (0, _objectWithoutProperties3['default'])(_props, ['horizontal', 'inline', 'componentClass', 'className']);
+    var _props = this.props,
+        horizontal = _props.horizontal,
+        inline = _props.inline,
+        Component = _props.componentClass,
+        className = _props.className,
+        props = (0, _objectWithoutProperties3['default'])(_props, ['horizontal', 'inline', 'componentClass', 'className']);
 
-    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props);
-
-    var bsProps = _splitBsProps[0];
-    var elementProps = _splitBsProps[1];
-
+    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props),
+        bsProps = _splitBsProps[0],
+        elementProps = _splitBsProps[1];
 
     var classes = [];
     if (horizontal) {
@@ -18271,7 +19859,7 @@ Form.defaultProps = defaultProps;
 
 exports['default'] = (0, _bootstrapUtils.bsClass)('form', Form);
 module.exports = exports['default'];
-},{"./utils/bootstrapUtils":248,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":456,"react-prop-types/lib/elementType":271}],179:[function(require,module,exports){
+},{"./utils/bootstrapUtils":257,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"prop-types":159,"react":463,"react-prop-types/lib/elementType":280}],188:[function(require,module,exports){
 (function (process){
 'use strict';
 
@@ -18305,6 +19893,10 @@ var _react = require('react');
 
 var _react2 = _interopRequireDefault(_react);
 
+var _propTypes = require('prop-types');
+
+var _propTypes2 = _interopRequireDefault(_propTypes);
+
 var _elementType = require('react-prop-types/lib/elementType');
 
 var _elementType2 = _interopRequireDefault(_elementType);
@@ -18323,6 +19915,8 @@ var _FormControlStatic2 = _interopRequireDefault(_FormControlStatic);
 
 var _bootstrapUtils = require('./utils/bootstrapUtils');
 
+var _StyleConfig = require('./utils/StyleConfig');
+
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'default': obj }; }
 
 var propTypes = {
@@ -18330,11 +19924,19 @@ var propTypes = {
   /**
    * Only relevant if `componentClass` is `'input'`.
    */
-  type: _react2['default'].PropTypes.string,
+  type: _propTypes2['default'].string,
   /**
    * Uses `controlId` from `<FormGroup>` if not explicitly specified.
    */
-  id: _react2['default'].PropTypes.string
+  id: _propTypes2['default'].string,
+  /**
+   * Attaches a ref to the `<input>` element. Only functions can be used here.
+   *
+   * ```js
+   * <FormControl inputRef={ref => { this.input = ref; }} />
+   * ```
+   */
+  inputRef: _propTypes2['default'].func
 };
 
 var defaultProps = {
@@ -18342,7 +19944,7 @@ var defaultProps = {
 };
 
 var contextTypes = {
-  $bs_formGroup: _react2['default'].PropTypes.object
+  $bs_formGroup: _propTypes2['default'].object
 };
 
 var FormControl = function (_React$Component) {
@@ -18357,19 +19959,19 @@ var FormControl = function (_React$Component) {
     var formGroup = this.context.$bs_formGroup;
     var controlId = formGroup && formGroup.controlId;
 
-    var _props = this.props;
-    var Component = _props.componentClass;
-    var type = _props.type;
-    var _props$id = _props.id;
-    var id = _props$id === undefined ? controlId : _props$id;
-    var className = _props.className;
-    var props = (0, _objectWithoutProperties3['default'])(_props, ['componentClass', 'type', 'id', 'className']);
+    var _props = this.props,
+        Component = _props.componentClass,
+        type = _props.type,
+        _props$id = _props.id,
+        id = _props$id === undefined ? controlId : _props$id,
+        inputRef = _props.inputRef,
+        className = _props.className,
+        bsSize = _props.bsSize,
+        props = (0, _objectWithoutProperties3['default'])(_props, ['componentClass', 'type', 'id', 'inputRef', 'className', 'bsSize']);
 
-    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props);
-
-    var bsProps = _splitBsProps[0];
-    var elementProps = _splitBsProps[1];
-
+    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props),
+        bsProps = _splitBsProps[0],
+        elementProps = _splitBsProps[1];
 
     process.env.NODE_ENV !== 'production' ? (0, _warning2['default'])(controlId == null || id === controlId, '`controlId` is ignored on `<FormControl>` when `id` is specified.') : void 0;
 
@@ -18379,9 +19981,17 @@ var FormControl = function (_React$Component) {
       classes = (0, _bootstrapUtils.getClassSet)(bsProps);
     }
 
+    // If user provides a size, make sure to append it to classes as input-
+    // e.g. if bsSize is small, it will append input-sm
+    if (bsSize) {
+      var size = _StyleConfig.SIZE_MAP[bsSize] || bsSize;
+      classes[(0, _bootstrapUtils.prefix)({ bsClass: 'input' }, size)] = true;
+    }
+
     return _react2['default'].createElement(Component, (0, _extends3['default'])({}, elementProps, {
       type: type,
       id: id,
+      ref: inputRef,
       className: (0, _classnames2['default'])(className, classes)
     }));
   };
@@ -18396,10 +20006,10 @@ FormControl.contextTypes = contextTypes;
 FormControl.Feedback = _FormControlFeedback2['default'];
 FormControl.Static = _FormControlStatic2['default'];
 
-exports['default'] = (0, _bootstrapUtils.bsClass)('form-control', FormControl);
+exports['default'] = (0, _bootstrapUtils.bsClass)('form-control', (0, _bootstrapUtils.bsSizes)([_StyleConfig.Size.SMALL, _StyleConfig.Size.LARGE], FormControl));
 module.exports = exports['default'];
 }).call(this,require('_process'))
-},{"./FormControlFeedback":180,"./FormControlStatic":181,"./utils/bootstrapUtils":248,"_process":154,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":456,"react-prop-types/lib/elementType":271,"warning":463}],180:[function(require,module,exports){
+},{"./FormControlFeedback":189,"./FormControlStatic":190,"./utils/StyleConfig":254,"./utils/bootstrapUtils":257,"_process":155,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"prop-types":159,"react":463,"react-prop-types/lib/elementType":280,"warning":470}],189:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -18432,6 +20042,10 @@ var _react = require('react');
 
 var _react2 = _interopRequireDefault(_react);
 
+var _propTypes = require('prop-types');
+
+var _propTypes2 = _interopRequireDefault(_propTypes);
+
 var _Glyphicon = require('./Glyphicon');
 
 var _Glyphicon2 = _interopRequireDefault(_Glyphicon);
@@ -18445,7 +20059,7 @@ var defaultProps = {
 };
 
 var contextTypes = {
-  $bs_formGroup: _react2['default'].PropTypes.object
+  $bs_formGroup: _propTypes2['default'].object
 };
 
 var FormControlFeedback = function (_React$Component) {
@@ -18482,16 +20096,14 @@ var FormControlFeedback = function (_React$Component) {
   };
 
   FormControlFeedback.prototype.render = function render() {
-    var _props = this.props;
-    var className = _props.className;
-    var children = _props.children;
-    var props = (0, _objectWithoutProperties3['default'])(_props, ['className', 'children']);
+    var _props = this.props,
+        className = _props.className,
+        children = _props.children,
+        props = (0, _objectWithoutProperties3['default'])(_props, ['className', 'children']);
 
-    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props);
-
-    var bsProps = _splitBsProps[0];
-    var elementProps = _splitBsProps[1];
-
+    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props),
+        bsProps = _splitBsProps[0],
+        elementProps = _splitBsProps[1];
 
     var classes = (0, _bootstrapUtils.getClassSet)(bsProps);
 
@@ -18513,7 +20125,7 @@ FormControlFeedback.contextTypes = contextTypes;
 
 exports['default'] = (0, _bootstrapUtils.bsClass)('form-control-feedback', FormControlFeedback);
 module.exports = exports['default'];
-},{"./Glyphicon":183,"./utils/bootstrapUtils":248,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":456}],181:[function(require,module,exports){
+},{"./Glyphicon":192,"./utils/bootstrapUtils":257,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"prop-types":159,"react":463}],190:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -18571,16 +20183,14 @@ var FormControlStatic = function (_React$Component) {
   }
 
   FormControlStatic.prototype.render = function render() {
-    var _props = this.props;
-    var Component = _props.componentClass;
-    var className = _props.className;
-    var props = (0, _objectWithoutProperties3['default'])(_props, ['componentClass', 'className']);
+    var _props = this.props,
+        Component = _props.componentClass,
+        className = _props.className,
+        props = (0, _objectWithoutProperties3['default'])(_props, ['componentClass', 'className']);
 
-    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props);
-
-    var bsProps = _splitBsProps[0];
-    var elementProps = _splitBsProps[1];
-
+    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props),
+        bsProps = _splitBsProps[0],
+        elementProps = _splitBsProps[1];
 
     var classes = (0, _bootstrapUtils.getClassSet)(bsProps);
 
@@ -18597,7 +20207,7 @@ FormControlStatic.defaultProps = defaultProps;
 
 exports['default'] = (0, _bootstrapUtils.bsClass)('form-control-static', FormControlStatic);
 module.exports = exports['default'];
-},{"./utils/bootstrapUtils":248,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":456,"react-prop-types/lib/elementType":271}],182:[function(require,module,exports){
+},{"./utils/bootstrapUtils":257,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":463,"react-prop-types/lib/elementType":280}],191:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -18630,6 +20240,10 @@ var _react = require('react');
 
 var _react2 = _interopRequireDefault(_react);
 
+var _propTypes = require('prop-types');
+
+var _propTypes2 = _interopRequireDefault(_propTypes);
+
 var _bootstrapUtils = require('./utils/bootstrapUtils');
 
 var _StyleConfig = require('./utils/StyleConfig');
@@ -18644,12 +20258,12 @@ var propTypes = {
   /**
    * Sets `id` on `<FormControl>` and `htmlFor` on `<FormGroup.Label>`.
    */
-  controlId: _react2['default'].PropTypes.string,
-  validationState: _react2['default'].PropTypes.oneOf(['success', 'warning', 'error'])
+  controlId: _propTypes2['default'].string,
+  validationState: _propTypes2['default'].oneOf(['success', 'warning', 'error', null])
 };
 
 var childContextTypes = {
-  $bs_formGroup: _react2['default'].PropTypes.object.isRequired
+  $bs_formGroup: _propTypes2['default'].object.isRequired
 };
 
 var FormGroup = function (_React$Component) {
@@ -18661,9 +20275,9 @@ var FormGroup = function (_React$Component) {
   }
 
   FormGroup.prototype.getChildContext = function getChildContext() {
-    var _props = this.props;
-    var controlId = _props.controlId;
-    var validationState = _props.validationState;
+    var _props = this.props,
+        controlId = _props.controlId,
+        validationState = _props.validationState;
 
 
     return {
@@ -18683,17 +20297,15 @@ var FormGroup = function (_React$Component) {
   };
 
   FormGroup.prototype.render = function render() {
-    var _props2 = this.props;
-    var validationState = _props2.validationState;
-    var className = _props2.className;
-    var children = _props2.children;
-    var props = (0, _objectWithoutProperties3['default'])(_props2, ['validationState', 'className', 'children']);
+    var _props2 = this.props,
+        validationState = _props2.validationState,
+        className = _props2.className,
+        children = _props2.children,
+        props = (0, _objectWithoutProperties3['default'])(_props2, ['validationState', 'className', 'children']);
 
-    var _splitBsPropsAndOmit = (0, _bootstrapUtils.splitBsPropsAndOmit)(props, ['controlId']);
-
-    var bsProps = _splitBsPropsAndOmit[0];
-    var elementProps = _splitBsPropsAndOmit[1];
-
+    var _splitBsPropsAndOmit = (0, _bootstrapUtils.splitBsPropsAndOmit)(props, ['controlId']),
+        bsProps = _splitBsPropsAndOmit[0],
+        elementProps = _splitBsPropsAndOmit[1];
 
     var classes = (0, _extends3['default'])({}, (0, _bootstrapUtils.getClassSet)(bsProps), {
       'has-feedback': this.hasFeedback(children)
@@ -18719,7 +20331,7 @@ FormGroup.childContextTypes = childContextTypes;
 
 exports['default'] = (0, _bootstrapUtils.bsClass)('form-group', (0, _bootstrapUtils.bsSizes)([_StyleConfig.Size.LARGE, _StyleConfig.Size.SMALL], FormGroup));
 module.exports = exports['default'];
-},{"./utils/StyleConfig":245,"./utils/ValidComponentChildren":247,"./utils/bootstrapUtils":248,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":456}],183:[function(require,module,exports){
+},{"./utils/StyleConfig":254,"./utils/ValidComponentChildren":256,"./utils/bootstrapUtils":257,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"prop-types":159,"react":463}],192:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -18752,15 +20364,19 @@ var _react = require('react');
 
 var _react2 = _interopRequireDefault(_react);
 
+var _propTypes = require('prop-types');
+
+var _propTypes2 = _interopRequireDefault(_propTypes);
+
 var _bootstrapUtils = require('./utils/bootstrapUtils');
 
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'default': obj }; }
 
 var propTypes = {
   /**
-   * An icon name. See e.g. http://getbootstrap.com/components/#glyphicons
+   * An icon name without "glyphicon-" prefix. See e.g. http://getbootstrap.com/components/#glyphicons
    */
-  glyph: _react2['default'].PropTypes.string.isRequired
+  glyph: _propTypes2['default'].string.isRequired
 };
 
 var Glyphicon = function (_React$Component) {
@@ -18774,16 +20390,14 @@ var Glyphicon = function (_React$Component) {
   Glyphicon.prototype.render = function render() {
     var _extends2;
 
-    var _props = this.props;
-    var glyph = _props.glyph;
-    var className = _props.className;
-    var props = (0, _objectWithoutProperties3['default'])(_props, ['glyph', 'className']);
+    var _props = this.props,
+        glyph = _props.glyph,
+        className = _props.className,
+        props = (0, _objectWithoutProperties3['default'])(_props, ['glyph', 'className']);
 
-    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props);
-
-    var bsProps = _splitBsProps[0];
-    var elementProps = _splitBsProps[1];
-
+    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props),
+        bsProps = _splitBsProps[0],
+        elementProps = _splitBsProps[1];
 
     var classes = (0, _extends4['default'])({}, (0, _bootstrapUtils.getClassSet)(bsProps), (_extends2 = {}, _extends2[(0, _bootstrapUtils.prefix)(bsProps, glyph)] = true, _extends2));
 
@@ -18799,7 +20413,7 @@ Glyphicon.propTypes = propTypes;
 
 exports['default'] = (0, _bootstrapUtils.bsClass)('glyphicon', Glyphicon);
 module.exports = exports['default'];
-},{"./utils/bootstrapUtils":248,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":456}],184:[function(require,module,exports){
+},{"./utils/bootstrapUtils":257,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"prop-types":159,"react":463}],193:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -18832,6 +20446,10 @@ var _react = require('react');
 
 var _react2 = _interopRequireDefault(_react);
 
+var _propTypes = require('prop-types');
+
+var _propTypes2 = _interopRequireDefault(_propTypes);
+
 var _elementType = require('react-prop-types/lib/elementType');
 
 var _elementType2 = _interopRequireDefault(_elementType);
@@ -18846,7 +20464,7 @@ var propTypes = {
    *
    * Adds `container-fluid` class.
    */
-  fluid: _react2['default'].PropTypes.bool,
+  fluid: _propTypes2['default'].bool,
   /**
    * You can use a custom element for this component
    */
@@ -18867,17 +20485,15 @@ var Grid = function (_React$Component) {
   }
 
   Grid.prototype.render = function render() {
-    var _props = this.props;
-    var fluid = _props.fluid;
-    var Component = _props.componentClass;
-    var className = _props.className;
-    var props = (0, _objectWithoutProperties3['default'])(_props, ['fluid', 'componentClass', 'className']);
+    var _props = this.props,
+        fluid = _props.fluid,
+        Component = _props.componentClass,
+        className = _props.className,
+        props = (0, _objectWithoutProperties3['default'])(_props, ['fluid', 'componentClass', 'className']);
 
-    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props);
-
-    var bsProps = _splitBsProps[0];
-    var elementProps = _splitBsProps[1];
-
+    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props),
+        bsProps = _splitBsProps[0],
+        elementProps = _splitBsProps[1];
 
     var classes = (0, _bootstrapUtils.prefix)(bsProps, fluid && 'fluid');
 
@@ -18894,7 +20510,7 @@ Grid.defaultProps = defaultProps;
 
 exports['default'] = (0, _bootstrapUtils.bsClass)('container', Grid);
 module.exports = exports['default'];
-},{"./utils/bootstrapUtils":248,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":456,"react-prop-types/lib/elementType":271}],185:[function(require,module,exports){
+},{"./utils/bootstrapUtils":257,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"prop-types":159,"react":463,"react-prop-types/lib/elementType":280}],194:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -18940,15 +20556,13 @@ var HelpBlock = function (_React$Component) {
   }
 
   HelpBlock.prototype.render = function render() {
-    var _props = this.props;
-    var className = _props.className;
-    var props = (0, _objectWithoutProperties3['default'])(_props, ['className']);
+    var _props = this.props,
+        className = _props.className,
+        props = (0, _objectWithoutProperties3['default'])(_props, ['className']);
 
-    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props);
-
-    var bsProps = _splitBsProps[0];
-    var elementProps = _splitBsProps[1];
-
+    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props),
+        bsProps = _splitBsProps[0],
+        elementProps = _splitBsProps[1];
 
     var classes = (0, _bootstrapUtils.getClassSet)(bsProps);
 
@@ -18962,7 +20576,7 @@ var HelpBlock = function (_React$Component) {
 
 exports['default'] = (0, _bootstrapUtils.bsClass)('help-block', HelpBlock);
 module.exports = exports['default'];
-},{"./utils/bootstrapUtils":248,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":456}],186:[function(require,module,exports){
+},{"./utils/bootstrapUtils":257,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":463}],195:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -18995,6 +20609,10 @@ var _react = require('react');
 
 var _react2 = _interopRequireDefault(_react);
 
+var _propTypes = require('prop-types');
+
+var _propTypes2 = _interopRequireDefault(_propTypes);
+
 var _bootstrapUtils = require('./utils/bootstrapUtils');
 
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'default': obj }; }
@@ -19003,22 +20621,22 @@ var propTypes = {
   /**
    * Sets image as responsive image
    */
-  responsive: _react2['default'].PropTypes.bool,
+  responsive: _propTypes2['default'].bool,
 
   /**
    * Sets image shape as rounded
    */
-  rounded: _react2['default'].PropTypes.bool,
+  rounded: _propTypes2['default'].bool,
 
   /**
    * Sets image shape as circle
    */
-  circle: _react2['default'].PropTypes.bool,
+  circle: _propTypes2['default'].bool,
 
   /**
    * Sets image shape as thumbnail
    */
-  thumbnail: _react2['default'].PropTypes.bool
+  thumbnail: _propTypes2['default'].bool
 };
 
 var defaultProps = {
@@ -19039,19 +20657,17 @@ var Image = function (_React$Component) {
   Image.prototype.render = function render() {
     var _classes;
 
-    var _props = this.props;
-    var responsive = _props.responsive;
-    var rounded = _props.rounded;
-    var circle = _props.circle;
-    var thumbnail = _props.thumbnail;
-    var className = _props.className;
-    var props = (0, _objectWithoutProperties3['default'])(_props, ['responsive', 'rounded', 'circle', 'thumbnail', 'className']);
+    var _props = this.props,
+        responsive = _props.responsive,
+        rounded = _props.rounded,
+        circle = _props.circle,
+        thumbnail = _props.thumbnail,
+        className = _props.className,
+        props = (0, _objectWithoutProperties3['default'])(_props, ['responsive', 'rounded', 'circle', 'thumbnail', 'className']);
 
-    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props);
-
-    var bsProps = _splitBsProps[0];
-    var elementProps = _splitBsProps[1];
-
+    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props),
+        bsProps = _splitBsProps[0],
+        elementProps = _splitBsProps[1];
 
     var classes = (_classes = {}, _classes[(0, _bootstrapUtils.prefix)(bsProps, 'responsive')] = responsive, _classes[(0, _bootstrapUtils.prefix)(bsProps, 'rounded')] = rounded, _classes[(0, _bootstrapUtils.prefix)(bsProps, 'circle')] = circle, _classes[(0, _bootstrapUtils.prefix)(bsProps, 'thumbnail')] = thumbnail, _classes);
 
@@ -19068,7 +20684,7 @@ Image.defaultProps = defaultProps;
 
 exports['default'] = (0, _bootstrapUtils.bsClass)('img', Image);
 module.exports = exports['default'];
-},{"./utils/bootstrapUtils":248,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":456}],187:[function(require,module,exports){
+},{"./utils/bootstrapUtils":257,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"prop-types":159,"react":463}],196:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -19124,15 +20740,13 @@ var InputGroup = function (_React$Component) {
   }
 
   InputGroup.prototype.render = function render() {
-    var _props = this.props;
-    var className = _props.className;
-    var props = (0, _objectWithoutProperties3['default'])(_props, ['className']);
+    var _props = this.props,
+        className = _props.className,
+        props = (0, _objectWithoutProperties3['default'])(_props, ['className']);
 
-    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props);
-
-    var bsProps = _splitBsProps[0];
-    var elementProps = _splitBsProps[1];
-
+    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props),
+        bsProps = _splitBsProps[0],
+        elementProps = _splitBsProps[1];
 
     var classes = (0, _bootstrapUtils.getClassSet)(bsProps);
 
@@ -19149,7 +20763,7 @@ InputGroup.Button = _InputGroupButton2['default'];
 
 exports['default'] = (0, _bootstrapUtils.bsClass)('input-group', (0, _bootstrapUtils.bsSizes)([_StyleConfig.Size.LARGE, _StyleConfig.Size.SMALL], InputGroup));
 module.exports = exports['default'];
-},{"./InputGroupAddon":188,"./InputGroupButton":189,"./utils/StyleConfig":245,"./utils/bootstrapUtils":248,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":456}],188:[function(require,module,exports){
+},{"./InputGroupAddon":197,"./InputGroupButton":198,"./utils/StyleConfig":254,"./utils/bootstrapUtils":257,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":463}],197:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -19195,15 +20809,13 @@ var InputGroupAddon = function (_React$Component) {
   }
 
   InputGroupAddon.prototype.render = function render() {
-    var _props = this.props;
-    var className = _props.className;
-    var props = (0, _objectWithoutProperties3['default'])(_props, ['className']);
+    var _props = this.props,
+        className = _props.className,
+        props = (0, _objectWithoutProperties3['default'])(_props, ['className']);
 
-    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props);
-
-    var bsProps = _splitBsProps[0];
-    var elementProps = _splitBsProps[1];
-
+    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props),
+        bsProps = _splitBsProps[0],
+        elementProps = _splitBsProps[1];
 
     var classes = (0, _bootstrapUtils.getClassSet)(bsProps);
 
@@ -19217,7 +20829,7 @@ var InputGroupAddon = function (_React$Component) {
 
 exports['default'] = (0, _bootstrapUtils.bsClass)('input-group-addon', InputGroupAddon);
 module.exports = exports['default'];
-},{"./utils/bootstrapUtils":248,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":456}],189:[function(require,module,exports){
+},{"./utils/bootstrapUtils":257,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":463}],198:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -19263,15 +20875,13 @@ var InputGroupButton = function (_React$Component) {
   }
 
   InputGroupButton.prototype.render = function render() {
-    var _props = this.props;
-    var className = _props.className;
-    var props = (0, _objectWithoutProperties3['default'])(_props, ['className']);
+    var _props = this.props,
+        className = _props.className,
+        props = (0, _objectWithoutProperties3['default'])(_props, ['className']);
 
-    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props);
-
-    var bsProps = _splitBsProps[0];
-    var elementProps = _splitBsProps[1];
-
+    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props),
+        bsProps = _splitBsProps[0],
+        elementProps = _splitBsProps[1];
 
     var classes = (0, _bootstrapUtils.getClassSet)(bsProps);
 
@@ -19285,7 +20895,7 @@ var InputGroupButton = function (_React$Component) {
 
 exports['default'] = (0, _bootstrapUtils.bsClass)('input-group-btn', InputGroupButton);
 module.exports = exports['default'];
-},{"./utils/bootstrapUtils":248,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":456}],190:[function(require,module,exports){
+},{"./utils/bootstrapUtils":257,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":463}],199:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -19343,16 +20953,14 @@ var Jumbotron = function (_React$Component) {
   }
 
   Jumbotron.prototype.render = function render() {
-    var _props = this.props;
-    var Component = _props.componentClass;
-    var className = _props.className;
-    var props = (0, _objectWithoutProperties3['default'])(_props, ['componentClass', 'className']);
+    var _props = this.props,
+        Component = _props.componentClass,
+        className = _props.className,
+        props = (0, _objectWithoutProperties3['default'])(_props, ['componentClass', 'className']);
 
-    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props);
-
-    var bsProps = _splitBsProps[0];
-    var elementProps = _splitBsProps[1];
-
+    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props),
+        bsProps = _splitBsProps[0],
+        elementProps = _splitBsProps[1];
 
     var classes = (0, _bootstrapUtils.getClassSet)(bsProps);
 
@@ -19369,7 +20977,7 @@ Jumbotron.defaultProps = defaultProps;
 
 exports['default'] = (0, _bootstrapUtils.bsClass)('jumbotron', Jumbotron);
 module.exports = exports['default'];
-},{"./utils/bootstrapUtils":248,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":456,"react-prop-types/lib/elementType":271}],191:[function(require,module,exports){
+},{"./utils/bootstrapUtils":257,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":463,"react-prop-types/lib/elementType":280}],200:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -19437,16 +21045,14 @@ var Label = function (_React$Component) {
   };
 
   Label.prototype.render = function render() {
-    var _props = this.props;
-    var className = _props.className;
-    var children = _props.children;
-    var props = (0, _objectWithoutProperties3['default'])(_props, ['className', 'children']);
+    var _props = this.props,
+        className = _props.className,
+        children = _props.children,
+        props = (0, _objectWithoutProperties3['default'])(_props, ['className', 'children']);
 
-    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props);
-
-    var bsProps = _splitBsProps[0];
-    var elementProps = _splitBsProps[1];
-
+    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props),
+        bsProps = _splitBsProps[0],
+        elementProps = _splitBsProps[1];
 
     var classes = (0, _extends3['default'])({}, (0, _bootstrapUtils.getClassSet)(bsProps), {
 
@@ -19468,7 +21074,7 @@ var Label = function (_React$Component) {
 
 exports['default'] = (0, _bootstrapUtils.bsClass)('label', (0, _bootstrapUtils.bsStyles)([].concat((0, _values2['default'])(_StyleConfig.State), [_StyleConfig.Style.DEFAULT, _StyleConfig.Style.PRIMARY]), _StyleConfig.Style.DEFAULT, Label));
 module.exports = exports['default'];
-},{"./utils/StyleConfig":245,"./utils/bootstrapUtils":248,"babel-runtime/core-js/object/values":11,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":456}],192:[function(require,module,exports){
+},{"./utils/StyleConfig":254,"./utils/bootstrapUtils":257,"babel-runtime/core-js/object/values":11,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":463}],201:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -19551,18 +21157,16 @@ var ListGroup = function (_React$Component) {
   }
 
   ListGroup.prototype.render = function render() {
-    var _props = this.props;
-    var children = _props.children;
-    var _props$componentClass = _props.componentClass;
-    var Component = _props$componentClass === undefined ? getDefaultComponent(children) : _props$componentClass;
-    var className = _props.className;
-    var props = (0, _objectWithoutProperties3['default'])(_props, ['children', 'componentClass', 'className']);
+    var _props = this.props,
+        children = _props.children,
+        _props$componentClass = _props.componentClass,
+        Component = _props$componentClass === undefined ? getDefaultComponent(children) : _props$componentClass,
+        className = _props.className,
+        props = (0, _objectWithoutProperties3['default'])(_props, ['children', 'componentClass', 'className']);
 
-    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props);
-
-    var bsProps = _splitBsProps[0];
-    var elementProps = _splitBsProps[1];
-
+    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props),
+        bsProps = _splitBsProps[0],
+        elementProps = _splitBsProps[1];
 
     var classes = (0, _bootstrapUtils.getClassSet)(bsProps);
 
@@ -19588,7 +21192,7 @@ ListGroup.propTypes = propTypes;
 
 exports['default'] = (0, _bootstrapUtils.bsClass)('list-group', ListGroup);
 module.exports = exports['default'];
-},{"./ListGroupItem":193,"./utils/ValidComponentChildren":247,"./utils/bootstrapUtils":248,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":456,"react-prop-types/lib/elementType":271}],193:[function(require,module,exports){
+},{"./ListGroupItem":202,"./utils/ValidComponentChildren":256,"./utils/bootstrapUtils":257,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":463,"react-prop-types/lib/elementType":280}],202:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -19625,6 +21229,10 @@ var _react = require('react');
 
 var _react2 = _interopRequireDefault(_react);
 
+var _propTypes = require('prop-types');
+
+var _propTypes2 = _interopRequireDefault(_propTypes);
+
 var _bootstrapUtils = require('./utils/bootstrapUtils');
 
 var _StyleConfig = require('./utils/StyleConfig');
@@ -19632,13 +21240,13 @@ var _StyleConfig = require('./utils/StyleConfig');
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'default': obj }; }
 
 var propTypes = {
-  active: _react2['default'].PropTypes.any,
-  disabled: _react2['default'].PropTypes.any,
-  header: _react2['default'].PropTypes.node,
-  listItem: _react2['default'].PropTypes.bool,
-  onClick: _react2['default'].PropTypes.func,
-  href: _react2['default'].PropTypes.string,
-  type: _react2['default'].PropTypes.string
+  active: _propTypes2['default'].any,
+  disabled: _propTypes2['default'].any,
+  header: _propTypes2['default'].node,
+  listItem: _propTypes2['default'].bool,
+  onClick: _propTypes2['default'].func,
+  href: _propTypes2['default'].string,
+  type: _propTypes2['default'].string
 };
 
 var defaultProps = {
@@ -19668,20 +21276,18 @@ var ListGroupItem = function (_React$Component) {
   };
 
   ListGroupItem.prototype.render = function render() {
-    var _props = this.props;
-    var active = _props.active;
-    var disabled = _props.disabled;
-    var className = _props.className;
-    var header = _props.header;
-    var listItem = _props.listItem;
-    var children = _props.children;
-    var props = (0, _objectWithoutProperties3['default'])(_props, ['active', 'disabled', 'className', 'header', 'listItem', 'children']);
+    var _props = this.props,
+        active = _props.active,
+        disabled = _props.disabled,
+        className = _props.className,
+        header = _props.header,
+        listItem = _props.listItem,
+        children = _props.children,
+        props = (0, _objectWithoutProperties3['default'])(_props, ['active', 'disabled', 'className', 'header', 'listItem', 'children']);
 
-    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props);
-
-    var bsProps = _splitBsProps[0];
-    var elementProps = _splitBsProps[1];
-
+    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props),
+        bsProps = _splitBsProps[0],
+        elementProps = _splitBsProps[1];
 
     var classes = (0, _extends3['default'])({}, (0, _bootstrapUtils.getClassSet)(bsProps), {
       active: active,
@@ -19732,7 +21338,7 @@ ListGroupItem.defaultProps = defaultProps;
 
 exports['default'] = (0, _bootstrapUtils.bsClass)('list-group-item', (0, _bootstrapUtils.bsStyles)((0, _values2['default'])(_StyleConfig.State), ListGroupItem));
 module.exports = exports['default'];
-},{"./utils/StyleConfig":245,"./utils/bootstrapUtils":248,"babel-runtime/core-js/object/values":11,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":456}],194:[function(require,module,exports){
+},{"./utils/StyleConfig":254,"./utils/bootstrapUtils":257,"babel-runtime/core-js/object/values":11,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"prop-types":159,"react":463}],203:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -19814,16 +21420,14 @@ var Media = function (_React$Component) {
   }
 
   Media.prototype.render = function render() {
-    var _props = this.props;
-    var Component = _props.componentClass;
-    var className = _props.className;
-    var props = (0, _objectWithoutProperties3['default'])(_props, ['componentClass', 'className']);
+    var _props = this.props,
+        Component = _props.componentClass,
+        className = _props.className,
+        props = (0, _objectWithoutProperties3['default'])(_props, ['componentClass', 'className']);
 
-    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props);
-
-    var bsProps = _splitBsProps[0];
-    var elementProps = _splitBsProps[1];
-
+    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props),
+        bsProps = _splitBsProps[0],
+        elementProps = _splitBsProps[1];
 
     var classes = (0, _bootstrapUtils.getClassSet)(bsProps);
 
@@ -19847,7 +21451,7 @@ Media.ListItem = _MediaListItem2['default'];
 
 exports['default'] = (0, _bootstrapUtils.bsClass)('media', Media);
 module.exports = exports['default'];
-},{"./MediaBody":195,"./MediaHeading":196,"./MediaLeft":197,"./MediaList":198,"./MediaListItem":199,"./MediaRight":200,"./utils/bootstrapUtils":248,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":456,"react-prop-types/lib/elementType":271}],195:[function(require,module,exports){
+},{"./MediaBody":204,"./MediaHeading":205,"./MediaLeft":206,"./MediaList":207,"./MediaListItem":208,"./MediaRight":209,"./utils/bootstrapUtils":257,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":463,"react-prop-types/lib/elementType":280}],204:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -19905,16 +21509,14 @@ var MediaBody = function (_React$Component) {
   }
 
   MediaBody.prototype.render = function render() {
-    var _props = this.props;
-    var Component = _props.componentClass;
-    var className = _props.className;
-    var props = (0, _objectWithoutProperties3['default'])(_props, ['componentClass', 'className']);
+    var _props = this.props,
+        Component = _props.componentClass,
+        className = _props.className,
+        props = (0, _objectWithoutProperties3['default'])(_props, ['componentClass', 'className']);
 
-    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props);
-
-    var bsProps = _splitBsProps[0];
-    var elementProps = _splitBsProps[1];
-
+    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props),
+        bsProps = _splitBsProps[0],
+        elementProps = _splitBsProps[1];
 
     var classes = (0, _bootstrapUtils.getClassSet)(bsProps);
 
@@ -19931,7 +21533,7 @@ MediaBody.defaultProps = defaultProps;
 
 exports['default'] = (0, _bootstrapUtils.bsClass)('media-body', MediaBody);
 module.exports = exports['default'];
-},{"./utils/bootstrapUtils":248,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":456,"react-prop-types/lib/elementType":271}],196:[function(require,module,exports){
+},{"./utils/bootstrapUtils":257,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":463,"react-prop-types/lib/elementType":280}],205:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -19989,16 +21591,14 @@ var MediaHeading = function (_React$Component) {
   }
 
   MediaHeading.prototype.render = function render() {
-    var _props = this.props;
-    var Component = _props.componentClass;
-    var className = _props.className;
-    var props = (0, _objectWithoutProperties3['default'])(_props, ['componentClass', 'className']);
+    var _props = this.props,
+        Component = _props.componentClass,
+        className = _props.className,
+        props = (0, _objectWithoutProperties3['default'])(_props, ['componentClass', 'className']);
 
-    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props);
-
-    var bsProps = _splitBsProps[0];
-    var elementProps = _splitBsProps[1];
-
+    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props),
+        bsProps = _splitBsProps[0],
+        elementProps = _splitBsProps[1];
 
     var classes = (0, _bootstrapUtils.getClassSet)(bsProps);
 
@@ -20015,7 +21615,7 @@ MediaHeading.defaultProps = defaultProps;
 
 exports['default'] = (0, _bootstrapUtils.bsClass)('media-heading', MediaHeading);
 module.exports = exports['default'];
-},{"./utils/bootstrapUtils":248,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":456,"react-prop-types/lib/elementType":271}],197:[function(require,module,exports){
+},{"./utils/bootstrapUtils":257,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":463,"react-prop-types/lib/elementType":280}],206:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -20048,6 +21648,10 @@ var _react = require('react');
 
 var _react2 = _interopRequireDefault(_react);
 
+var _propTypes = require('prop-types');
+
+var _propTypes2 = _interopRequireDefault(_propTypes);
+
 var _Media = require('./Media');
 
 var _Media2 = _interopRequireDefault(_Media);
@@ -20060,7 +21664,7 @@ var propTypes = {
   /**
    * Align the media to the top, middle, or bottom of the media object.
    */
-  align: _react2['default'].PropTypes.oneOf(['top', 'middle', 'bottom'])
+  align: _propTypes2['default'].oneOf(['top', 'middle', 'bottom'])
 };
 
 var MediaLeft = function (_React$Component) {
@@ -20072,16 +21676,14 @@ var MediaLeft = function (_React$Component) {
   }
 
   MediaLeft.prototype.render = function render() {
-    var _props = this.props;
-    var align = _props.align;
-    var className = _props.className;
-    var props = (0, _objectWithoutProperties3['default'])(_props, ['align', 'className']);
+    var _props = this.props,
+        align = _props.align,
+        className = _props.className,
+        props = (0, _objectWithoutProperties3['default'])(_props, ['align', 'className']);
 
-    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props);
-
-    var bsProps = _splitBsProps[0];
-    var elementProps = _splitBsProps[1];
-
+    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props),
+        bsProps = _splitBsProps[0],
+        elementProps = _splitBsProps[1];
 
     var classes = (0, _bootstrapUtils.getClassSet)(bsProps);
 
@@ -20102,7 +21704,7 @@ MediaLeft.propTypes = propTypes;
 
 exports['default'] = (0, _bootstrapUtils.bsClass)('media-left', MediaLeft);
 module.exports = exports['default'];
-},{"./Media":194,"./utils/bootstrapUtils":248,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":456}],198:[function(require,module,exports){
+},{"./Media":203,"./utils/bootstrapUtils":257,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"prop-types":159,"react":463}],207:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -20148,15 +21750,13 @@ var MediaList = function (_React$Component) {
   }
 
   MediaList.prototype.render = function render() {
-    var _props = this.props;
-    var className = _props.className;
-    var props = (0, _objectWithoutProperties3['default'])(_props, ['className']);
+    var _props = this.props,
+        className = _props.className,
+        props = (0, _objectWithoutProperties3['default'])(_props, ['className']);
 
-    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props);
-
-    var bsProps = _splitBsProps[0];
-    var elementProps = _splitBsProps[1];
-
+    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props),
+        bsProps = _splitBsProps[0],
+        elementProps = _splitBsProps[1];
 
     var classes = (0, _bootstrapUtils.getClassSet)(bsProps);
 
@@ -20170,7 +21770,7 @@ var MediaList = function (_React$Component) {
 
 exports['default'] = (0, _bootstrapUtils.bsClass)('media-list', MediaList);
 module.exports = exports['default'];
-},{"./utils/bootstrapUtils":248,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":456}],199:[function(require,module,exports){
+},{"./utils/bootstrapUtils":257,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":463}],208:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -20216,15 +21816,13 @@ var MediaListItem = function (_React$Component) {
   }
 
   MediaListItem.prototype.render = function render() {
-    var _props = this.props;
-    var className = _props.className;
-    var props = (0, _objectWithoutProperties3['default'])(_props, ['className']);
+    var _props = this.props,
+        className = _props.className,
+        props = (0, _objectWithoutProperties3['default'])(_props, ['className']);
 
-    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props);
-
-    var bsProps = _splitBsProps[0];
-    var elementProps = _splitBsProps[1];
-
+    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props),
+        bsProps = _splitBsProps[0],
+        elementProps = _splitBsProps[1];
 
     var classes = (0, _bootstrapUtils.getClassSet)(bsProps);
 
@@ -20238,7 +21836,7 @@ var MediaListItem = function (_React$Component) {
 
 exports['default'] = (0, _bootstrapUtils.bsClass)('media', MediaListItem);
 module.exports = exports['default'];
-},{"./utils/bootstrapUtils":248,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":456}],200:[function(require,module,exports){
+},{"./utils/bootstrapUtils":257,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":463}],209:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -20271,6 +21869,10 @@ var _react = require('react');
 
 var _react2 = _interopRequireDefault(_react);
 
+var _propTypes = require('prop-types');
+
+var _propTypes2 = _interopRequireDefault(_propTypes);
+
 var _Media = require('./Media');
 
 var _Media2 = _interopRequireDefault(_Media);
@@ -20283,7 +21885,7 @@ var propTypes = {
   /**
    * Align the media to the top, middle, or bottom of the media object.
    */
-  align: _react2['default'].PropTypes.oneOf(['top', 'middle', 'bottom'])
+  align: _propTypes2['default'].oneOf(['top', 'middle', 'bottom'])
 };
 
 var MediaRight = function (_React$Component) {
@@ -20295,16 +21897,14 @@ var MediaRight = function (_React$Component) {
   }
 
   MediaRight.prototype.render = function render() {
-    var _props = this.props;
-    var align = _props.align;
-    var className = _props.className;
-    var props = (0, _objectWithoutProperties3['default'])(_props, ['align', 'className']);
+    var _props = this.props,
+        align = _props.align,
+        className = _props.className,
+        props = (0, _objectWithoutProperties3['default'])(_props, ['align', 'className']);
 
-    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props);
-
-    var bsProps = _splitBsProps[0];
-    var elementProps = _splitBsProps[1];
-
+    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props),
+        bsProps = _splitBsProps[0],
+        elementProps = _splitBsProps[1];
 
     var classes = (0, _bootstrapUtils.getClassSet)(bsProps);
 
@@ -20325,7 +21925,7 @@ MediaRight.propTypes = propTypes;
 
 exports['default'] = (0, _bootstrapUtils.bsClass)('media-right', MediaRight);
 module.exports = exports['default'];
-},{"./Media":194,"./utils/bootstrapUtils":248,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":456}],201:[function(require,module,exports){
+},{"./Media":203,"./utils/bootstrapUtils":257,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"prop-types":159,"react":463}],210:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -20357,6 +21957,10 @@ var _classnames2 = _interopRequireDefault(_classnames);
 var _react = require('react');
 
 var _react2 = _interopRequireDefault(_react);
+
+var _propTypes = require('prop-types');
+
+var _propTypes2 = _interopRequireDefault(_propTypes);
 
 var _all = require('react-prop-types/lib/all');
 
@@ -20378,42 +21982,42 @@ var propTypes = {
   /**
    * Highlight the menu item as active.
    */
-  active: _react2['default'].PropTypes.bool,
+  active: _propTypes2['default'].bool,
 
   /**
    * Disable the menu item, making it unselectable.
    */
-  disabled: _react2['default'].PropTypes.bool,
+  disabled: _propTypes2['default'].bool,
 
   /**
    * Styles the menu item as a horizontal rule, providing visual separation between
    * groups of menu items.
    */
-  divider: (0, _all2['default'])(_react2['default'].PropTypes.bool, function (_ref) {
-    var divider = _ref.divider;
-    var children = _ref.children;
+  divider: (0, _all2['default'])(_propTypes2['default'].bool, function (_ref) {
+    var divider = _ref.divider,
+        children = _ref.children;
     return divider && children ? new Error('Children will not be rendered for dividers') : null;
   }),
 
   /**
    * Value passed to the `onSelect` handler, useful for identifying the selected menu item.
    */
-  eventKey: _react2['default'].PropTypes.any,
+  eventKey: _propTypes2['default'].any,
 
   /**
    * Styles the menu item as a header label, useful for describing a group of menu items.
    */
-  header: _react2['default'].PropTypes.bool,
+  header: _propTypes2['default'].bool,
 
   /**
    * HTML `href` attribute corresponding to `a.href`.
    */
-  href: _react2['default'].PropTypes.string,
+  href: _propTypes2['default'].string,
 
   /**
    * Callback fired when the menu item is clicked.
    */
-  onClick: _react2['default'].PropTypes.func,
+  onClick: _propTypes2['default'].func,
 
   /**
    * Callback fired when the menu item is selected.
@@ -20422,7 +22026,7 @@ var propTypes = {
    * (eventKey: any, event: Object) => any
    * ```
    */
-  onSelect: _react2['default'].PropTypes.func
+  onSelect: _propTypes2['default'].func
 };
 
 var defaultProps = {
@@ -20444,11 +22048,11 @@ var MenuItem = function (_React$Component) {
   }
 
   MenuItem.prototype.handleClick = function handleClick(event) {
-    var _props = this.props;
-    var href = _props.href;
-    var disabled = _props.disabled;
-    var onSelect = _props.onSelect;
-    var eventKey = _props.eventKey;
+    var _props = this.props,
+        href = _props.href,
+        disabled = _props.disabled,
+        onSelect = _props.onSelect,
+        eventKey = _props.eventKey;
 
 
     if (!href || disabled) {
@@ -20465,21 +22069,19 @@ var MenuItem = function (_React$Component) {
   };
 
   MenuItem.prototype.render = function render() {
-    var _props2 = this.props;
-    var active = _props2.active;
-    var disabled = _props2.disabled;
-    var divider = _props2.divider;
-    var header = _props2.header;
-    var onClick = _props2.onClick;
-    var className = _props2.className;
-    var style = _props2.style;
-    var props = (0, _objectWithoutProperties3['default'])(_props2, ['active', 'disabled', 'divider', 'header', 'onClick', 'className', 'style']);
+    var _props2 = this.props,
+        active = _props2.active,
+        disabled = _props2.disabled,
+        divider = _props2.divider,
+        header = _props2.header,
+        onClick = _props2.onClick,
+        className = _props2.className,
+        style = _props2.style,
+        props = (0, _objectWithoutProperties3['default'])(_props2, ['active', 'disabled', 'divider', 'header', 'onClick', 'className', 'style']);
 
-    var _splitBsPropsAndOmit = (0, _bootstrapUtils.splitBsPropsAndOmit)(props, ['eventKey', 'onSelect']);
-
-    var bsProps = _splitBsPropsAndOmit[0];
-    var elementProps = _splitBsPropsAndOmit[1];
-
+    var _splitBsPropsAndOmit = (0, _bootstrapUtils.splitBsPropsAndOmit)(props, ['eventKey', 'onSelect']),
+        bsProps = _splitBsPropsAndOmit[0],
+        elementProps = _splitBsPropsAndOmit[1];
 
     if (divider) {
       // Forcibly blank out the children; separators shouldn't render any.
@@ -20523,7 +22125,7 @@ MenuItem.defaultProps = defaultProps;
 
 exports['default'] = (0, _bootstrapUtils.bsClass)('dropdown', MenuItem);
 module.exports = exports['default'];
-},{"./SafeAnchor":231,"./utils/bootstrapUtils":248,"./utils/createChainedFunction":250,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":456,"react-prop-types/lib/all":269}],202:[function(require,module,exports){
+},{"./SafeAnchor":240,"./utils/bootstrapUtils":257,"./utils/createChainedFunction":259,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"prop-types":159,"react":463,"react-prop-types/lib/all":278}],211:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -20571,6 +22173,10 @@ var _scrollbarSize2 = _interopRequireDefault(_scrollbarSize);
 var _react = require('react');
 
 var _react2 = _interopRequireDefault(_react);
+
+var _propTypes = require('prop-types');
+
+var _propTypes2 = _interopRequireDefault(_propTypes);
 
 var _reactDom = require('react-dom');
 
@@ -20632,17 +22238,17 @@ var propTypes = (0, _extends3['default'])({}, _Modal2['default'].propTypes, _Mod
    * Include a backdrop component. Specify 'static' for a backdrop that doesn't
    * trigger an "onHide" when clicked.
    */
-  backdrop: _react2['default'].PropTypes.oneOf(['static', true, false]),
+  backdrop: _propTypes2['default'].oneOf(['static', true, false]),
 
   /**
    * Close the modal when escape key is pressed
    */
-  keyboard: _react2['default'].PropTypes.bool,
+  keyboard: _propTypes2['default'].bool,
 
   /**
    * Open and close the Modal with a slide and fade animation.
    */
-  animation: _react2['default'].PropTypes.bool,
+  animation: _propTypes2['default'].bool,
 
   /**
    * A Component type that provides the modal content Markup. This is a useful
@@ -20657,55 +22263,61 @@ var propTypes = (0, _extends3['default'])({}, _Modal2['default'].propTypes, _Mod
    * Generally this should never be set to false as it makes the Modal less
    * accessible to assistive technologies, like screen-readers.
    */
-  autoFocus: _react2['default'].PropTypes.bool,
+  autoFocus: _propTypes2['default'].bool,
 
   /**
    * When `true` The modal will prevent focus from leaving the Modal while
    * open. Consider leaving the default value here, as it is necessary to make
    * the Modal work well with assistive technologies, such as screen readers.
    */
-  enforceFocus: _react2['default'].PropTypes.bool,
+  enforceFocus: _propTypes2['default'].bool,
+
+  /**
+   * When `true` The modal will restore focus to previously focused element once
+   * modal is hidden
+   */
+  restoreFocus: _propTypes2['default'].bool,
 
   /**
    * When `true` The modal will show itself.
    */
-  show: _react2['default'].PropTypes.bool,
+  show: _propTypes2['default'].bool,
 
   /**
    * A callback fired when the header closeButton or non-static backdrop is
    * clicked. Required if either are specified.
    */
-  onHide: _react2['default'].PropTypes.func,
+  onHide: _propTypes2['default'].func,
 
   /**
    * Callback fired before the Modal transitions in
    */
-  onEnter: _react2['default'].PropTypes.func,
+  onEnter: _propTypes2['default'].func,
 
   /**
    * Callback fired as the Modal begins to transition in
    */
-  onEntering: _react2['default'].PropTypes.func,
+  onEntering: _propTypes2['default'].func,
 
   /**
    * Callback fired after the Modal finishes transitioning in
    */
-  onEntered: _react2['default'].PropTypes.func,
+  onEntered: _propTypes2['default'].func,
 
   /**
    * Callback fired right before the Modal transitions out
    */
-  onExit: _react2['default'].PropTypes.func,
+  onExit: _propTypes2['default'].func,
 
   /**
    * Callback fired as the Modal begins to transition out
    */
-  onExiting: _react2['default'].PropTypes.func,
+  onExiting: _propTypes2['default'].func,
 
   /**
    * Callback fired after the Modal finishes transitioning out
    */
-  onExited: _react2['default'].PropTypes.func,
+  onExited: _propTypes2['default'].func,
 
   /**
    * @private
@@ -20719,8 +22331,8 @@ var defaultProps = (0, _extends3['default'])({}, _Modal2['default'].defaultProps
 });
 
 var childContextTypes = {
-  $bs_modal: _react2['default'].PropTypes.shape({
-    onHide: _react2['default'].PropTypes.func
+  $bs_modal: _propTypes2['default'].shape({
+    onHide: _propTypes2['default'].func
   })
 };
 
@@ -20802,23 +22414,21 @@ var Modal = function (_React$Component) {
   Modal.prototype.render = function render() {
     var _this2 = this;
 
-    var _props = this.props;
-    var backdrop = _props.backdrop;
-    var animation = _props.animation;
-    var show = _props.show;
-    var Dialog = _props.dialogComponentClass;
-    var className = _props.className;
-    var style = _props.style;
-    var children = _props.children;
-    var onEntering = _props.onEntering;
-    var onExited = _props.onExited;
-    var props = (0, _objectWithoutProperties3['default'])(_props, ['backdrop', 'animation', 'show', 'dialogComponentClass', 'className', 'style', 'children', 'onEntering', 'onExited']);
+    var _props = this.props,
+        backdrop = _props.backdrop,
+        animation = _props.animation,
+        show = _props.show,
+        Dialog = _props.dialogComponentClass,
+        className = _props.className,
+        style = _props.style,
+        children = _props.children,
+        onEntering = _props.onEntering,
+        onExited = _props.onExited,
+        props = (0, _objectWithoutProperties3['default'])(_props, ['backdrop', 'animation', 'show', 'dialogComponentClass', 'className', 'style', 'children', 'onEntering', 'onExited']);
 
-    var _splitComponentProps = (0, _splitComponentProps3['default'])(props, _Modal2['default']);
-
-    var baseModalProps = _splitComponentProps[0];
-    var dialogProps = _splitComponentProps[1];
-
+    var _splitComponentProps = (0, _splitComponentProps3['default'])(props, _Modal2['default']),
+        baseModalProps = _splitComponentProps[0],
+        dialogProps = _splitComponentProps[1];
 
     var inClassName = show && !animation && 'in';
 
@@ -20869,7 +22479,7 @@ Modal.BACKDROP_TRANSITION_DURATION = 150;
 
 exports['default'] = (0, _bootstrapUtils.bsClass)('modal', (0, _bootstrapUtils.bsSizes)([_StyleConfig.Size.LARGE, _StyleConfig.Size.SMALL], Modal));
 module.exports = exports['default'];
-},{"./Fade":177,"./ModalBody":203,"./ModalDialog":204,"./ModalFooter":205,"./ModalHeader":206,"./ModalTitle":207,"./utils/StyleConfig":245,"./utils/bootstrapUtils":248,"./utils/createChainedFunction":250,"./utils/splitComponentProps":253,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"dom-helpers/events":122,"dom-helpers/ownerDocument":125,"dom-helpers/util/inDOM":143,"dom-helpers/util/scrollbarSize":144,"react":456,"react-dom":254,"react-overlays/lib/Modal":255,"react-overlays/lib/utils/isOverflowing":266,"react-prop-types/lib/elementType":271}],203:[function(require,module,exports){
+},{"./Fade":186,"./ModalBody":212,"./ModalDialog":213,"./ModalFooter":214,"./ModalHeader":215,"./ModalTitle":216,"./utils/StyleConfig":254,"./utils/bootstrapUtils":257,"./utils/createChainedFunction":259,"./utils/splitComponentProps":262,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"dom-helpers/events":124,"dom-helpers/ownerDocument":128,"dom-helpers/util/inDOM":146,"dom-helpers/util/scrollbarSize":147,"prop-types":159,"react":463,"react-dom":263,"react-overlays/lib/Modal":264,"react-overlays/lib/utils/isOverflowing":275,"react-prop-types/lib/elementType":280}],212:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -20902,9 +22512,21 @@ var _react = require('react');
 
 var _react2 = _interopRequireDefault(_react);
 
+var _elementType = require('react-prop-types/lib/elementType');
+
+var _elementType2 = _interopRequireDefault(_elementType);
+
 var _bootstrapUtils = require('./utils/bootstrapUtils');
 
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'default': obj }; }
+
+var propTypes = {
+  componentClass: _elementType2['default']
+};
+
+var defaultProps = {
+  componentClass: 'div'
+};
 
 var ModalBody = function (_React$Component) {
   (0, _inherits3['default'])(ModalBody, _React$Component);
@@ -20915,19 +22537,18 @@ var ModalBody = function (_React$Component) {
   }
 
   ModalBody.prototype.render = function render() {
-    var _props = this.props;
-    var className = _props.className;
-    var props = (0, _objectWithoutProperties3['default'])(_props, ['className']);
+    var _props = this.props,
+        Component = _props.componentClass,
+        className = _props.className,
+        props = (0, _objectWithoutProperties3['default'])(_props, ['componentClass', 'className']);
 
-    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props);
-
-    var bsProps = _splitBsProps[0];
-    var elementProps = _splitBsProps[1];
-
+    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props),
+        bsProps = _splitBsProps[0],
+        elementProps = _splitBsProps[1];
 
     var classes = (0, _bootstrapUtils.getClassSet)(bsProps);
 
-    return _react2['default'].createElement('div', (0, _extends3['default'])({}, elementProps, {
+    return _react2['default'].createElement(Component, (0, _extends3['default'])({}, elementProps, {
       className: (0, _classnames2['default'])(className, classes)
     }));
   };
@@ -20935,9 +22556,12 @@ var ModalBody = function (_React$Component) {
   return ModalBody;
 }(_react2['default'].Component);
 
+ModalBody.propTypes = propTypes;
+ModalBody.defaultProps = defaultProps;
+
 exports['default'] = (0, _bootstrapUtils.bsClass)('modal-body', ModalBody);
 module.exports = exports['default'];
-},{"./utils/bootstrapUtils":248,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":456}],204:[function(require,module,exports){
+},{"./utils/bootstrapUtils":257,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":463,"react-prop-types/lib/elementType":280}],213:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -20970,6 +22594,10 @@ var _react = require('react');
 
 var _react2 = _interopRequireDefault(_react);
 
+var _propTypes = require('prop-types');
+
+var _propTypes2 = _interopRequireDefault(_propTypes);
+
 var _bootstrapUtils = require('./utils/bootstrapUtils');
 
 var _StyleConfig = require('./utils/StyleConfig');
@@ -20980,7 +22608,7 @@ var propTypes = {
   /**
    * A css class to apply to the Modal dialog DOM node.
    */
-  dialogClassName: _react2['default'].PropTypes.string
+  dialogClassName: _propTypes2['default'].string
 };
 
 var ModalDialog = function (_React$Component) {
@@ -20994,18 +22622,16 @@ var ModalDialog = function (_React$Component) {
   ModalDialog.prototype.render = function render() {
     var _extends2;
 
-    var _props = this.props;
-    var dialogClassName = _props.dialogClassName;
-    var className = _props.className;
-    var style = _props.style;
-    var children = _props.children;
-    var props = (0, _objectWithoutProperties3['default'])(_props, ['dialogClassName', 'className', 'style', 'children']);
+    var _props = this.props,
+        dialogClassName = _props.dialogClassName,
+        className = _props.className,
+        style = _props.style,
+        children = _props.children,
+        props = (0, _objectWithoutProperties3['default'])(_props, ['dialogClassName', 'className', 'style', 'children']);
 
-    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props);
-
-    var bsProps = _splitBsProps[0];
-    var elementProps = _splitBsProps[1];
-
+    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props),
+        bsProps = _splitBsProps[0],
+        elementProps = _splitBsProps[1];
 
     var bsClassName = (0, _bootstrapUtils.prefix)(bsProps);
 
@@ -21040,7 +22666,7 @@ ModalDialog.propTypes = propTypes;
 
 exports['default'] = (0, _bootstrapUtils.bsClass)('modal', (0, _bootstrapUtils.bsSizes)([_StyleConfig.Size.LARGE, _StyleConfig.Size.SMALL], ModalDialog));
 module.exports = exports['default'];
-},{"./utils/StyleConfig":245,"./utils/bootstrapUtils":248,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":456}],205:[function(require,module,exports){
+},{"./utils/StyleConfig":254,"./utils/bootstrapUtils":257,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"prop-types":159,"react":463}],214:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -21073,9 +22699,21 @@ var _react = require('react');
 
 var _react2 = _interopRequireDefault(_react);
 
+var _elementType = require('react-prop-types/lib/elementType');
+
+var _elementType2 = _interopRequireDefault(_elementType);
+
 var _bootstrapUtils = require('./utils/bootstrapUtils');
 
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'default': obj }; }
+
+var propTypes = {
+  componentClass: _elementType2['default']
+};
+
+var defaultProps = {
+  componentClass: 'div'
+};
 
 var ModalFooter = function (_React$Component) {
   (0, _inherits3['default'])(ModalFooter, _React$Component);
@@ -21086,19 +22724,18 @@ var ModalFooter = function (_React$Component) {
   }
 
   ModalFooter.prototype.render = function render() {
-    var _props = this.props;
-    var className = _props.className;
-    var props = (0, _objectWithoutProperties3['default'])(_props, ['className']);
+    var _props = this.props,
+        Component = _props.componentClass,
+        className = _props.className,
+        props = (0, _objectWithoutProperties3['default'])(_props, ['componentClass', 'className']);
 
-    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props);
-
-    var bsProps = _splitBsProps[0];
-    var elementProps = _splitBsProps[1];
-
+    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props),
+        bsProps = _splitBsProps[0],
+        elementProps = _splitBsProps[1];
 
     var classes = (0, _bootstrapUtils.getClassSet)(bsProps);
 
-    return _react2['default'].createElement('div', (0, _extends3['default'])({}, elementProps, {
+    return _react2['default'].createElement(Component, (0, _extends3['default'])({}, elementProps, {
       className: (0, _classnames2['default'])(className, classes)
     }));
   };
@@ -21106,9 +22743,12 @@ var ModalFooter = function (_React$Component) {
   return ModalFooter;
 }(_react2['default'].Component);
 
+ModalFooter.propTypes = propTypes;
+ModalFooter.defaultProps = defaultProps;
+
 exports['default'] = (0, _bootstrapUtils.bsClass)('modal-footer', ModalFooter);
 module.exports = exports['default'];
-},{"./utils/bootstrapUtils":248,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":456}],206:[function(require,module,exports){
+},{"./utils/bootstrapUtils":257,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":463,"react-prop-types/lib/elementType":280}],215:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -21140,6 +22780,10 @@ var _classnames2 = _interopRequireDefault(_classnames);
 var _react = require('react');
 
 var _react2 = _interopRequireDefault(_react);
+
+var _propTypes = require('prop-types');
+
+var _propTypes2 = _interopRequireDefault(_propTypes);
 
 var _bootstrapUtils = require('./utils/bootstrapUtils');
 
@@ -21157,19 +22801,19 @@ var propTypes = {
    * button. It is used for Assistive Technology when the label text is not
    * readable.
    */
-  'aria-label': _react2['default'].PropTypes.string,
+  'aria-label': _propTypes2['default'].string,
 
   /**
    * Specify whether the Component should contain a close button
    */
-  closeButton: _react2['default'].PropTypes.bool,
+  closeButton: _propTypes2['default'].bool,
 
   /**
    * A Callback fired when the close button is clicked. If used directly inside
    * a Modal component, the onHide will automatically be propagated up to the
    * parent Modal `onHide`.
    */
-  onHide: _react2['default'].PropTypes.func
+  onHide: _propTypes2['default'].func
 };
 
 var defaultProps = {
@@ -21178,8 +22822,8 @@ var defaultProps = {
 };
 
 var contextTypes = {
-  $bs_modal: _react2['default'].PropTypes.shape({
-    onHide: _react2['default'].PropTypes.func
+  $bs_modal: _propTypes2['default'].shape({
+    onHide: _propTypes2['default'].func
   })
 };
 
@@ -21192,22 +22836,20 @@ var ModalHeader = function (_React$Component) {
   }
 
   ModalHeader.prototype.render = function render() {
-    var _props = this.props;
-    var label = _props['aria-label'];
-    var closeButton = _props.closeButton;
-    var onHide = _props.onHide;
-    var className = _props.className;
-    var children = _props.children;
-    var props = (0, _objectWithoutProperties3['default'])(_props, ['aria-label', 'closeButton', 'onHide', 'className', 'children']);
+    var _props = this.props,
+        label = _props['aria-label'],
+        closeButton = _props.closeButton,
+        onHide = _props.onHide,
+        className = _props.className,
+        children = _props.children,
+        props = (0, _objectWithoutProperties3['default'])(_props, ['aria-label', 'closeButton', 'onHide', 'className', 'children']);
 
 
     var modal = this.context.$bs_modal;
 
-    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props);
-
-    var bsProps = _splitBsProps[0];
-    var elementProps = _splitBsProps[1];
-
+    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props),
+        bsProps = _splitBsProps[0],
+        elementProps = _splitBsProps[1];
 
     var classes = (0, _bootstrapUtils.getClassSet)(bsProps);
 
@@ -21222,7 +22864,7 @@ var ModalHeader = function (_React$Component) {
           type: 'button',
           className: 'close',
           'aria-label': label,
-          onClick: (0, _createChainedFunction2['default'])(modal.onHide, onHide)
+          onClick: (0, _createChainedFunction2['default'])(modal && modal.onHide, onHide)
         },
         _react2['default'].createElement(
           'span',
@@ -21243,7 +22885,7 @@ ModalHeader.contextTypes = contextTypes;
 
 exports['default'] = (0, _bootstrapUtils.bsClass)('modal-header', ModalHeader);
 module.exports = exports['default'];
-},{"./utils/bootstrapUtils":248,"./utils/createChainedFunction":250,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":456}],207:[function(require,module,exports){
+},{"./utils/bootstrapUtils":257,"./utils/createChainedFunction":259,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"prop-types":159,"react":463}],216:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -21276,9 +22918,21 @@ var _react = require('react');
 
 var _react2 = _interopRequireDefault(_react);
 
+var _elementType = require('react-prop-types/lib/elementType');
+
+var _elementType2 = _interopRequireDefault(_elementType);
+
 var _bootstrapUtils = require('./utils/bootstrapUtils');
 
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'default': obj }; }
+
+var propTypes = {
+  componentClass: _elementType2['default']
+};
+
+var defaultProps = {
+  componentClass: 'h4'
+};
 
 var ModalTitle = function (_React$Component) {
   (0, _inherits3['default'])(ModalTitle, _React$Component);
@@ -21289,19 +22943,18 @@ var ModalTitle = function (_React$Component) {
   }
 
   ModalTitle.prototype.render = function render() {
-    var _props = this.props;
-    var className = _props.className;
-    var props = (0, _objectWithoutProperties3['default'])(_props, ['className']);
+    var _props = this.props,
+        Component = _props.componentClass,
+        className = _props.className,
+        props = (0, _objectWithoutProperties3['default'])(_props, ['componentClass', 'className']);
 
-    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props);
-
-    var bsProps = _splitBsProps[0];
-    var elementProps = _splitBsProps[1];
-
+    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props),
+        bsProps = _splitBsProps[0],
+        elementProps = _splitBsProps[1];
 
     var classes = (0, _bootstrapUtils.getClassSet)(bsProps);
 
-    return _react2['default'].createElement('h4', (0, _extends3['default'])({}, elementProps, {
+    return _react2['default'].createElement(Component, (0, _extends3['default'])({}, elementProps, {
       className: (0, _classnames2['default'])(className, classes)
     }));
   };
@@ -21309,9 +22962,12 @@ var ModalTitle = function (_React$Component) {
   return ModalTitle;
 }(_react2['default'].Component);
 
+ModalTitle.propTypes = propTypes;
+ModalTitle.defaultProps = defaultProps;
+
 exports['default'] = (0, _bootstrapUtils.bsClass)('modal-title', ModalTitle);
 module.exports = exports['default'];
-},{"./utils/bootstrapUtils":248,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":456}],208:[function(require,module,exports){
+},{"./utils/bootstrapUtils":257,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":463,"react-prop-types/lib/elementType":280}],217:[function(require,module,exports){
 (function (process){
 'use strict';
 
@@ -21349,6 +23005,10 @@ var _react = require('react');
 
 var _react2 = _interopRequireDefault(_react);
 
+var _propTypes = require('prop-types');
+
+var _propTypes2 = _interopRequireDefault(_propTypes);
+
 var _reactDom = require('react-dom');
 
 var _reactDom2 = _interopRequireDefault(_reactDom);
@@ -21385,21 +23045,21 @@ var propTypes = {
    * Marks the NavItem with a matching `eventKey` as active. Has a
    * higher precedence over `activeHref`.
    */
-  activeKey: _react2['default'].PropTypes.any,
+  activeKey: _propTypes2['default'].any,
 
   /**
    * Marks the child NavItem with a matching `href` prop as active.
    */
-  activeHref: _react2['default'].PropTypes.string,
+  activeHref: _propTypes2['default'].string,
 
   /**
    * NavItems are be positioned vertically.
    */
-  stacked: _react2['default'].PropTypes.bool,
+  stacked: _propTypes2['default'].bool,
 
-  justified: (0, _all2['default'])(_react2['default'].PropTypes.bool, function (_ref) {
-    var justified = _ref.justified;
-    var navbar = _ref.navbar;
+  justified: (0, _all2['default'])(_propTypes2['default'].bool, function (_ref) {
+    var justified = _ref.justified,
+        navbar = _ref.navbar;
     return justified && navbar ? Error('justified navbar `Nav`s are not supported') : null;
   }),
 
@@ -21413,7 +23073,7 @@ var propTypes = {
    * )
    * ```
    */
-  onSelect: _react2['default'].PropTypes.func,
+  onSelect: _propTypes2['default'].func,
 
   /**
    * ARIA role for the Nav, in the context of a TabContainer, the default will
@@ -21423,25 +23083,25 @@ var propTypes = {
    * the ARIA authoring practices for tabs:
    * https://www.w3.org/TR/2013/WD-wai-aria-practices-20130307/#tabpanel
    */
-  role: _react2['default'].PropTypes.string,
+  role: _propTypes2['default'].string,
 
   /**
    * Apply styling an alignment for use in a Navbar. This prop will be set
    * automatically when the Nav is used inside a Navbar.
    */
-  navbar: _react2['default'].PropTypes.bool,
+  navbar: _propTypes2['default'].bool,
 
   /**
    * Float the Nav to the right. When `navbar` is `true` the appropriate
    * contextual classes are added as well.
    */
-  pullRight: _react2['default'].PropTypes.bool,
+  pullRight: _propTypes2['default'].bool,
 
   /**
    * Float the Nav to the left. When `navbar` is `true` the appropriate
    * contextual classes are added as well.
    */
-  pullLeft: _react2['default'].PropTypes.bool
+  pullLeft: _propTypes2['default'].bool
 };
 
 var defaultProps = {
@@ -21452,15 +23112,16 @@ var defaultProps = {
 };
 
 var contextTypes = {
-  $bs_navbar: _react2['default'].PropTypes.shape({
-    bsClass: _react2['default'].PropTypes.string
+  $bs_navbar: _propTypes2['default'].shape({
+    bsClass: _propTypes2['default'].string,
+    onSelect: _propTypes2['default'].func
   }),
 
-  $bs_tabContainer: _react2['default'].PropTypes.shape({
-    activeKey: _react2['default'].PropTypes.any,
-    onSelect: _react2['default'].PropTypes.func.isRequired,
-    getTabId: _react2['default'].PropTypes.func.isRequired,
-    getPaneId: _react2['default'].PropTypes.func.isRequired
+  $bs_tabContainer: _propTypes2['default'].shape({
+    activeKey: _propTypes2['default'].any,
+    onSelect: _propTypes2['default'].func.isRequired,
+    getTabId: _propTypes2['default'].func.isRequired,
+    getPaneId: _propTypes2['default'].func.isRequired
   })
 };
 
@@ -21483,11 +23144,9 @@ var Nav = function (_React$Component) {
 
     var children = this.props.children;
 
-    var _getActiveProps = this.getActiveProps();
-
-    var activeKey = _getActiveProps.activeKey;
-    var activeHref = _getActiveProps.activeHref;
-
+    var _getActiveProps = this.getActiveProps(),
+        activeKey = _getActiveProps.activeKey,
+        activeHref = _getActiveProps.activeHref;
 
     var activeChild = _ValidComponentChildren2['default'].find(children, function (child) {
       return _this2.isActive(child, activeKey, activeHref);
@@ -21525,7 +23184,7 @@ var Nav = function (_React$Component) {
 
     event.preventDefault();
 
-    if (onSelect && nextActiveChild && nextActiveChild.props.eventKey) {
+    if (onSelect && nextActiveChild && nextActiveChild.props.eventKey != null) {
       onSelect(nextActiveChild.props.eventKey);
     }
 
@@ -21538,14 +23197,12 @@ var Nav = function (_React$Component) {
     var children = this.props.children;
 
     var validChildren = children.filter(function (child) {
-      return child.props.eventKey && !child.props.disabled;
+      return child.props.eventKey != null && !child.props.disabled;
     });
 
-    var _getActiveProps2 = this.getActiveProps();
-
-    var activeKey = _getActiveProps2.activeKey;
-    var activeHref = _getActiveProps2.activeHref;
-
+    var _getActiveProps2 = this.getActiveProps(),
+        activeKey = _getActiveProps2.activeKey,
+        activeHref = _getActiveProps2.activeHref;
 
     var activeChild = _ValidComponentChildren2['default'].find(children, function (child) {
       return _this3.isActive(child, activeKey, activeHref);
@@ -21600,13 +23257,13 @@ var Nav = function (_React$Component) {
       return null;
     }
 
-    var _child$props = child.props;
-    var id = _child$props.id;
-    var controls = _child$props['aria-controls'];
-    var eventKey = _child$props.eventKey;
-    var role = _child$props.role;
-    var onKeyDown = _child$props.onKeyDown;
-    var tabIndex = _child$props.tabIndex;
+    var _child$props = child.props,
+        id = _child$props.id,
+        controls = _child$props['aria-controls'],
+        eventKey = _child$props.eventKey,
+        role = _child$props.role,
+        onKeyDown = _child$props.onKeyDown,
+        tabIndex = _child$props.tabIndex;
 
 
     if (tabContainer) {
@@ -21637,35 +23294,32 @@ var Nav = function (_React$Component) {
     var _extends2,
         _this5 = this;
 
-    var _props = this.props;
-    var stacked = _props.stacked;
-    var justified = _props.justified;
-    var onSelect = _props.onSelect;
-    var propsRole = _props.role;
-    var propsNavbar = _props.navbar;
-    var pullRight = _props.pullRight;
-    var pullLeft = _props.pullLeft;
-    var className = _props.className;
-    var children = _props.children;
-    var props = (0, _objectWithoutProperties3['default'])(_props, ['stacked', 'justified', 'onSelect', 'role', 'navbar', 'pullRight', 'pullLeft', 'className', 'children']);
+    var _props = this.props,
+        stacked = _props.stacked,
+        justified = _props.justified,
+        onSelect = _props.onSelect,
+        propsRole = _props.role,
+        propsNavbar = _props.navbar,
+        pullRight = _props.pullRight,
+        pullLeft = _props.pullLeft,
+        className = _props.className,
+        children = _props.children,
+        props = (0, _objectWithoutProperties3['default'])(_props, ['stacked', 'justified', 'onSelect', 'role', 'navbar', 'pullRight', 'pullLeft', 'className', 'children']);
 
 
     var tabContainer = this.context.$bs_tabContainer;
     var role = propsRole || (tabContainer ? 'tablist' : null);
 
-    var _getActiveProps3 = this.getActiveProps();
-
-    var activeKey = _getActiveProps3.activeKey;
-    var activeHref = _getActiveProps3.activeHref;
+    var _getActiveProps3 = this.getActiveProps(),
+        activeKey = _getActiveProps3.activeKey,
+        activeHref = _getActiveProps3.activeHref;
 
     delete props.activeKey; // Accessed via this.getActiveProps().
     delete props.activeHref; // Accessed via this.getActiveProps().
 
-    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props);
-
-    var bsProps = _splitBsProps[0];
-    var elementProps = _splitBsProps[1];
-
+    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props),
+        bsProps = _splitBsProps[0],
+        elementProps = _splitBsProps[1];
 
     var classes = (0, _extends4['default'])({}, (0, _bootstrapUtils.getClassSet)(bsProps), (_extends2 = {}, _extends2[(0, _bootstrapUtils.prefix)(bsProps, 'stacked')] = stacked, _extends2[(0, _bootstrapUtils.prefix)(bsProps, 'justified')] = justified, _extends2));
 
@@ -21696,7 +23350,7 @@ var Nav = function (_React$Component) {
       }),
       _ValidComponentChildren2['default'].map(children, function (child) {
         var active = _this5.isActive(child, activeKey, activeHref);
-        var childOnSelect = (0, _createChainedFunction2['default'])(child.props.onSelect, onSelect, tabContainer && tabContainer.onSelect);
+        var childOnSelect = (0, _createChainedFunction2['default'])(child.props.onSelect, onSelect, navbar && navbar.onSelect, tabContainer && tabContainer.onSelect);
 
         return (0, _react.cloneElement)(child, (0, _extends4['default'])({}, _this5.getTabProps(child, tabContainer, role, active, childOnSelect), {
           active: active,
@@ -21718,7 +23372,7 @@ Nav.contextTypes = contextTypes;
 exports['default'] = (0, _bootstrapUtils.bsClass)('nav', (0, _bootstrapUtils.bsStyles)(['tabs', 'pills'], Nav));
 module.exports = exports['default'];
 }).call(this,require('_process'))
-},{"./utils/ValidComponentChildren":247,"./utils/bootstrapUtils":248,"./utils/createChainedFunction":250,"_process":154,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"keycode":151,"react":456,"react-dom":254,"react-prop-types/lib/all":269,"warning":463}],209:[function(require,module,exports){
+},{"./utils/ValidComponentChildren":256,"./utils/bootstrapUtils":257,"./utils/createChainedFunction":259,"_process":155,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"keycode":151,"prop-types":159,"react":463,"react-dom":263,"react-prop-types/lib/all":278,"warning":470}],218:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -21751,6 +23405,10 @@ var _react = require('react');
 
 var _react2 = _interopRequireDefault(_react);
 
+var _propTypes = require('prop-types');
+
+var _propTypes2 = _interopRequireDefault(_propTypes);
+
 var _Dropdown = require('./Dropdown');
 
 var _Dropdown2 = _interopRequireDefault(_Dropdown);
@@ -21768,15 +23426,15 @@ function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'd
 var propTypes = (0, _extends3['default'])({}, _Dropdown2['default'].propTypes, {
 
   // Toggle props.
-  title: _react2['default'].PropTypes.node.isRequired,
-  noCaret: _react2['default'].PropTypes.bool,
-  active: _react2['default'].PropTypes.bool,
+  title: _propTypes2['default'].node.isRequired,
+  noCaret: _propTypes2['default'].bool,
+  active: _propTypes2['default'].bool,
 
   // Override generated docs from <Dropdown>.
   /**
    * @private
    */
-  children: _react2['default'].PropTypes.node
+  children: _propTypes2['default'].node
 });
 
 var NavDropdown = function (_React$Component) {
@@ -21808,24 +23466,23 @@ var NavDropdown = function (_React$Component) {
   NavDropdown.prototype.render = function render() {
     var _this3 = this;
 
-    var _props = this.props;
-    var title = _props.title;
-    var activeKey = _props.activeKey;
-    var activeHref = _props.activeHref;
-    var className = _props.className;
-    var style = _props.style;
-    var children = _props.children;
-    var props = (0, _objectWithoutProperties3['default'])(_props, ['title', 'activeKey', 'activeHref', 'className', 'style', 'children']);
+    var _props = this.props,
+        title = _props.title,
+        activeKey = _props.activeKey,
+        activeHref = _props.activeHref,
+        className = _props.className,
+        style = _props.style,
+        children = _props.children,
+        props = (0, _objectWithoutProperties3['default'])(_props, ['title', 'activeKey', 'activeHref', 'className', 'style', 'children']);
 
 
     var active = this.isActive(this, activeKey, activeHref);
     delete props.active; // Accessed via this.isActive().
     delete props.eventKey; // Accessed via this.isActive().
 
-    var _splitComponentProps = (0, _splitComponentProps3['default'])(props, _Dropdown2['default'].ControlledComponent);
-
-    var dropdownProps = _splitComponentProps[0];
-    var toggleProps = _splitComponentProps[1];
+    var _splitComponentProps = (0, _splitComponentProps3['default'])(props, _Dropdown2['default'].ControlledComponent),
+        dropdownProps = _splitComponentProps[0],
+        toggleProps = _splitComponentProps[1];
 
     // Unlike for the other dropdowns, styling needs to go to the `<Dropdown>`
     // rather than the `<Dropdown.Toggle>`.
@@ -21861,7 +23518,7 @@ NavDropdown.propTypes = propTypes;
 
 exports['default'] = NavDropdown;
 module.exports = exports['default'];
-},{"./Dropdown":173,"./utils/ValidComponentChildren":247,"./utils/splitComponentProps":253,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":456}],210:[function(require,module,exports){
+},{"./Dropdown":182,"./utils/ValidComponentChildren":256,"./utils/splitComponentProps":262,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"prop-types":159,"react":463}],219:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -21894,6 +23551,10 @@ var _react = require('react');
 
 var _react2 = _interopRequireDefault(_react);
 
+var _propTypes = require('prop-types');
+
+var _propTypes2 = _interopRequireDefault(_propTypes);
+
 var _SafeAnchor = require('./SafeAnchor');
 
 var _SafeAnchor2 = _interopRequireDefault(_SafeAnchor);
@@ -21905,13 +23566,13 @@ var _createChainedFunction2 = _interopRequireDefault(_createChainedFunction);
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'default': obj }; }
 
 var propTypes = {
-  active: _react2['default'].PropTypes.bool,
-  disabled: _react2['default'].PropTypes.bool,
-  role: _react2['default'].PropTypes.string,
-  href: _react2['default'].PropTypes.string,
-  onClick: _react2['default'].PropTypes.func,
-  onSelect: _react2['default'].PropTypes.func,
-  eventKey: _react2['default'].PropTypes.any
+  active: _propTypes2['default'].bool,
+  disabled: _propTypes2['default'].bool,
+  role: _propTypes2['default'].string,
+  href: _propTypes2['default'].string,
+  onClick: _propTypes2['default'].func,
+  onSelect: _propTypes2['default'].func,
+  eventKey: _propTypes2['default'].any
 };
 
 var defaultProps = {
@@ -21942,13 +23603,13 @@ var NavItem = function (_React$Component) {
   };
 
   NavItem.prototype.render = function render() {
-    var _props = this.props;
-    var active = _props.active;
-    var disabled = _props.disabled;
-    var onClick = _props.onClick;
-    var className = _props.className;
-    var style = _props.style;
-    var props = (0, _objectWithoutProperties3['default'])(_props, ['active', 'disabled', 'onClick', 'className', 'style']);
+    var _props = this.props,
+        active = _props.active,
+        disabled = _props.disabled,
+        onClick = _props.onClick,
+        className = _props.className,
+        style = _props.style,
+        props = (0, _objectWithoutProperties3['default'])(_props, ['active', 'disabled', 'onClick', 'className', 'style']);
 
 
     delete props.onSelect;
@@ -21988,7 +23649,7 @@ NavItem.defaultProps = defaultProps;
 
 exports['default'] = NavItem;
 module.exports = exports['default'];
-},{"./SafeAnchor":231,"./utils/createChainedFunction":250,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":456}],211:[function(require,module,exports){
+},{"./SafeAnchor":240,"./utils/createChainedFunction":259,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"prop-types":159,"react":463}],220:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -22020,6 +23681,10 @@ var _classnames2 = _interopRequireDefault(_classnames);
 var _react = require('react');
 
 var _react2 = _interopRequireDefault(_react);
+
+var _propTypes = require('prop-types');
+
+var _propTypes2 = _interopRequireDefault(_propTypes);
 
 var _elementType = require('react-prop-types/lib/elementType');
 
@@ -22053,6 +23718,10 @@ var _bootstrapUtils = require('./utils/bootstrapUtils');
 
 var _StyleConfig = require('./utils/StyleConfig');
 
+var _createChainedFunction = require('./utils/createChainedFunction');
+
+var _createChainedFunction2 = _interopRequireDefault(_createChainedFunction);
+
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'default': obj }; }
 
 var propTypes = {
@@ -22060,25 +23729,25 @@ var propTypes = {
    * Create a fixed navbar along the top of the screen, that scrolls with the
    * page
    */
-  fixedTop: _react2['default'].PropTypes.bool,
+  fixedTop: _propTypes2['default'].bool,
   /**
    * Create a fixed navbar along the bottom of the screen, that scrolls with
    * the page
    */
-  fixedBottom: _react2['default'].PropTypes.bool,
+  fixedBottom: _propTypes2['default'].bool,
   /**
    * Create a full-width navbar that scrolls away with the page
    */
-  staticTop: _react2['default'].PropTypes.bool,
+  staticTop: _propTypes2['default'].bool,
   /**
    * An alternative dark visual style for the Navbar
    */
-  inverse: _react2['default'].PropTypes.bool,
+  inverse: _propTypes2['default'].bool,
   /**
    * Allow the Navbar to fluidly adjust to the page or container width, instead
    * of at the predefined screen breakpoints
    */
-  fluid: _react2['default'].PropTypes.bool,
+  fluid: _propTypes2['default'].bool,
 
   /**
    * Set a custom element for this component.
@@ -22091,16 +23760,45 @@ var propTypes = {
    *
    * @controllable navExpanded
    */
-  onToggle: _react2['default'].PropTypes.func,
-
+  onToggle: _propTypes2['default'].func,
+  /**
+   * A callback fired when a descendant of a child `<Nav>` is selected. Should
+   * be used to execute complex closing or other miscellaneous actions desired
+   * after selecting a descendant of `<Nav>`. Does nothing if no `<Nav>` or `<Nav>`
+   * descendants exist. The callback is called with an eventKey, which is a
+   * prop from the selected `<Nav>` descendant, and an event.
+   *
+   * ```js
+   * function (
+   * 	Any eventKey,
+   * 	SyntheticEvent event?
+   * )
+   * ```
+   *
+   * For basic closing behavior after all `<Nav>` descendant onSelect events in
+   * mobile viewports, try using collapseOnSelect.
+   *
+   * Note: If you are manually closing the navbar using this `OnSelect` prop,
+   * ensure that you are setting `expanded` to false and not *toggling* between
+   * true and false.
+   */
+  onSelect: _propTypes2['default'].func,
+  /**
+   * Sets `expanded` to `false` after the onSelect event of a descendant of a
+   * child `<Nav>`. Does nothing if no `<Nav>` or `<Nav>` descendants exist.
+   *
+   * The onSelect callback should be used instead for more complex operations
+   * that need to be executed after the `select` event of `<Nav>` descendants.
+   */
+  collapseOnSelect: _propTypes2['default'].bool,
   /**
    * Explicitly set the visiblity of the navbar body
    *
    * @controllable onToggle
    */
-  expanded: _react2['default'].PropTypes.bool,
+  expanded: _propTypes2['default'].bool,
 
-  role: _react2['default'].PropTypes.string
+  role: _propTypes2['default'].string
 }; // TODO: Remove this pragma once we upgrade eslint-config-airbnb.
 /* eslint-disable react/no-multi-comp */
 
@@ -22110,14 +23808,16 @@ var defaultProps = {
   fixedBottom: false,
   staticTop: false,
   inverse: false,
-  fluid: false
+  fluid: false,
+  collapseOnSelect: false
 };
 
 var childContextTypes = {
-  $bs_navbar: _react.PropTypes.shape({
-    bsClass: _react.PropTypes.string,
-    expanded: _react.PropTypes.bool,
-    onToggle: _react.PropTypes.func.isRequired
+  $bs_navbar: _propTypes2['default'].shape({
+    bsClass: _propTypes2['default'].string,
+    expanded: _propTypes2['default'].bool,
+    onToggle: _propTypes2['default'].func.isRequired,
+    onSelect: _propTypes2['default'].func
   })
 };
 
@@ -22130,28 +23830,43 @@ var Navbar = function (_React$Component) {
     var _this = (0, _possibleConstructorReturn3['default'])(this, _React$Component.call(this, props, context));
 
     _this.handleToggle = _this.handleToggle.bind(_this);
+    _this.handleCollapse = _this.handleCollapse.bind(_this);
     return _this;
   }
 
   Navbar.prototype.getChildContext = function getChildContext() {
-    var _props = this.props;
-    var bsClass = _props.bsClass;
-    var expanded = _props.expanded;
+    var _props = this.props,
+        bsClass = _props.bsClass,
+        expanded = _props.expanded,
+        onSelect = _props.onSelect,
+        collapseOnSelect = _props.collapseOnSelect;
 
 
     return {
       $bs_navbar: {
         bsClass: bsClass,
         expanded: expanded,
-        onToggle: this.handleToggle
+        onToggle: this.handleToggle,
+        onSelect: (0, _createChainedFunction2['default'])(onSelect, collapseOnSelect ? this.handleCollapse : null)
       }
     };
   };
 
+  Navbar.prototype.handleCollapse = function handleCollapse() {
+    var _props2 = this.props,
+        onToggle = _props2.onToggle,
+        expanded = _props2.expanded;
+
+
+    if (expanded) {
+      onToggle(false);
+    }
+  };
+
   Navbar.prototype.handleToggle = function handleToggle() {
-    var _props2 = this.props;
-    var onToggle = _props2.onToggle;
-    var expanded = _props2.expanded;
+    var _props3 = this.props,
+        onToggle = _props3.onToggle,
+        expanded = _props3.expanded;
 
 
     onToggle(!expanded);
@@ -22160,25 +23875,25 @@ var Navbar = function (_React$Component) {
   Navbar.prototype.render = function render() {
     var _extends2;
 
-    var _props3 = this.props;
-    var Component = _props3.componentClass;
-    var fixedTop = _props3.fixedTop;
-    var fixedBottom = _props3.fixedBottom;
-    var staticTop = _props3.staticTop;
-    var inverse = _props3.inverse;
-    var fluid = _props3.fluid;
-    var className = _props3.className;
-    var children = _props3.children;
-    var props = (0, _objectWithoutProperties3['default'])(_props3, ['componentClass', 'fixedTop', 'fixedBottom', 'staticTop', 'inverse', 'fluid', 'className', 'children']);
+    var _props4 = this.props,
+        Component = _props4.componentClass,
+        fixedTop = _props4.fixedTop,
+        fixedBottom = _props4.fixedBottom,
+        staticTop = _props4.staticTop,
+        inverse = _props4.inverse,
+        fluid = _props4.fluid,
+        className = _props4.className,
+        children = _props4.children,
+        props = (0, _objectWithoutProperties3['default'])(_props4, ['componentClass', 'fixedTop', 'fixedBottom', 'staticTop', 'inverse', 'fluid', 'className', 'children']);
 
-    var _splitBsPropsAndOmit = (0, _bootstrapUtils.splitBsPropsAndOmit)(props, ['expanded', 'onToggle']);
-
-    var bsProps = _splitBsPropsAndOmit[0];
-    var elementProps = _splitBsPropsAndOmit[1];
+    var _splitBsPropsAndOmit = (0, _bootstrapUtils.splitBsPropsAndOmit)(props, ['expanded', 'onToggle', 'onSelect', 'collapseOnSelect']),
+        bsProps = _splitBsPropsAndOmit[0],
+        elementProps = _splitBsPropsAndOmit[1];
 
     // will result in some false positives but that seems better
     // than false negatives. strict `undefined` check allows explicit
     // "nulling" of the role if the user really doesn't want one
+
 
     if (elementProps.role === undefined && Component !== 'nav') {
       elementProps.role = 'navigation';
@@ -22216,13 +23931,13 @@ var UncontrollableNavbar = (0, _uncontrollable2['default'])(Navbar, { expanded: 
 
 function createSimpleWrapper(tag, suffix, displayName) {
   var Wrapper = function Wrapper(_ref, _ref2) {
-    var Component = _ref.componentClass;
-    var className = _ref.className;
-    var pullRight = _ref.pullRight;
-    var pullLeft = _ref.pullLeft;
-    var props = (0, _objectWithoutProperties3['default'])(_ref, ['componentClass', 'className', 'pullRight', 'pullLeft']);
-    var _ref2$$bs_navbar = _ref2.$bs_navbar;
-    var navbarProps = _ref2$$bs_navbar === undefined ? { bsClass: 'navbar' } : _ref2$$bs_navbar;
+    var _ref2$$bs_navbar = _ref2.$bs_navbar,
+        navbarProps = _ref2$$bs_navbar === undefined ? { bsClass: 'navbar' } : _ref2$$bs_navbar;
+    var Component = _ref.componentClass,
+        className = _ref.className,
+        pullRight = _ref.pullRight,
+        pullLeft = _ref.pullLeft,
+        props = (0, _objectWithoutProperties3['default'])(_ref, ['componentClass', 'className', 'pullRight', 'pullLeft']);
     return _react2['default'].createElement(Component, (0, _extends4['default'])({}, props, {
       className: (0, _classnames2['default'])(className, (0, _bootstrapUtils.prefix)(navbarProps, suffix), pullRight && (0, _bootstrapUtils.prefix)(navbarProps, 'right'), pullLeft && (0, _bootstrapUtils.prefix)(navbarProps, 'left'))
     }));
@@ -22232,8 +23947,8 @@ function createSimpleWrapper(tag, suffix, displayName) {
 
   Wrapper.propTypes = {
     componentClass: _elementType2['default'],
-    pullRight: _react2['default'].PropTypes.bool,
-    pullLeft: _react2['default'].PropTypes.bool
+    pullRight: _propTypes2['default'].bool,
+    pullLeft: _propTypes2['default'].bool
   };
 
   Wrapper.defaultProps = {
@@ -22243,8 +23958,8 @@ function createSimpleWrapper(tag, suffix, displayName) {
   };
 
   Wrapper.contextTypes = {
-    $bs_navbar: _react.PropTypes.shape({
-      bsClass: _react.PropTypes.string
+    $bs_navbar: _propTypes2['default'].shape({
+      bsClass: _propTypes2['default'].string
     })
   };
 
@@ -22263,7 +23978,7 @@ UncontrollableNavbar.Link = createSimpleWrapper('a', 'link', 'NavbarLink');
 // Set bsStyles here so they can be overridden.
 exports['default'] = (0, _bootstrapUtils.bsStyles)([_StyleConfig.Style.DEFAULT, _StyleConfig.Style.INVERSE], _StyleConfig.Style.DEFAULT, UncontrollableNavbar);
 module.exports = exports['default'];
-},{"./Grid":184,"./NavbarBrand":212,"./NavbarCollapse":213,"./NavbarHeader":214,"./NavbarToggle":215,"./utils/StyleConfig":245,"./utils/bootstrapUtils":248,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":456,"react-prop-types/lib/elementType":271,"uncontrollable":458}],212:[function(require,module,exports){
+},{"./Grid":193,"./NavbarBrand":221,"./NavbarCollapse":222,"./NavbarHeader":223,"./NavbarToggle":224,"./utils/StyleConfig":254,"./utils/bootstrapUtils":257,"./utils/createChainedFunction":259,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"prop-types":159,"react":463,"react-prop-types/lib/elementType":280,"uncontrollable":465}],221:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -22296,13 +24011,17 @@ var _react = require('react');
 
 var _react2 = _interopRequireDefault(_react);
 
+var _propTypes = require('prop-types');
+
+var _propTypes2 = _interopRequireDefault(_propTypes);
+
 var _bootstrapUtils = require('./utils/bootstrapUtils');
 
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'default': obj }; }
 
 var contextTypes = {
-  $bs_navbar: _react2['default'].PropTypes.shape({
-    bsClass: _react2['default'].PropTypes.string
+  $bs_navbar: _propTypes2['default'].shape({
+    bsClass: _propTypes2['default'].string
   })
 };
 
@@ -22315,10 +24034,10 @@ var NavbarBrand = function (_React$Component) {
   }
 
   NavbarBrand.prototype.render = function render() {
-    var _props = this.props;
-    var className = _props.className;
-    var children = _props.children;
-    var props = (0, _objectWithoutProperties3['default'])(_props, ['className', 'children']);
+    var _props = this.props,
+        className = _props.className,
+        children = _props.children,
+        props = (0, _objectWithoutProperties3['default'])(_props, ['className', 'children']);
 
     var navbarProps = this.context.$bs_navbar || { bsClass: 'navbar' };
 
@@ -22344,7 +24063,7 @@ NavbarBrand.contextTypes = contextTypes;
 
 exports['default'] = NavbarBrand;
 module.exports = exports['default'];
-},{"./utils/bootstrapUtils":248,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":456}],213:[function(require,module,exports){
+},{"./utils/bootstrapUtils":257,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"prop-types":159,"react":463}],222:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -22373,6 +24092,10 @@ var _react = require('react');
 
 var _react2 = _interopRequireDefault(_react);
 
+var _propTypes = require('prop-types');
+
+var _propTypes2 = _interopRequireDefault(_propTypes);
+
 var _Collapse = require('./Collapse');
 
 var _Collapse2 = _interopRequireDefault(_Collapse);
@@ -22382,9 +24105,9 @@ var _bootstrapUtils = require('./utils/bootstrapUtils');
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'default': obj }; }
 
 var contextTypes = {
-  $bs_navbar: _react.PropTypes.shape({
-    bsClass: _react.PropTypes.string,
-    expanded: _react.PropTypes.bool
+  $bs_navbar: _propTypes2['default'].shape({
+    bsClass: _propTypes2['default'].string,
+    expanded: _propTypes2['default'].bool
   })
 };
 
@@ -22397,9 +24120,9 @@ var NavbarCollapse = function (_React$Component) {
   }
 
   NavbarCollapse.prototype.render = function render() {
-    var _props = this.props;
-    var children = _props.children;
-    var props = (0, _objectWithoutProperties3['default'])(_props, ['children']);
+    var _props = this.props,
+        children = _props.children,
+        props = (0, _objectWithoutProperties3['default'])(_props, ['children']);
 
     var navbarProps = this.context.$bs_navbar || { bsClass: 'navbar' };
 
@@ -22423,7 +24146,7 @@ NavbarCollapse.contextTypes = contextTypes;
 
 exports['default'] = NavbarCollapse;
 module.exports = exports['default'];
-},{"./Collapse":171,"./utils/bootstrapUtils":248,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"react":456}],214:[function(require,module,exports){
+},{"./Collapse":180,"./utils/bootstrapUtils":257,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"prop-types":159,"react":463}],223:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -22456,13 +24179,17 @@ var _react = require('react');
 
 var _react2 = _interopRequireDefault(_react);
 
+var _propTypes = require('prop-types');
+
+var _propTypes2 = _interopRequireDefault(_propTypes);
+
 var _bootstrapUtils = require('./utils/bootstrapUtils');
 
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'default': obj }; }
 
 var contextTypes = {
-  $bs_navbar: _react2['default'].PropTypes.shape({
-    bsClass: _react2['default'].PropTypes.string
+  $bs_navbar: _propTypes2['default'].shape({
+    bsClass: _propTypes2['default'].string
   })
 };
 
@@ -22475,9 +24202,9 @@ var NavbarHeader = function (_React$Component) {
   }
 
   NavbarHeader.prototype.render = function render() {
-    var _props = this.props;
-    var className = _props.className;
-    var props = (0, _objectWithoutProperties3['default'])(_props, ['className']);
+    var _props = this.props,
+        className = _props.className,
+        props = (0, _objectWithoutProperties3['default'])(_props, ['className']);
 
     var navbarProps = this.context.$bs_navbar || { bsClass: 'navbar' };
 
@@ -22493,7 +24220,7 @@ NavbarHeader.contextTypes = contextTypes;
 
 exports['default'] = NavbarHeader;
 module.exports = exports['default'];
-},{"./utils/bootstrapUtils":248,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":456}],215:[function(require,module,exports){
+},{"./utils/bootstrapUtils":257,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"prop-types":159,"react":463}],224:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -22526,6 +24253,10 @@ var _react = require('react');
 
 var _react2 = _interopRequireDefault(_react);
 
+var _propTypes = require('prop-types');
+
+var _propTypes2 = _interopRequireDefault(_propTypes);
+
 var _bootstrapUtils = require('./utils/bootstrapUtils');
 
 var _createChainedFunction = require('./utils/createChainedFunction');
@@ -22535,18 +24266,18 @@ var _createChainedFunction2 = _interopRequireDefault(_createChainedFunction);
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'default': obj }; }
 
 var propTypes = {
-  onClick: _react.PropTypes.func,
+  onClick: _propTypes2['default'].func,
   /**
    * The toggle content, if left empty it will render the default toggle (seen above).
    */
-  children: _react.PropTypes.node
+  children: _propTypes2['default'].node
 };
 
 var contextTypes = {
-  $bs_navbar: _react.PropTypes.shape({
-    bsClass: _react.PropTypes.string,
-    expanded: _react.PropTypes.bool,
-    onToggle: _react.PropTypes.func.isRequired
+  $bs_navbar: _propTypes2['default'].shape({
+    bsClass: _propTypes2['default'].string,
+    expanded: _propTypes2['default'].bool,
+    onToggle: _propTypes2['default'].func.isRequired
   })
 };
 
@@ -22559,11 +24290,11 @@ var NavbarToggle = function (_React$Component) {
   }
 
   NavbarToggle.prototype.render = function render() {
-    var _props = this.props;
-    var onClick = _props.onClick;
-    var className = _props.className;
-    var children = _props.children;
-    var props = (0, _objectWithoutProperties3['default'])(_props, ['onClick', 'className', 'children']);
+    var _props = this.props,
+        onClick = _props.onClick,
+        className = _props.className,
+        children = _props.children,
+        props = (0, _objectWithoutProperties3['default'])(_props, ['onClick', 'className', 'children']);
 
     var navbarProps = this.context.$bs_navbar || { bsClass: 'navbar' };
 
@@ -22604,7 +24335,7 @@ NavbarToggle.contextTypes = contextTypes;
 
 exports['default'] = NavbarToggle;
 module.exports = exports['default'];
-},{"./utils/bootstrapUtils":248,"./utils/createChainedFunction":250,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":456}],216:[function(require,module,exports){
+},{"./utils/bootstrapUtils":257,"./utils/createChainedFunction":259,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"prop-types":159,"react":463}],225:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -22637,6 +24368,10 @@ var _react = require('react');
 
 var _react2 = _interopRequireDefault(_react);
 
+var _propTypes = require('prop-types');
+
+var _propTypes2 = _interopRequireDefault(_propTypes);
+
 var _Overlay = require('react-overlays/lib/Overlay');
 
 var _Overlay2 = _interopRequireDefault(_Overlay);
@@ -22656,57 +24391,63 @@ var propTypes = (0, _extends3['default'])({}, _Overlay2['default'].propTypes, {
   /**
    * Set the visibility of the Overlay
    */
-  show: _react2['default'].PropTypes.bool,
+  show: _propTypes2['default'].bool,
   /**
    * Specify whether the overlay should trigger onHide when the user clicks outside the overlay
    */
-  rootClose: _react2['default'].PropTypes.bool,
+  rootClose: _propTypes2['default'].bool,
   /**
    * A callback invoked by the overlay when it wishes to be hidden. Required if
    * `rootClose` is specified.
    */
-  onHide: _react2['default'].PropTypes.func,
+  onHide: _propTypes2['default'].func,
 
   /**
    * Use animation
    */
-  animation: _react2['default'].PropTypes.oneOfType([_react2['default'].PropTypes.bool, _elementType2['default']]),
+  animation: _propTypes2['default'].oneOfType([_propTypes2['default'].bool, _elementType2['default']]),
 
   /**
    * Callback fired before the Overlay transitions in
    */
-  onEnter: _react2['default'].PropTypes.func,
+  onEnter: _propTypes2['default'].func,
 
   /**
    * Callback fired as the Overlay begins to transition in
    */
-  onEntering: _react2['default'].PropTypes.func,
+  onEntering: _propTypes2['default'].func,
 
   /**
    * Callback fired after the Overlay finishes transitioning in
    */
-  onEntered: _react2['default'].PropTypes.func,
+  onEntered: _propTypes2['default'].func,
 
   /**
    * Callback fired right before the Overlay transitions out
    */
-  onExit: _react2['default'].PropTypes.func,
+  onExit: _propTypes2['default'].func,
 
   /**
    * Callback fired as the Overlay begins to transition out
    */
-  onExiting: _react2['default'].PropTypes.func,
+  onExiting: _propTypes2['default'].func,
 
   /**
    * Callback fired after the Overlay finishes transitioning out
    */
-  onExited: _react2['default'].PropTypes.func
+  onExited: _propTypes2['default'].func,
+
+  /**
+   * Sets the direction of the Overlay.
+   */
+  placement: _propTypes2['default'].oneOf(['top', 'right', 'bottom', 'left'])
 });
 
 var defaultProps = {
   animation: _Fade2['default'],
   rootClose: false,
-  show: false
+  show: false,
+  placement: 'right'
 };
 
 var Overlay = function (_React$Component) {
@@ -22718,10 +24459,10 @@ var Overlay = function (_React$Component) {
   }
 
   Overlay.prototype.render = function render() {
-    var _props = this.props;
-    var animation = _props.animation;
-    var children = _props.children;
-    var props = (0, _objectWithoutProperties3['default'])(_props, ['animation', 'children']);
+    var _props = this.props,
+        animation = _props.animation,
+        children = _props.children,
+        props = (0, _objectWithoutProperties3['default'])(_props, ['animation', 'children']);
 
 
     var transition = animation === true ? _Fade2['default'] : animation || null;
@@ -22753,7 +24494,7 @@ Overlay.defaultProps = defaultProps;
 
 exports['default'] = Overlay;
 module.exports = exports['default'];
-},{"./Fade":177,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":456,"react-overlays/lib/Overlay":257,"react-prop-types/lib/elementType":271}],217:[function(require,module,exports){
+},{"./Fade":186,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"prop-types":159,"react":463,"react-overlays/lib/Overlay":266,"react-prop-types/lib/elementType":280}],226:[function(require,module,exports){
 (function (process){
 'use strict';
 
@@ -22787,6 +24528,10 @@ var _react = require('react');
 
 var _react2 = _interopRequireDefault(_react);
 
+var _propTypes = require('prop-types');
+
+var _propTypes2 = _interopRequireDefault(_propTypes);
+
 var _reactDom = require('react-dom');
 
 var _reactDom2 = _interopRequireDefault(_reactDom);
@@ -22819,74 +24564,74 @@ function isOneOf(one, of) {
   return one === of;
 }
 
-var triggerType = _react2['default'].PropTypes.oneOf(['click', 'hover', 'focus']);
+var triggerType = _propTypes2['default'].oneOf(['click', 'hover', 'focus']);
 
 var propTypes = (0, _extends3['default'])({}, _Overlay2['default'].propTypes, {
 
   /**
   * Specify which action or actions trigger Overlay visibility
   */
-  trigger: _react2['default'].PropTypes.oneOfType([triggerType, _react2['default'].PropTypes.arrayOf(triggerType)]),
+  trigger: _propTypes2['default'].oneOfType([triggerType, _propTypes2['default'].arrayOf(triggerType)]),
 
   /**
    * A millisecond delay amount to show and hide the Overlay once triggered
    */
-  delay: _react2['default'].PropTypes.number,
+  delay: _propTypes2['default'].number,
   /**
    * A millisecond delay amount before showing the Overlay once triggered.
    */
-  delayShow: _react2['default'].PropTypes.number,
+  delayShow: _propTypes2['default'].number,
   /**
    * A millisecond delay amount before hiding the Overlay once triggered.
    */
-  delayHide: _react2['default'].PropTypes.number,
+  delayHide: _propTypes2['default'].number,
 
   // FIXME: This should be `defaultShow`.
   /**
    * The initial visibility state of the Overlay. For more nuanced visibility
    * control, consider using the Overlay component directly.
    */
-  defaultOverlayShown: _react2['default'].PropTypes.bool,
+  defaultOverlayShown: _propTypes2['default'].bool,
 
   /**
    * An element or text to overlay next to the target.
    */
-  overlay: _react2['default'].PropTypes.node.isRequired,
+  overlay: _propTypes2['default'].node.isRequired,
 
   /**
    * @private
    */
-  onBlur: _react2['default'].PropTypes.func,
+  onBlur: _propTypes2['default'].func,
   /**
    * @private
    */
-  onClick: _react2['default'].PropTypes.func,
+  onClick: _propTypes2['default'].func,
   /**
    * @private
    */
-  onFocus: _react2['default'].PropTypes.func,
+  onFocus: _propTypes2['default'].func,
   /**
    * @private
    */
-  onMouseOut: _react2['default'].PropTypes.func,
+  onMouseOut: _propTypes2['default'].func,
   /**
    * @private
    */
-  onMouseOver: _react2['default'].PropTypes.func,
+  onMouseOver: _propTypes2['default'].func,
 
   // Overridden props from `<Overlay>`.
   /**
    * @private
    */
-  target: _react2['default'].PropTypes.oneOf([null]),
+  target: _propTypes2['default'].oneOf([null]),
   /**
   * @private
   */
-  onHide: _react2['default'].PropTypes.oneOf([null]),
+  onHide: _propTypes2['default'].oneOf([null]),
   /**
    * @private
    */
-  show: _react2['default'].PropTypes.oneOf([null])
+  show: _propTypes2['default'].oneOf([null])
 });
 
 var defaultProps = {
@@ -23043,16 +24788,16 @@ var OverlayTrigger = function (_React$Component) {
   };
 
   OverlayTrigger.prototype.render = function render() {
-    var _props = this.props;
-    var trigger = _props.trigger;
-    var overlay = _props.overlay;
-    var children = _props.children;
-    var onBlur = _props.onBlur;
-    var onClick = _props.onClick;
-    var onFocus = _props.onFocus;
-    var onMouseOut = _props.onMouseOut;
-    var onMouseOver = _props.onMouseOver;
-    var props = (0, _objectWithoutProperties3['default'])(_props, ['trigger', 'overlay', 'children', 'onBlur', 'onClick', 'onFocus', 'onMouseOut', 'onMouseOver']);
+    var _props = this.props,
+        trigger = _props.trigger,
+        overlay = _props.overlay,
+        children = _props.children,
+        onBlur = _props.onBlur,
+        onClick = _props.onClick,
+        onFocus = _props.onFocus,
+        onMouseOut = _props.onMouseOut,
+        onMouseOver = _props.onMouseOver,
+        props = (0, _objectWithoutProperties3['default'])(_props, ['trigger', 'overlay', 'children', 'onBlur', 'onClick', 'onFocus', 'onMouseOut', 'onMouseOver']);
 
 
     delete props.delay;
@@ -23062,10 +24807,11 @@ var OverlayTrigger = function (_React$Component) {
 
     var child = _react2['default'].Children.only(children);
     var childProps = child.props;
+    var triggerProps = {};
 
-    var triggerProps = {
-      'aria-describedby': overlay.props.id
-    };
+    if (this.state.show) {
+      triggerProps['aria-describedby'] = overlay.props.id;
+    }
 
     // FIXME: The logic here for passing through handlers on this component is
     // inconsistent. We shouldn't be passing any of these props through.
@@ -23102,7 +24848,7 @@ OverlayTrigger.defaultProps = defaultProps;
 exports['default'] = OverlayTrigger;
 module.exports = exports['default'];
 }).call(this,require('_process'))
-},{"./Overlay":216,"./utils/createChainedFunction":250,"_process":154,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"dom-helpers/query/contains":126,"react":456,"react-dom":254,"warning":463}],218:[function(require,module,exports){
+},{"./Overlay":225,"./utils/createChainedFunction":259,"_process":155,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"dom-helpers/query/contains":129,"prop-types":159,"react":463,"react-dom":263,"warning":470}],227:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -23148,16 +24894,14 @@ var PageHeader = function (_React$Component) {
   }
 
   PageHeader.prototype.render = function render() {
-    var _props = this.props;
-    var className = _props.className;
-    var children = _props.children;
-    var props = (0, _objectWithoutProperties3['default'])(_props, ['className', 'children']);
+    var _props = this.props,
+        className = _props.className,
+        children = _props.children,
+        props = (0, _objectWithoutProperties3['default'])(_props, ['className', 'children']);
 
-    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props);
-
-    var bsProps = _splitBsProps[0];
-    var elementProps = _splitBsProps[1];
-
+    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props),
+        bsProps = _splitBsProps[0],
+        elementProps = _splitBsProps[1];
 
     var classes = (0, _bootstrapUtils.getClassSet)(bsProps);
 
@@ -23179,7 +24923,7 @@ var PageHeader = function (_React$Component) {
 
 exports['default'] = (0, _bootstrapUtils.bsClass)('page-header', PageHeader);
 module.exports = exports['default'];
-},{"./utils/bootstrapUtils":248,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":456}],219:[function(require,module,exports){
+},{"./utils/bootstrapUtils":257,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":463}],228:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -23196,7 +24940,7 @@ function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'd
 
 exports['default'] = _deprecationWarning2['default'].wrapper(_PagerItem2['default'], '`<PageItem>`', '`<Pager.Item>`');
 module.exports = exports['default'];
-},{"./PagerItem":221,"./utils/deprecationWarning":251}],220:[function(require,module,exports){
+},{"./PagerItem":230,"./utils/deprecationWarning":260}],229:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -23229,6 +24973,10 @@ var _react = require('react');
 
 var _react2 = _interopRequireDefault(_react);
 
+var _propTypes = require('prop-types');
+
+var _propTypes2 = _interopRequireDefault(_propTypes);
+
 var _PagerItem = require('./PagerItem');
 
 var _PagerItem2 = _interopRequireDefault(_PagerItem);
@@ -23246,7 +24994,7 @@ var _ValidComponentChildren2 = _interopRequireDefault(_ValidComponentChildren);
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'default': obj }; }
 
 var propTypes = {
-  onSelect: _react2['default'].PropTypes.func
+  onSelect: _propTypes2['default'].func
 };
 
 var Pager = function (_React$Component) {
@@ -23258,17 +25006,15 @@ var Pager = function (_React$Component) {
   }
 
   Pager.prototype.render = function render() {
-    var _props = this.props;
-    var onSelect = _props.onSelect;
-    var className = _props.className;
-    var children = _props.children;
-    var props = (0, _objectWithoutProperties3['default'])(_props, ['onSelect', 'className', 'children']);
+    var _props = this.props,
+        onSelect = _props.onSelect,
+        className = _props.className,
+        children = _props.children,
+        props = (0, _objectWithoutProperties3['default'])(_props, ['onSelect', 'className', 'children']);
 
-    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props);
-
-    var bsProps = _splitBsProps[0];
-    var elementProps = _splitBsProps[1];
-
+    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props),
+        bsProps = _splitBsProps[0],
+        elementProps = _splitBsProps[1];
 
     var classes = (0, _bootstrapUtils.getClassSet)(bsProps);
 
@@ -23294,7 +25040,7 @@ Pager.Item = _PagerItem2['default'];
 
 exports['default'] = (0, _bootstrapUtils.bsClass)('pager', Pager);
 module.exports = exports['default'];
-},{"./PagerItem":221,"./utils/ValidComponentChildren":247,"./utils/bootstrapUtils":248,"./utils/createChainedFunction":250,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":456}],221:[function(require,module,exports){
+},{"./PagerItem":230,"./utils/ValidComponentChildren":256,"./utils/bootstrapUtils":257,"./utils/createChainedFunction":259,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"prop-types":159,"react":463}],230:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -23327,6 +25073,10 @@ var _react = require('react');
 
 var _react2 = _interopRequireDefault(_react);
 
+var _propTypes = require('prop-types');
+
+var _propTypes2 = _interopRequireDefault(_propTypes);
+
 var _SafeAnchor = require('./SafeAnchor');
 
 var _SafeAnchor2 = _interopRequireDefault(_SafeAnchor);
@@ -23338,12 +25088,12 @@ var _createChainedFunction2 = _interopRequireDefault(_createChainedFunction);
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'default': obj }; }
 
 var propTypes = {
-  disabled: _react2['default'].PropTypes.bool,
-  previous: _react2['default'].PropTypes.bool,
-  next: _react2['default'].PropTypes.bool,
-  onClick: _react2['default'].PropTypes.func,
-  onSelect: _react2['default'].PropTypes.func,
-  eventKey: _react2['default'].PropTypes.any
+  disabled: _propTypes2['default'].bool,
+  previous: _propTypes2['default'].bool,
+  next: _propTypes2['default'].bool,
+  onClick: _propTypes2['default'].func,
+  onSelect: _propTypes2['default'].func,
+  eventKey: _propTypes2['default'].any
 };
 
 var defaultProps = {
@@ -23365,10 +25115,10 @@ var PagerItem = function (_React$Component) {
   }
 
   PagerItem.prototype.handleSelect = function handleSelect(e) {
-    var _props = this.props;
-    var disabled = _props.disabled;
-    var onSelect = _props.onSelect;
-    var eventKey = _props.eventKey;
+    var _props = this.props,
+        disabled = _props.disabled,
+        onSelect = _props.onSelect,
+        eventKey = _props.eventKey;
 
 
     if (onSelect || disabled) {
@@ -23385,14 +25135,14 @@ var PagerItem = function (_React$Component) {
   };
 
   PagerItem.prototype.render = function render() {
-    var _props2 = this.props;
-    var disabled = _props2.disabled;
-    var previous = _props2.previous;
-    var next = _props2.next;
-    var onClick = _props2.onClick;
-    var className = _props2.className;
-    var style = _props2.style;
-    var props = (0, _objectWithoutProperties3['default'])(_props2, ['disabled', 'previous', 'next', 'onClick', 'className', 'style']);
+    var _props2 = this.props,
+        disabled = _props2.disabled,
+        previous = _props2.previous,
+        next = _props2.next,
+        onClick = _props2.onClick,
+        className = _props2.className,
+        style = _props2.style,
+        props = (0, _objectWithoutProperties3['default'])(_props2, ['disabled', 'previous', 'next', 'onClick', 'className', 'style']);
 
 
     delete props.onSelect;
@@ -23419,7 +25169,7 @@ PagerItem.defaultProps = defaultProps;
 
 exports['default'] = PagerItem;
 module.exports = exports['default'];
-},{"./SafeAnchor":231,"./utils/createChainedFunction":250,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":456}],222:[function(require,module,exports){
+},{"./SafeAnchor":240,"./utils/createChainedFunction":259,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"prop-types":159,"react":463}],231:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -23452,6 +25202,10 @@ var _react = require('react');
 
 var _react2 = _interopRequireDefault(_react);
 
+var _propTypes = require('prop-types');
+
+var _propTypes2 = _interopRequireDefault(_propTypes);
+
 var _elementType = require('react-prop-types/lib/elementType');
 
 var _elementType2 = _interopRequireDefault(_elementType);
@@ -23465,46 +25219,47 @@ var _bootstrapUtils = require('./utils/bootstrapUtils');
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'default': obj }; }
 
 var propTypes = {
-  activePage: _react2['default'].PropTypes.number,
-  items: _react2['default'].PropTypes.number,
-  maxButtons: _react2['default'].PropTypes.number,
+  activePage: _propTypes2['default'].number,
+  items: _propTypes2['default'].number,
+  maxButtons: _propTypes2['default'].number,
 
   /**
-   * When `true`, will display the first and the last button page
+   * When `true`, will display the first and the last button page when
+   * displaying ellipsis.
    */
-  boundaryLinks: _react2['default'].PropTypes.bool,
+  boundaryLinks: _propTypes2['default'].bool,
 
   /**
    * When `true`, will display the default node value ('&hellip;').
    * Otherwise, will display provided node (when specified).
    */
-  ellipsis: _react2['default'].PropTypes.oneOfType([_react2['default'].PropTypes.bool, _react2['default'].PropTypes.node]),
+  ellipsis: _propTypes2['default'].oneOfType([_propTypes2['default'].bool, _propTypes2['default'].node]),
 
   /**
    * When `true`, will display the default node value ('&laquo;').
    * Otherwise, will display provided node (when specified).
    */
-  first: _react2['default'].PropTypes.oneOfType([_react2['default'].PropTypes.bool, _react2['default'].PropTypes.node]),
+  first: _propTypes2['default'].oneOfType([_propTypes2['default'].bool, _propTypes2['default'].node]),
 
   /**
    * When `true`, will display the default node value ('&raquo;').
    * Otherwise, will display provided node (when specified).
    */
-  last: _react2['default'].PropTypes.oneOfType([_react2['default'].PropTypes.bool, _react2['default'].PropTypes.node]),
+  last: _propTypes2['default'].oneOfType([_propTypes2['default'].bool, _propTypes2['default'].node]),
 
   /**
    * When `true`, will display the default node value ('&lsaquo;').
    * Otherwise, will display provided node (when specified).
    */
-  prev: _react2['default'].PropTypes.oneOfType([_react2['default'].PropTypes.bool, _react2['default'].PropTypes.node]),
+  prev: _propTypes2['default'].oneOfType([_propTypes2['default'].bool, _propTypes2['default'].node]),
 
   /**
    * When `true`, will display the default node value ('&rsaquo;').
    * Otherwise, will display provided node (when specified).
    */
-  next: _react2['default'].PropTypes.oneOfType([_react2['default'].PropTypes.bool, _react2['default'].PropTypes.node]),
+  next: _propTypes2['default'].oneOfType([_propTypes2['default'].bool, _propTypes2['default'].node]),
 
-  onSelect: _react2['default'].PropTypes.func,
+  onSelect: _propTypes2['default'].func,
 
   /**
    * You can use a custom element for the buttons
@@ -23537,53 +25292,43 @@ var Pagination = function (_React$Component) {
 
     var startPage = void 0;
     var endPage = void 0;
-    var hasHiddenPagesAfter = void 0;
 
-    if (maxButtons) {
-      var hiddenPagesBefore = activePage - parseInt(maxButtons / 2, 10);
-      startPage = hiddenPagesBefore > 2 ? hiddenPagesBefore : 1;
-      hasHiddenPagesAfter = startPage + maxButtons < items;
-
-      if (!hasHiddenPagesAfter) {
-        endPage = items;
-        startPage = items - maxButtons + 1;
-        if (startPage < 1) {
-          startPage = 1;
-        }
-      } else {
-        endPage = startPage + maxButtons - 1;
-      }
+    if (maxButtons && maxButtons < items) {
+      startPage = Math.max(Math.min(activePage - Math.floor(maxButtons / 2, 10), items - maxButtons + 1), 1);
+      endPage = startPage + maxButtons - 1;
     } else {
       startPage = 1;
       endPage = items;
     }
 
-    for (var pagenumber = startPage; pagenumber <= endPage; pagenumber++) {
+    for (var page = startPage; page <= endPage; ++page) {
       pageButtons.push(_react2['default'].createElement(
         _PaginationButton2['default'],
         (0, _extends3['default'])({}, buttonProps, {
-          key: pagenumber,
-          eventKey: pagenumber,
-          active: pagenumber === activePage
+          key: page,
+          eventKey: page,
+          active: page === activePage
         }),
-        pagenumber
+        page
       ));
     }
 
-    if (boundaryLinks && ellipsis && startPage !== 1) {
-      pageButtons.unshift(_react2['default'].createElement(
-        _PaginationButton2['default'],
-        {
-          key: 'ellipsisFirst',
-          disabled: true,
-          componentClass: buttonProps.componentClass
-        },
-        _react2['default'].createElement(
-          'span',
-          { 'aria-label': 'More' },
-          ellipsis === true ? '\u2026' : ellipsis
-        )
-      ));
+    if (ellipsis && boundaryLinks && startPage > 1) {
+      if (startPage > 2) {
+        pageButtons.unshift(_react2['default'].createElement(
+          _PaginationButton2['default'],
+          {
+            key: 'ellipsisFirst',
+            disabled: true,
+            componentClass: buttonProps.componentClass
+          },
+          _react2['default'].createElement(
+            'span',
+            { 'aria-label': 'More' },
+            ellipsis === true ? '\u2026' : ellipsis
+          )
+        ));
+      }
 
       pageButtons.unshift(_react2['default'].createElement(
         _PaginationButton2['default'],
@@ -23596,22 +25341,24 @@ var Pagination = function (_React$Component) {
       ));
     }
 
-    if (maxButtons && hasHiddenPagesAfter && ellipsis) {
-      pageButtons.push(_react2['default'].createElement(
-        _PaginationButton2['default'],
-        {
-          key: 'ellipsis',
-          disabled: true,
-          componentClass: buttonProps.componentClass
-        },
-        _react2['default'].createElement(
-          'span',
-          { 'aria-label': 'More' },
-          ellipsis === true ? '\u2026' : ellipsis
-        )
-      ));
+    if (ellipsis && endPage < items) {
+      if (!boundaryLinks || endPage < items - 1) {
+        pageButtons.push(_react2['default'].createElement(
+          _PaginationButton2['default'],
+          {
+            key: 'ellipsis',
+            disabled: true,
+            componentClass: buttonProps.componentClass
+          },
+          _react2['default'].createElement(
+            'span',
+            { 'aria-label': 'More' },
+            ellipsis === true ? '\u2026' : ellipsis
+          )
+        ));
+      }
 
-      if (boundaryLinks && endPage !== items) {
+      if (boundaryLinks) {
         pageButtons.push(_react2['default'].createElement(
           _PaginationButton2['default'],
           (0, _extends3['default'])({}, buttonProps, {
@@ -23628,26 +25375,24 @@ var Pagination = function (_React$Component) {
   };
 
   Pagination.prototype.render = function render() {
-    var _props = this.props;
-    var activePage = _props.activePage;
-    var items = _props.items;
-    var maxButtons = _props.maxButtons;
-    var boundaryLinks = _props.boundaryLinks;
-    var ellipsis = _props.ellipsis;
-    var first = _props.first;
-    var last = _props.last;
-    var prev = _props.prev;
-    var next = _props.next;
-    var onSelect = _props.onSelect;
-    var buttonComponentClass = _props.buttonComponentClass;
-    var className = _props.className;
-    var props = (0, _objectWithoutProperties3['default'])(_props, ['activePage', 'items', 'maxButtons', 'boundaryLinks', 'ellipsis', 'first', 'last', 'prev', 'next', 'onSelect', 'buttonComponentClass', 'className']);
+    var _props = this.props,
+        activePage = _props.activePage,
+        items = _props.items,
+        maxButtons = _props.maxButtons,
+        boundaryLinks = _props.boundaryLinks,
+        ellipsis = _props.ellipsis,
+        first = _props.first,
+        last = _props.last,
+        prev = _props.prev,
+        next = _props.next,
+        onSelect = _props.onSelect,
+        buttonComponentClass = _props.buttonComponentClass,
+        className = _props.className,
+        props = (0, _objectWithoutProperties3['default'])(_props, ['activePage', 'items', 'maxButtons', 'boundaryLinks', 'ellipsis', 'first', 'last', 'prev', 'next', 'onSelect', 'buttonComponentClass', 'className']);
 
-    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props);
-
-    var bsProps = _splitBsProps[0];
-    var elementProps = _splitBsProps[1];
-
+    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props),
+        bsProps = _splitBsProps[0],
+        elementProps = _splitBsProps[1];
 
     var classes = (0, _bootstrapUtils.getClassSet)(bsProps);
 
@@ -23721,7 +25466,7 @@ Pagination.defaultProps = defaultProps;
 
 exports['default'] = (0, _bootstrapUtils.bsClass)('pagination', Pagination);
 module.exports = exports['default'];
-},{"./PaginationButton":223,"./utils/bootstrapUtils":248,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":456,"react-prop-types/lib/elementType":271}],223:[function(require,module,exports){
+},{"./PaginationButton":232,"./utils/bootstrapUtils":257,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"prop-types":159,"react":463,"react-prop-types/lib/elementType":280}],232:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -23754,6 +25499,10 @@ var _react = require('react');
 
 var _react2 = _interopRequireDefault(_react);
 
+var _propTypes = require('prop-types');
+
+var _propTypes2 = _interopRequireDefault(_propTypes);
+
 var _elementType = require('react-prop-types/lib/elementType');
 
 var _elementType2 = _interopRequireDefault(_elementType);
@@ -23774,12 +25523,12 @@ function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'd
 
 var propTypes = {
   componentClass: _elementType2['default'],
-  className: _react2['default'].PropTypes.string,
-  eventKey: _react2['default'].PropTypes.any,
-  onSelect: _react2['default'].PropTypes.func,
-  disabled: _react2['default'].PropTypes.bool,
-  active: _react2['default'].PropTypes.bool,
-  onClick: _react2['default'].PropTypes.func
+  className: _propTypes2['default'].string,
+  eventKey: _propTypes2['default'].any,
+  onSelect: _propTypes2['default'].func,
+  disabled: _propTypes2['default'].bool,
+  active: _propTypes2['default'].bool,
+  onClick: _propTypes2['default'].func
 };
 
 var defaultProps = {
@@ -23801,10 +25550,10 @@ var PaginationButton = function (_React$Component) {
   }
 
   PaginationButton.prototype.handleClick = function handleClick(event) {
-    var _props = this.props;
-    var disabled = _props.disabled;
-    var onSelect = _props.onSelect;
-    var eventKey = _props.eventKey;
+    var _props = this.props,
+        disabled = _props.disabled,
+        onSelect = _props.onSelect,
+        eventKey = _props.eventKey;
 
 
     if (disabled) {
@@ -23817,14 +25566,14 @@ var PaginationButton = function (_React$Component) {
   };
 
   PaginationButton.prototype.render = function render() {
-    var _props2 = this.props;
-    var Component = _props2.componentClass;
-    var active = _props2.active;
-    var disabled = _props2.disabled;
-    var onClick = _props2.onClick;
-    var className = _props2.className;
-    var style = _props2.style;
-    var props = (0, _objectWithoutProperties3['default'])(_props2, ['componentClass', 'active', 'disabled', 'onClick', 'className', 'style']);
+    var _props2 = this.props,
+        Component = _props2.componentClass,
+        active = _props2.active,
+        disabled = _props2.disabled,
+        onClick = _props2.onClick,
+        className = _props2.className,
+        style = _props2.style,
+        props = (0, _objectWithoutProperties3['default'])(_props2, ['componentClass', 'active', 'disabled', 'onClick', 'className', 'style']);
 
 
     if (Component === _SafeAnchor2['default']) {
@@ -23855,7 +25604,7 @@ PaginationButton.defaultProps = defaultProps;
 
 exports['default'] = PaginationButton;
 module.exports = exports['default'];
-},{"./SafeAnchor":231,"./utils/createChainedFunction":250,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":456,"react-prop-types/lib/elementType":271}],224:[function(require,module,exports){
+},{"./SafeAnchor":240,"./utils/createChainedFunction":259,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"prop-types":159,"react":463,"react-prop-types/lib/elementType":280}],233:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -23892,6 +25641,10 @@ var _react = require('react');
 
 var _react2 = _interopRequireDefault(_react);
 
+var _propTypes = require('prop-types');
+
+var _propTypes2 = _interopRequireDefault(_propTypes);
+
 var _Collapse = require('./Collapse');
 
 var _Collapse2 = _interopRequireDefault(_Collapse);
@@ -23905,24 +25658,24 @@ function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'd
 // TODO: Use uncontrollable.
 
 var propTypes = {
-  collapsible: _react2['default'].PropTypes.bool,
-  onSelect: _react2['default'].PropTypes.func,
-  header: _react2['default'].PropTypes.node,
-  id: _react2['default'].PropTypes.oneOfType([_react2['default'].PropTypes.string, _react2['default'].PropTypes.number]),
-  footer: _react2['default'].PropTypes.node,
-  defaultExpanded: _react2['default'].PropTypes.bool,
-  expanded: _react2['default'].PropTypes.bool,
-  eventKey: _react2['default'].PropTypes.any,
-  headerRole: _react2['default'].PropTypes.string,
-  panelRole: _react2['default'].PropTypes.string,
+  collapsible: _propTypes2['default'].bool,
+  onSelect: _propTypes2['default'].func,
+  header: _propTypes2['default'].node,
+  id: _propTypes2['default'].oneOfType([_propTypes2['default'].string, _propTypes2['default'].number]),
+  footer: _propTypes2['default'].node,
+  defaultExpanded: _propTypes2['default'].bool,
+  expanded: _propTypes2['default'].bool,
+  eventKey: _propTypes2['default'].any,
+  headerRole: _propTypes2['default'].string,
+  panelRole: _propTypes2['default'].string,
 
   // From Collapse.
-  onEnter: _react2['default'].PropTypes.func,
-  onEntering: _react2['default'].PropTypes.func,
-  onEntered: _react2['default'].PropTypes.func,
-  onExit: _react2['default'].PropTypes.func,
-  onExiting: _react2['default'].PropTypes.func,
-  onExited: _react2['default'].PropTypes.func
+  onEnter: _propTypes2['default'].func,
+  onEntering: _propTypes2['default'].func,
+  onEntered: _propTypes2['default'].func,
+  onExit: _propTypes2['default'].func,
+  onExiting: _propTypes2['default'].func,
+  onExited: _propTypes2['default'].func
 };
 
 var defaultProps = {
@@ -23961,10 +25714,6 @@ var Panel = function (_React$Component) {
     }
   };
 
-  Panel.prototype.shouldRenderFill = function shouldRenderFill(child) {
-    return _react2['default'].isValidElement(child) && child.props.fill != null;
-  };
-
   Panel.prototype.renderHeader = function renderHeader(collapsible, header, id, role, expanded, bsProps) {
     var titleClassName = (0, _bootstrapUtils.prefix)(bsProps, 'title');
 
@@ -24001,7 +25750,8 @@ var Panel = function (_React$Component) {
         onClick: this.handleClickTitle,
         'aria-controls': id,
         'aria-expanded': expanded,
-        'aria-selected': expanded
+        'aria-selected': expanded,
+        className: expanded ? null : 'collapsed'
       },
       header
     );
@@ -24065,29 +25815,27 @@ var Panel = function (_React$Component) {
   };
 
   Panel.prototype.render = function render() {
-    var _props = this.props;
-    var collapsible = _props.collapsible;
-    var header = _props.header;
-    var id = _props.id;
-    var footer = _props.footer;
-    var propsExpanded = _props.expanded;
-    var headerRole = _props.headerRole;
-    var panelRole = _props.panelRole;
-    var className = _props.className;
-    var children = _props.children;
-    var onEnter = _props.onEnter;
-    var onEntering = _props.onEntering;
-    var onEntered = _props.onEntered;
-    var onExit = _props.onExit;
-    var onExiting = _props.onExiting;
-    var onExited = _props.onExited;
-    var props = (0, _objectWithoutProperties3['default'])(_props, ['collapsible', 'header', 'id', 'footer', 'expanded', 'headerRole', 'panelRole', 'className', 'children', 'onEnter', 'onEntering', 'onEntered', 'onExit', 'onExiting', 'onExited']);
+    var _props = this.props,
+        collapsible = _props.collapsible,
+        header = _props.header,
+        id = _props.id,
+        footer = _props.footer,
+        propsExpanded = _props.expanded,
+        headerRole = _props.headerRole,
+        panelRole = _props.panelRole,
+        className = _props.className,
+        children = _props.children,
+        onEnter = _props.onEnter,
+        onEntering = _props.onEntering,
+        onEntered = _props.onEntered,
+        onExit = _props.onExit,
+        onExiting = _props.onExiting,
+        onExited = _props.onExited,
+        props = (0, _objectWithoutProperties3['default'])(_props, ['collapsible', 'header', 'id', 'footer', 'expanded', 'headerRole', 'panelRole', 'className', 'children', 'onEnter', 'onEntering', 'onEntered', 'onExit', 'onExiting', 'onExited']);
 
-    var _splitBsPropsAndOmit = (0, _bootstrapUtils.splitBsPropsAndOmit)(props, ['defaultExpanded', 'eventKey', 'onSelect']);
-
-    var bsProps = _splitBsPropsAndOmit[0];
-    var elementProps = _splitBsPropsAndOmit[1];
-
+    var _splitBsPropsAndOmit = (0, _bootstrapUtils.splitBsPropsAndOmit)(props, ['defaultExpanded', 'eventKey', 'onSelect']),
+        bsProps = _splitBsPropsAndOmit[0],
+        elementProps = _splitBsPropsAndOmit[1];
 
     var expanded = propsExpanded != null ? propsExpanded : this.state.expanded;
 
@@ -24121,7 +25869,7 @@ Panel.defaultProps = defaultProps;
 
 exports['default'] = (0, _bootstrapUtils.bsClass)('panel', (0, _bootstrapUtils.bsStyles)([].concat((0, _values2['default'])(_StyleConfig.State), [_StyleConfig.Style.DEFAULT, _StyleConfig.Style.PRIMARY]), _StyleConfig.Style.DEFAULT, Panel));
 module.exports = exports['default'];
-},{"./Collapse":171,"./utils/StyleConfig":245,"./utils/bootstrapUtils":248,"babel-runtime/core-js/object/values":11,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":456}],225:[function(require,module,exports){
+},{"./Collapse":180,"./utils/StyleConfig":254,"./utils/bootstrapUtils":257,"babel-runtime/core-js/object/values":11,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"prop-types":159,"react":463}],234:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -24158,6 +25906,10 @@ var _react = require('react');
 
 var _react2 = _interopRequireDefault(_react);
 
+var _propTypes = require('prop-types');
+
+var _propTypes2 = _interopRequireDefault(_propTypes);
+
 var _bootstrapUtils = require('./utils/bootstrapUtils');
 
 var _createChainedFunction = require('./utils/createChainedFunction');
@@ -24171,11 +25923,11 @@ var _ValidComponentChildren2 = _interopRequireDefault(_ValidComponentChildren);
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'default': obj }; }
 
 var propTypes = {
-  accordion: _react2['default'].PropTypes.bool,
-  activeKey: _react2['default'].PropTypes.any,
-  defaultActiveKey: _react2['default'].PropTypes.any,
-  onSelect: _react2['default'].PropTypes.func,
-  role: _react2['default'].PropTypes.string
+  accordion: _propTypes2['default'].bool,
+  activeKey: _propTypes2['default'].any,
+  defaultActiveKey: _propTypes2['default'].any,
+  onSelect: _propTypes2['default'].func,
+  role: _propTypes2['default'].string
 };
 
 var defaultProps = {
@@ -24217,18 +25969,16 @@ var PanelGroup = function (_React$Component) {
   PanelGroup.prototype.render = function render() {
     var _this2 = this;
 
-    var _props = this.props;
-    var accordion = _props.accordion;
-    var propsActiveKey = _props.activeKey;
-    var className = _props.className;
-    var children = _props.children;
-    var props = (0, _objectWithoutProperties3['default'])(_props, ['accordion', 'activeKey', 'className', 'children']);
+    var _props = this.props,
+        accordion = _props.accordion,
+        propsActiveKey = _props.activeKey,
+        className = _props.className,
+        children = _props.children,
+        props = (0, _objectWithoutProperties3['default'])(_props, ['accordion', 'activeKey', 'className', 'children']);
 
-    var _splitBsPropsAndOmit = (0, _bootstrapUtils.splitBsPropsAndOmit)(props, ['defaultActiveKey', 'onSelect']);
-
-    var bsProps = _splitBsPropsAndOmit[0];
-    var elementProps = _splitBsPropsAndOmit[1];
-
+    var _splitBsPropsAndOmit = (0, _bootstrapUtils.splitBsPropsAndOmit)(props, ['defaultActiveKey', 'onSelect']),
+        bsProps = _splitBsPropsAndOmit[0],
+        elementProps = _splitBsPropsAndOmit[1];
 
     var activeKey = void 0;
     if (accordion) {
@@ -24271,7 +26021,7 @@ PanelGroup.defaultProps = defaultProps;
 
 exports['default'] = (0, _bootstrapUtils.bsClass)('panel-group', PanelGroup);
 module.exports = exports['default'];
-},{"./utils/ValidComponentChildren":247,"./utils/bootstrapUtils":248,"./utils/createChainedFunction":250,"babel-runtime/core-js/object/assign":4,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":456}],226:[function(require,module,exports){
+},{"./utils/ValidComponentChildren":256,"./utils/bootstrapUtils":257,"./utils/createChainedFunction":259,"babel-runtime/core-js/object/assign":4,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"prop-types":159,"react":463}],235:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -24304,6 +26054,10 @@ var _react = require('react');
 
 var _react2 = _interopRequireDefault(_react);
 
+var _propTypes = require('prop-types');
+
+var _propTypes2 = _interopRequireDefault(_propTypes);
+
 var _isRequiredForA11y = require('react-prop-types/lib/isRequiredForA11y');
 
 var _isRequiredForA11y2 = _interopRequireDefault(_isRequiredForA11y);
@@ -24318,35 +26072,35 @@ var propTypes = {
    * @type {string}
    * @required
    */
-  id: (0, _isRequiredForA11y2['default'])(_react2['default'].PropTypes.oneOfType([_react2['default'].PropTypes.string, _react2['default'].PropTypes.number])),
+  id: (0, _isRequiredForA11y2['default'])(_propTypes2['default'].oneOfType([_propTypes2['default'].string, _propTypes2['default'].number])),
 
   /**
    * Sets the direction the Popover is positioned towards.
    */
-  placement: _react2['default'].PropTypes.oneOf(['top', 'right', 'bottom', 'left']),
+  placement: _propTypes2['default'].oneOf(['top', 'right', 'bottom', 'left']),
 
   /**
    * The "top" position value for the Popover.
    */
-  positionTop: _react2['default'].PropTypes.oneOfType([_react2['default'].PropTypes.number, _react2['default'].PropTypes.string]),
+  positionTop: _propTypes2['default'].oneOfType([_propTypes2['default'].number, _propTypes2['default'].string]),
   /**
    * The "left" position value for the Popover.
    */
-  positionLeft: _react2['default'].PropTypes.oneOfType([_react2['default'].PropTypes.number, _react2['default'].PropTypes.string]),
+  positionLeft: _propTypes2['default'].oneOfType([_propTypes2['default'].number, _propTypes2['default'].string]),
 
   /**
    * The "top" position value for the Popover arrow.
    */
-  arrowOffsetTop: _react2['default'].PropTypes.oneOfType([_react2['default'].PropTypes.number, _react2['default'].PropTypes.string]),
+  arrowOffsetTop: _propTypes2['default'].oneOfType([_propTypes2['default'].number, _propTypes2['default'].string]),
   /**
    * The "left" position value for the Popover arrow.
    */
-  arrowOffsetLeft: _react2['default'].PropTypes.oneOfType([_react2['default'].PropTypes.number, _react2['default'].PropTypes.string]),
+  arrowOffsetLeft: _propTypes2['default'].oneOfType([_propTypes2['default'].number, _propTypes2['default'].string]),
 
   /**
    * Title content
    */
-  title: _react2['default'].PropTypes.node
+  title: _propTypes2['default'].node
 };
 
 var defaultProps = {
@@ -24364,23 +26118,21 @@ var Popover = function (_React$Component) {
   Popover.prototype.render = function render() {
     var _extends2;
 
-    var _props = this.props;
-    var placement = _props.placement;
-    var positionTop = _props.positionTop;
-    var positionLeft = _props.positionLeft;
-    var arrowOffsetTop = _props.arrowOffsetTop;
-    var arrowOffsetLeft = _props.arrowOffsetLeft;
-    var title = _props.title;
-    var className = _props.className;
-    var style = _props.style;
-    var children = _props.children;
-    var props = (0, _objectWithoutProperties3['default'])(_props, ['placement', 'positionTop', 'positionLeft', 'arrowOffsetTop', 'arrowOffsetLeft', 'title', 'className', 'style', 'children']);
+    var _props = this.props,
+        placement = _props.placement,
+        positionTop = _props.positionTop,
+        positionLeft = _props.positionLeft,
+        arrowOffsetTop = _props.arrowOffsetTop,
+        arrowOffsetLeft = _props.arrowOffsetLeft,
+        title = _props.title,
+        className = _props.className,
+        style = _props.style,
+        children = _props.children,
+        props = (0, _objectWithoutProperties3['default'])(_props, ['placement', 'positionTop', 'positionLeft', 'arrowOffsetTop', 'arrowOffsetLeft', 'title', 'className', 'style', 'children']);
 
-    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props);
-
-    var bsProps = _splitBsProps[0];
-    var elementProps = _splitBsProps[1];
-
+    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props),
+        bsProps = _splitBsProps[0],
+        elementProps = _splitBsProps[1];
 
     var classes = (0, _extends4['default'])({}, (0, _bootstrapUtils.getClassSet)(bsProps), (_extends2 = {}, _extends2[placement] = true, _extends2));
 
@@ -24424,7 +26176,7 @@ Popover.defaultProps = defaultProps;
 
 exports['default'] = (0, _bootstrapUtils.bsClass)('popover', Popover);
 module.exports = exports['default'];
-},{"./utils/bootstrapUtils":248,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":456,"react-prop-types/lib/isRequiredForA11y":272}],227:[function(require,module,exports){
+},{"./utils/bootstrapUtils":257,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"prop-types":159,"react":463,"react-prop-types/lib/isRequiredForA11y":281}],236:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -24460,6 +26212,10 @@ var _classnames2 = _interopRequireDefault(_classnames);
 var _react = require('react');
 
 var _react2 = _interopRequireDefault(_react);
+
+var _propTypes = require('prop-types');
+
+var _propTypes2 = _interopRequireDefault(_propTypes);
 
 var _bootstrapUtils = require('./utils/bootstrapUtils');
 
@@ -24502,19 +26258,19 @@ function onlyProgressBar(props, propName, componentName) {
 }
 
 var propTypes = {
-  min: _react.PropTypes.number,
-  now: _react.PropTypes.number,
-  max: _react.PropTypes.number,
-  label: _react.PropTypes.node,
-  srOnly: _react.PropTypes.bool,
-  striped: _react.PropTypes.bool,
-  active: _react.PropTypes.bool,
+  min: _propTypes2['default'].number,
+  now: _propTypes2['default'].number,
+  max: _propTypes2['default'].number,
+  label: _propTypes2['default'].node,
+  srOnly: _propTypes2['default'].bool,
+  striped: _propTypes2['default'].bool,
+  active: _propTypes2['default'].bool,
   children: onlyProgressBar,
 
   /**
    * @private
    */
-  isChild: _react.PropTypes.bool
+  isChild: _propTypes2['default'].bool
 };
 
 var defaultProps = {
@@ -24542,22 +26298,20 @@ var ProgressBar = function (_React$Component) {
   ProgressBar.prototype.renderProgressBar = function renderProgressBar(_ref) {
     var _extends2;
 
-    var min = _ref.min;
-    var now = _ref.now;
-    var max = _ref.max;
-    var label = _ref.label;
-    var srOnly = _ref.srOnly;
-    var striped = _ref.striped;
-    var active = _ref.active;
-    var className = _ref.className;
-    var style = _ref.style;
-    var props = (0, _objectWithoutProperties3['default'])(_ref, ['min', 'now', 'max', 'label', 'srOnly', 'striped', 'active', 'className', 'style']);
+    var min = _ref.min,
+        now = _ref.now,
+        max = _ref.max,
+        label = _ref.label,
+        srOnly = _ref.srOnly,
+        striped = _ref.striped,
+        active = _ref.active,
+        className = _ref.className,
+        style = _ref.style,
+        props = (0, _objectWithoutProperties3['default'])(_ref, ['min', 'now', 'max', 'label', 'srOnly', 'striped', 'active', 'className', 'style']);
 
-    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props);
-
-    var bsProps = _splitBsProps[0];
-    var elementProps = _splitBsProps[1];
-
+    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props),
+        bsProps = _splitBsProps[0],
+        elementProps = _splitBsProps[1];
 
     var classes = (0, _extends4['default'])({}, (0, _bootstrapUtils.getClassSet)(bsProps), (_extends2 = {
       active: active
@@ -24582,27 +26336,27 @@ var ProgressBar = function (_React$Component) {
   };
 
   ProgressBar.prototype.render = function render() {
-    var _props = this.props;
-    var isChild = _props.isChild;
-    var props = (0, _objectWithoutProperties3['default'])(_props, ['isChild']);
+    var _props = this.props,
+        isChild = _props.isChild,
+        props = (0, _objectWithoutProperties3['default'])(_props, ['isChild']);
 
 
     if (isChild) {
       return this.renderProgressBar(props);
     }
 
-    var min = props.min;
-    var now = props.now;
-    var max = props.max;
-    var label = props.label;
-    var srOnly = props.srOnly;
-    var striped = props.striped;
-    var active = props.active;
-    var bsClass = props.bsClass;
-    var bsStyle = props.bsStyle;
-    var className = props.className;
-    var children = props.children;
-    var wrapperProps = (0, _objectWithoutProperties3['default'])(props, ['min', 'now', 'max', 'label', 'srOnly', 'striped', 'active', 'bsClass', 'bsStyle', 'className', 'children']);
+    var min = props.min,
+        now = props.now,
+        max = props.max,
+        label = props.label,
+        srOnly = props.srOnly,
+        striped = props.striped,
+        active = props.active,
+        bsClass = props.bsClass,
+        bsStyle = props.bsStyle,
+        className = props.className,
+        children = props.children,
+        wrapperProps = (0, _objectWithoutProperties3['default'])(props, ['min', 'now', 'max', 'label', 'srOnly', 'striped', 'active', 'bsClass', 'bsStyle', 'className', 'children']);
 
 
     return _react2['default'].createElement(
@@ -24626,7 +26380,7 @@ ProgressBar.defaultProps = defaultProps;
 
 exports['default'] = (0, _bootstrapUtils.bsClass)('progress-bar', (0, _bootstrapUtils.bsStyles)((0, _values2['default'])(_StyleConfig.State), ProgressBar));
 module.exports = exports['default'];
-},{"./utils/StyleConfig":245,"./utils/ValidComponentChildren":247,"./utils/bootstrapUtils":248,"babel-runtime/core-js/object/values":11,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":456}],228:[function(require,module,exports){
+},{"./utils/StyleConfig":254,"./utils/ValidComponentChildren":256,"./utils/bootstrapUtils":257,"babel-runtime/core-js/object/values":11,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"prop-types":159,"react":463}],237:[function(require,module,exports){
 (function (process){
 'use strict';
 
@@ -24660,6 +26414,10 @@ var _react = require('react');
 
 var _react2 = _interopRequireDefault(_react);
 
+var _propTypes = require('prop-types');
+
+var _propTypes2 = _interopRequireDefault(_propTypes);
+
 var _warning = require('warning');
 
 var _warning2 = _interopRequireDefault(_warning);
@@ -24669,12 +26427,12 @@ var _bootstrapUtils = require('./utils/bootstrapUtils');
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'default': obj }; }
 
 var propTypes = {
-  inline: _react2['default'].PropTypes.bool,
-  disabled: _react2['default'].PropTypes.bool,
+  inline: _propTypes2['default'].bool,
+  disabled: _propTypes2['default'].bool,
   /**
    * Only valid if `inline` is not set.
    */
-  validationState: _react2['default'].PropTypes.oneOf(['success', 'warning', 'error']),
+  validationState: _propTypes2['default'].oneOf(['success', 'warning', 'error', null]),
   /**
    * Attaches a ref to the `<input>` element. Only functions can be used here.
    *
@@ -24682,7 +26440,7 @@ var propTypes = {
    * <Radio inputRef={ref => { this.input = ref; }} />
    * ```
    */
-  inputRef: _react2['default'].PropTypes.func
+  inputRef: _propTypes2['default'].func
 };
 
 var defaultProps = {
@@ -24699,21 +26457,19 @@ var Radio = function (_React$Component) {
   }
 
   Radio.prototype.render = function render() {
-    var _props = this.props;
-    var inline = _props.inline;
-    var disabled = _props.disabled;
-    var validationState = _props.validationState;
-    var inputRef = _props.inputRef;
-    var className = _props.className;
-    var style = _props.style;
-    var children = _props.children;
-    var props = (0, _objectWithoutProperties3['default'])(_props, ['inline', 'disabled', 'validationState', 'inputRef', 'className', 'style', 'children']);
+    var _props = this.props,
+        inline = _props.inline,
+        disabled = _props.disabled,
+        validationState = _props.validationState,
+        inputRef = _props.inputRef,
+        className = _props.className,
+        style = _props.style,
+        children = _props.children,
+        props = (0, _objectWithoutProperties3['default'])(_props, ['inline', 'disabled', 'validationState', 'inputRef', 'className', 'style', 'children']);
 
-    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props);
-
-    var bsProps = _splitBsProps[0];
-    var elementProps = _splitBsProps[1];
-
+    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props),
+        bsProps = _splitBsProps[0],
+        elementProps = _splitBsProps[1];
 
     var input = _react2['default'].createElement('input', (0, _extends3['default'])({}, elementProps, {
       ref: inputRef,
@@ -24766,7 +26522,7 @@ Radio.defaultProps = defaultProps;
 exports['default'] = (0, _bootstrapUtils.bsClass)('radio', Radio);
 module.exports = exports['default'];
 }).call(this,require('_process'))
-},{"./utils/bootstrapUtils":248,"_process":154,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":456,"warning":463}],229:[function(require,module,exports){
+},{"./utils/bootstrapUtils":257,"_process":155,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"prop-types":159,"react":463,"warning":470}],238:[function(require,module,exports){
 (function (process){
 'use strict';
 
@@ -24800,6 +26556,10 @@ var _react = require('react');
 
 var _react2 = _interopRequireDefault(_react);
 
+var _propTypes = require('prop-types');
+
+var _propTypes2 = _interopRequireDefault(_propTypes);
+
 var _warning = require('warning');
 
 var _warning2 = _interopRequireDefault(_warning);
@@ -24814,15 +26574,15 @@ var propTypes = {
   /**
    * This component requires a single child element
    */
-  children: _react.PropTypes.element.isRequired,
+  children: _propTypes2['default'].element.isRequired,
   /**
    * 16by9 aspect ratio
    */
-  a16by9: _react.PropTypes.bool,
+  a16by9: _propTypes2['default'].bool,
   /**
    * 4by3 aspect ratio
    */
-  a4by3: _react.PropTypes.bool
+  a4by3: _propTypes2['default'].bool
 };
 
 var defaultProps = {
@@ -24841,18 +26601,16 @@ var ResponsiveEmbed = function (_React$Component) {
   ResponsiveEmbed.prototype.render = function render() {
     var _extends2;
 
-    var _props = this.props;
-    var a16by9 = _props.a16by9;
-    var a4by3 = _props.a4by3;
-    var className = _props.className;
-    var children = _props.children;
-    var props = (0, _objectWithoutProperties3['default'])(_props, ['a16by9', 'a4by3', 'className', 'children']);
+    var _props = this.props,
+        a16by9 = _props.a16by9,
+        a4by3 = _props.a4by3,
+        className = _props.className,
+        children = _props.children,
+        props = (0, _objectWithoutProperties3['default'])(_props, ['a16by9', 'a4by3', 'className', 'children']);
 
-    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props);
-
-    var bsProps = _splitBsProps[0];
-    var elementProps = _splitBsProps[1];
-
+    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props),
+        bsProps = _splitBsProps[0],
+        elementProps = _splitBsProps[1];
 
     process.env.NODE_ENV !== 'production' ? (0, _warning2['default'])(a16by9 || a4by3, 'Either `a16by9` or `a4by3` must be set.') : void 0;
     process.env.NODE_ENV !== 'production' ? (0, _warning2['default'])(!(a16by9 && a4by3), 'Only one of `a16by9` or `a4by3` can be set.') : void 0;
@@ -24877,7 +26635,7 @@ ResponsiveEmbed.defaultProps = defaultProps;
 exports['default'] = (0, _bootstrapUtils.bsClass)('embed-responsive', ResponsiveEmbed);
 module.exports = exports['default'];
 }).call(this,require('_process'))
-},{"./utils/bootstrapUtils":248,"_process":154,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":456,"warning":463}],230:[function(require,module,exports){
+},{"./utils/bootstrapUtils":257,"_process":155,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"prop-types":159,"react":463,"warning":470}],239:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -24935,16 +26693,14 @@ var Row = function (_React$Component) {
   }
 
   Row.prototype.render = function render() {
-    var _props = this.props;
-    var Component = _props.componentClass;
-    var className = _props.className;
-    var props = (0, _objectWithoutProperties3['default'])(_props, ['componentClass', 'className']);
+    var _props = this.props,
+        Component = _props.componentClass,
+        className = _props.className,
+        props = (0, _objectWithoutProperties3['default'])(_props, ['componentClass', 'className']);
 
-    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props);
-
-    var bsProps = _splitBsProps[0];
-    var elementProps = _splitBsProps[1];
-
+    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props),
+        bsProps = _splitBsProps[0],
+        elementProps = _splitBsProps[1];
 
     var classes = (0, _bootstrapUtils.getClassSet)(bsProps);
 
@@ -24961,7 +26717,7 @@ Row.defaultProps = defaultProps;
 
 exports['default'] = (0, _bootstrapUtils.bsClass)('row', Row);
 module.exports = exports['default'];
-},{"./utils/bootstrapUtils":248,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":456,"react-prop-types/lib/elementType":271}],231:[function(require,module,exports){
+},{"./utils/bootstrapUtils":257,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":463,"react-prop-types/lib/elementType":280}],240:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -24990,6 +26746,10 @@ var _react = require('react');
 
 var _react2 = _interopRequireDefault(_react);
 
+var _propTypes = require('prop-types');
+
+var _propTypes2 = _interopRequireDefault(_propTypes);
+
 var _elementType = require('react-prop-types/lib/elementType');
 
 var _elementType2 = _interopRequireDefault(_elementType);
@@ -24997,11 +26757,11 @@ var _elementType2 = _interopRequireDefault(_elementType);
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'default': obj }; }
 
 var propTypes = {
-  href: _react2['default'].PropTypes.string,
-  onClick: _react2['default'].PropTypes.func,
-  disabled: _react2['default'].PropTypes.bool,
-  role: _react2['default'].PropTypes.string,
-  tabIndex: _react2['default'].PropTypes.oneOfType([_react2['default'].PropTypes.number, _react2['default'].PropTypes.string]),
+  href: _propTypes2['default'].string,
+  onClick: _propTypes2['default'].func,
+  disabled: _propTypes2['default'].bool,
+  role: _propTypes2['default'].string,
+  tabIndex: _propTypes2['default'].oneOfType([_propTypes2['default'].number, _propTypes2['default'].string]),
   /**
    * this is sort of silly but needed for Button
    */
@@ -25037,10 +26797,10 @@ var SafeAnchor = function (_React$Component) {
   }
 
   SafeAnchor.prototype.handleClick = function handleClick(event) {
-    var _props = this.props;
-    var disabled = _props.disabled;
-    var href = _props.href;
-    var onClick = _props.onClick;
+    var _props = this.props,
+        disabled = _props.disabled,
+        href = _props.href,
+        onClick = _props.onClick;
 
 
     if (disabled || isTrivialHref(href)) {
@@ -25058,17 +26818,17 @@ var SafeAnchor = function (_React$Component) {
   };
 
   SafeAnchor.prototype.render = function render() {
-    var _props2 = this.props;
-    var Component = _props2.componentClass;
-    var disabled = _props2.disabled;
-    var props = (0, _objectWithoutProperties3['default'])(_props2, ['componentClass', 'disabled']);
+    var _props2 = this.props,
+        Component = _props2.componentClass,
+        disabled = _props2.disabled,
+        props = (0, _objectWithoutProperties3['default'])(_props2, ['componentClass', 'disabled']);
 
 
     if (isTrivialHref(props.href)) {
       props.role = props.role || 'button';
       // we want to make sure there is a href attribute on the node
       // otherwise, the cursor incorrectly styled (except with role='button')
-      props.href = props.href || '';
+      props.href = props.href || '#';
     }
 
     if (disabled) {
@@ -25089,7 +26849,7 @@ SafeAnchor.defaultProps = defaultProps;
 
 exports['default'] = SafeAnchor;
 module.exports = exports['default'];
-},{"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"react":456,"react-prop-types/lib/elementType":271}],232:[function(require,module,exports){
+},{"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"prop-types":159,"react":463,"react-prop-types/lib/elementType":280}],241:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -25118,6 +26878,10 @@ var _react = require('react');
 
 var _react2 = _interopRequireDefault(_react);
 
+var _propTypes = require('prop-types');
+
+var _propTypes2 = _interopRequireDefault(_propTypes);
+
 var _Button = require('./Button');
 
 var _Button2 = _interopRequireDefault(_Button);
@@ -25139,24 +26903,24 @@ function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'd
 var propTypes = (0, _extends3['default'])({}, _Dropdown2['default'].propTypes, {
 
   // Toggle props.
-  bsStyle: _react2['default'].PropTypes.string,
-  bsSize: _react2['default'].PropTypes.string,
-  href: _react2['default'].PropTypes.string,
-  onClick: _react2['default'].PropTypes.func,
+  bsStyle: _propTypes2['default'].string,
+  bsSize: _propTypes2['default'].string,
+  href: _propTypes2['default'].string,
+  onClick: _propTypes2['default'].func,
   /**
    * The content of the split button.
    */
-  title: _react2['default'].PropTypes.node.isRequired,
+  title: _propTypes2['default'].node.isRequired,
   /**
    * Accessible label for the toggle; the value of `title` if not specified.
    */
-  toggleLabel: _react2['default'].PropTypes.string,
+  toggleLabel: _propTypes2['default'].string,
 
   // Override generated docs from <Dropdown>.
   /**
    * @private
    */
-  children: _react2['default'].PropTypes.node
+  children: _propTypes2['default'].node
 });
 
 var SplitButton = function (_React$Component) {
@@ -25168,19 +26932,17 @@ var SplitButton = function (_React$Component) {
   }
 
   SplitButton.prototype.render = function render() {
-    var _props = this.props;
-    var bsSize = _props.bsSize;
-    var bsStyle = _props.bsStyle;
-    var title = _props.title;
-    var toggleLabel = _props.toggleLabel;
-    var children = _props.children;
-    var props = (0, _objectWithoutProperties3['default'])(_props, ['bsSize', 'bsStyle', 'title', 'toggleLabel', 'children']);
+    var _props = this.props,
+        bsSize = _props.bsSize,
+        bsStyle = _props.bsStyle,
+        title = _props.title,
+        toggleLabel = _props.toggleLabel,
+        children = _props.children,
+        props = (0, _objectWithoutProperties3['default'])(_props, ['bsSize', 'bsStyle', 'title', 'toggleLabel', 'children']);
 
-    var _splitComponentProps = (0, _splitComponentProps3['default'])(props, _Dropdown2['default'].ControlledComponent);
-
-    var dropdownProps = _splitComponentProps[0];
-    var buttonProps = _splitComponentProps[1];
-
+    var _splitComponentProps = (0, _splitComponentProps3['default'])(props, _Dropdown2['default'].ControlledComponent),
+        dropdownProps = _splitComponentProps[0],
+        buttonProps = _splitComponentProps[1];
 
     return _react2['default'].createElement(
       _Dropdown2['default'],
@@ -25219,7 +26981,7 @@ SplitButton.Toggle = _SplitToggle2['default'];
 
 exports['default'] = SplitButton;
 module.exports = exports['default'];
-},{"./Button":162,"./Dropdown":173,"./SplitToggle":233,"./utils/splitComponentProps":253,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"react":456}],233:[function(require,module,exports){
+},{"./Button":171,"./Dropdown":182,"./SplitToggle":242,"./utils/splitComponentProps":262,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"prop-types":159,"react":463}],242:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -25272,7 +27034,7 @@ SplitToggle.defaultProps = _DropdownToggle2['default'].defaultProps;
 
 exports['default'] = SplitToggle;
 module.exports = exports['default'];
-},{"./DropdownToggle":176,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/possibleConstructorReturn":19,"react":456}],234:[function(require,module,exports){
+},{"./DropdownToggle":185,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/possibleConstructorReturn":19,"react":463}],243:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -25297,6 +27059,10 @@ var _react = require('react');
 
 var _react2 = _interopRequireDefault(_react);
 
+var _propTypes = require('prop-types');
+
+var _propTypes2 = _interopRequireDefault(_propTypes);
+
 var _TabContainer = require('./TabContainer');
 
 var _TabContainer2 = _interopRequireDefault(_TabContainer);
@@ -25313,14 +27079,14 @@ function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'd
 
 var propTypes = (0, _extends3['default'])({}, _TabPane2['default'].propTypes, {
 
-  disabled: _react2['default'].PropTypes.bool,
+  disabled: _propTypes2['default'].bool,
 
-  title: _react2['default'].PropTypes.node,
+  title: _propTypes2['default'].node,
 
   /**
    * tabClassName is used as className for the associated NavItem
    */
-  tabClassName: _react2['default'].PropTypes.string
+  tabClassName: _propTypes2['default'].string
 });
 
 var Tab = function (_React$Component) {
@@ -25353,7 +27119,7 @@ Tab.Pane = _TabPane2['default'];
 
 exports['default'] = Tab;
 module.exports = exports['default'];
-},{"./TabContainer":235,"./TabContent":236,"./TabPane":237,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/possibleConstructorReturn":19,"react":456}],235:[function(require,module,exports){
+},{"./TabContainer":244,"./TabContent":245,"./TabPane":246,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/possibleConstructorReturn":19,"prop-types":159,"react":463}],244:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -25378,6 +27144,10 @@ var _react = require('react');
 
 var _react2 = _interopRequireDefault(_react);
 
+var _propTypes = require('prop-types');
+
+var _propTypes2 = _interopRequireDefault(_propTypes);
+
 var _uncontrollable = require('uncontrollable');
 
 var _uncontrollable2 = _interopRequireDefault(_uncontrollable);
@@ -25387,7 +27157,7 @@ function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'd
 var TAB = 'tab';
 var PANE = 'pane';
 
-var idPropType = _react.PropTypes.oneOfType([_react.PropTypes.string, _react.PropTypes.number]);
+var idPropType = _propTypes2['default'].oneOfType([_propTypes2['default'].string, _propTypes2['default'].number]);
 
 var propTypes = {
   /**
@@ -25424,29 +27194,29 @@ var propTypes = {
    *
    * @defaultValue (eventKey, type) => `${this.props.id}-${type}-${key}`
    */
-  generateChildId: _react.PropTypes.func,
+  generateChildId: _propTypes2['default'].func,
 
   /**
    * A callback fired when a tab is selected.
    *
    * @controllable activeKey
    */
-  onSelect: _react.PropTypes.func,
+  onSelect: _propTypes2['default'].func,
 
   /**
    * The `eventKey` of the currently active tab.
    *
    * @controllable onSelect
    */
-  activeKey: _react.PropTypes.any
+  activeKey: _propTypes2['default'].any
 };
 
 var childContextTypes = {
-  $bs_tabContainer: _react2['default'].PropTypes.shape({
-    activeKey: _react.PropTypes.any,
-    onSelect: _react.PropTypes.func.isRequired,
-    getTabId: _react.PropTypes.func.isRequired,
-    getPaneId: _react.PropTypes.func.isRequired
+  $bs_tabContainer: _propTypes2['default'].shape({
+    activeKey: _propTypes2['default'].any,
+    onSelect: _propTypes2['default'].func.isRequired,
+    getTabId: _propTypes2['default'].func.isRequired,
+    getPaneId: _propTypes2['default'].func.isRequired
   })
 };
 
@@ -25459,11 +27229,11 @@ var TabContainer = function (_React$Component) {
   }
 
   TabContainer.prototype.getChildContext = function getChildContext() {
-    var _props = this.props;
-    var activeKey = _props.activeKey;
-    var onSelect = _props.onSelect;
-    var generateChildId = _props.generateChildId;
-    var id = _props.id;
+    var _props = this.props,
+        activeKey = _props.activeKey,
+        onSelect = _props.onSelect,
+        generateChildId = _props.generateChildId,
+        id = _props.id;
 
 
     var getId = generateChildId || function (key, type) {
@@ -25485,9 +27255,9 @@ var TabContainer = function (_React$Component) {
   };
 
   TabContainer.prototype.render = function render() {
-    var _props2 = this.props;
-    var children = _props2.children;
-    var props = (0, _objectWithoutProperties3['default'])(_props2, ['children']);
+    var _props2 = this.props,
+        children = _props2.children,
+        props = (0, _objectWithoutProperties3['default'])(_props2, ['children']);
 
 
     delete props.generateChildId;
@@ -25505,7 +27275,7 @@ TabContainer.childContextTypes = childContextTypes;
 
 exports['default'] = (0, _uncontrollable2['default'])(TabContainer, { activeKey: 'onSelect' });
 module.exports = exports['default'];
-},{"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"react":456,"uncontrollable":458}],236:[function(require,module,exports){
+},{"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"prop-types":159,"react":463,"uncontrollable":465}],245:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -25538,6 +27308,10 @@ var _react = require('react');
 
 var _react2 = _interopRequireDefault(_react);
 
+var _propTypes = require('prop-types');
+
+var _propTypes2 = _interopRequireDefault(_propTypes);
+
 var _elementType = require('react-prop-types/lib/elementType');
 
 var _elementType2 = _interopRequireDefault(_elementType);
@@ -25554,35 +27328,42 @@ var propTypes = {
    * `false` to disable, `true` to enable the default `<Fade>` animation or any
    * `<Transition>` component.
    */
-  animation: _react.PropTypes.oneOfType([_react.PropTypes.bool, _elementType2['default']]),
+  animation: _propTypes2['default'].oneOfType([_propTypes2['default'].bool, _elementType2['default']]),
+
+  /**
+   * Wait until the first "enter" transition to mount tabs (add them to the DOM)
+   */
+  mountOnEnter: _propTypes2['default'].bool,
 
   /**
    * Unmount tabs (remove it from the DOM) when they are no longer visible
    */
-  unmountOnExit: _react.PropTypes.bool
+  unmountOnExit: _propTypes2['default'].bool
 };
 
 var defaultProps = {
   componentClass: 'div',
   animation: true,
+  mountOnEnter: false,
   unmountOnExit: false
 };
 
 var contextTypes = {
-  $bs_tabContainer: _react.PropTypes.shape({
-    activeKey: _react.PropTypes.any
+  $bs_tabContainer: _propTypes2['default'].shape({
+    activeKey: _propTypes2['default'].any
   })
 };
 
 var childContextTypes = {
-  $bs_tabContent: _react.PropTypes.shape({
-    bsClass: _react.PropTypes.string,
-    animation: _react.PropTypes.oneOfType([_react.PropTypes.bool, _elementType2['default']]),
-    activeKey: _react.PropTypes.any,
-    unmountOnExit: _react.PropTypes.bool,
-    onPaneEnter: _react.PropTypes.func.isRequired,
-    onPaneExited: _react.PropTypes.func.isRequired,
-    exiting: _react.PropTypes.bool.isRequired
+  $bs_tabContent: _propTypes2['default'].shape({
+    bsClass: _propTypes2['default'].string,
+    animation: _propTypes2['default'].oneOfType([_propTypes2['default'].bool, _elementType2['default']]),
+    activeKey: _propTypes2['default'].any,
+    mountOnEnter: _propTypes2['default'].bool,
+    unmountOnExit: _propTypes2['default'].bool,
+    onPaneEnter: _propTypes2['default'].func.isRequired,
+    onPaneExited: _propTypes2['default'].func.isRequired,
+    exiting: _propTypes2['default'].bool.isRequired
   })
 };
 
@@ -25608,10 +27389,11 @@ var TabContent = function (_React$Component) {
   }
 
   TabContent.prototype.getChildContext = function getChildContext() {
-    var _props = this.props;
-    var bsClass = _props.bsClass;
-    var animation = _props.animation;
-    var unmountOnExit = _props.unmountOnExit;
+    var _props = this.props,
+        bsClass = _props.bsClass,
+        animation = _props.animation,
+        mountOnEnter = _props.mountOnEnter,
+        unmountOnExit = _props.unmountOnExit;
 
 
     var stateActiveKey = this.state.activeKey;
@@ -25625,6 +27407,7 @@ var TabContent = function (_React$Component) {
         bsClass: bsClass,
         animation: animation,
         activeKey: activeKey,
+        mountOnEnter: mountOnEnter,
         unmountOnExit: unmountOnExit,
         onPaneEnter: this.handlePaneEnter,
         onPaneExited: this.handlePaneExited,
@@ -25687,16 +27470,14 @@ var TabContent = function (_React$Component) {
   };
 
   TabContent.prototype.render = function render() {
-    var _props2 = this.props;
-    var Component = _props2.componentClass;
-    var className = _props2.className;
-    var props = (0, _objectWithoutProperties3['default'])(_props2, ['componentClass', 'className']);
+    var _props2 = this.props,
+        Component = _props2.componentClass,
+        className = _props2.className,
+        props = (0, _objectWithoutProperties3['default'])(_props2, ['componentClass', 'className']);
 
-    var _splitBsPropsAndOmit = (0, _bootstrapUtils.splitBsPropsAndOmit)(props, ['animation', 'unmountOnExit']);
-
-    var bsProps = _splitBsPropsAndOmit[0];
-    var elementProps = _splitBsPropsAndOmit[1];
-
+    var _splitBsPropsAndOmit = (0, _bootstrapUtils.splitBsPropsAndOmit)(props, ['animation', 'mountOnEnter', 'unmountOnExit']),
+        bsProps = _splitBsPropsAndOmit[0],
+        elementProps = _splitBsPropsAndOmit[1];
 
     return _react2['default'].createElement(Component, (0, _extends3['default'])({}, elementProps, {
       className: (0, _classnames2['default'])(className, (0, _bootstrapUtils.prefix)(bsProps, 'content'))
@@ -25713,7 +27494,7 @@ TabContent.childContextTypes = childContextTypes;
 
 exports['default'] = (0, _bootstrapUtils.bsClass)('tab', TabContent);
 module.exports = exports['default'];
-},{"./utils/bootstrapUtils":248,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":456,"react-prop-types/lib/elementType":271}],237:[function(require,module,exports){
+},{"./utils/bootstrapUtils":257,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"prop-types":159,"react":463,"react-prop-types/lib/elementType":280}],246:[function(require,module,exports){
 (function (process){
 'use strict';
 
@@ -25747,6 +27528,10 @@ var _react = require('react');
 
 var _react2 = _interopRequireDefault(_react);
 
+var _propTypes = require('prop-types');
+
+var _propTypes2 = _interopRequireDefault(_propTypes);
+
 var _elementType = require('react-prop-types/lib/elementType');
 
 var _elementType2 = _interopRequireDefault(_elementType);
@@ -25771,77 +27556,83 @@ var propTypes = {
   /**
    * Uniquely identify the `<TabPane>` among its siblings.
    */
-  eventKey: _react.PropTypes.any,
+  eventKey: _propTypes2['default'].any,
 
   /**
    * Use animation when showing or hiding `<TabPane>`s. Use `false` to disable,
    * `true` to enable the default `<Fade>` animation or any `<Transition>`
    * component.
    */
-  animation: _react.PropTypes.oneOfType([_react.PropTypes.bool, _elementType2['default']]),
+  animation: _propTypes2['default'].oneOfType([_propTypes2['default'].bool, _elementType2['default']]),
 
   /** @private **/
-  id: _react.PropTypes.string,
+  id: _propTypes2['default'].string,
 
   /** @private **/
-  'aria-labelledby': _react.PropTypes.string,
+  'aria-labelledby': _propTypes2['default'].string,
 
   /**
    * If not explicitly specified and rendered in the context of a
    * `<TabContent>`, the `bsClass` of the `<TabContent>` suffixed by `-pane`.
    * If otherwise not explicitly specified, `tab-pane`.
    */
-  bsClass: _react2['default'].PropTypes.string,
+  bsClass: _propTypes2['default'].string,
 
   /**
    * Transition onEnter callback when animation is not `false`
    */
-  onEnter: _react.PropTypes.func,
+  onEnter: _propTypes2['default'].func,
 
   /**
    * Transition onEntering callback when animation is not `false`
    */
-  onEntering: _react.PropTypes.func,
+  onEntering: _propTypes2['default'].func,
 
   /**
    * Transition onEntered callback when animation is not `false`
    */
-  onEntered: _react.PropTypes.func,
+  onEntered: _propTypes2['default'].func,
 
   /**
    * Transition onExit callback when animation is not `false`
    */
-  onExit: _react.PropTypes.func,
+  onExit: _propTypes2['default'].func,
 
   /**
    * Transition onExiting callback when animation is not `false`
    */
-  onExiting: _react.PropTypes.func,
+  onExiting: _propTypes2['default'].func,
 
   /**
    * Transition onExited callback when animation is not `false`
    */
-  onExited: _react.PropTypes.func,
+  onExited: _propTypes2['default'].func,
+
+  /**
+   * Wait until the first "enter" transition to mount the tab (add it to the DOM)
+   */
+  mountOnEnter: _propTypes2['default'].bool,
 
   /**
    * Unmount the tab (remove it from the DOM) when it is no longer visible
    */
-  unmountOnExit: _react.PropTypes.bool
+  unmountOnExit: _propTypes2['default'].bool
 };
 
 var contextTypes = {
-  $bs_tabContainer: _react.PropTypes.shape({
-    getId: _react.PropTypes.func,
-    unmountOnExit: _react.PropTypes.bool
+  $bs_tabContainer: _propTypes2['default'].shape({
+    getTabId: _propTypes2['default'].func,
+    getPaneId: _propTypes2['default'].func
   }),
-  $bs_tabContent: _react.PropTypes.shape({
-    bsClass: _react.PropTypes.string,
-    animation: _react.PropTypes.oneOfType([_react.PropTypes.bool, _elementType2['default']]),
-    activeKey: _react.PropTypes.any,
-    unmountOnExit: _react.PropTypes.bool,
-    onPaneEnter: _react.PropTypes.func.isRequired,
-    onPaneExited: _react.PropTypes.func.isRequired,
-    exiting: _react.PropTypes.bool.isRequired
+  $bs_tabContent: _propTypes2['default'].shape({
+    bsClass: _propTypes2['default'].string,
+    animation: _propTypes2['default'].oneOfType([_propTypes2['default'].bool, _elementType2['default']]),
+    activeKey: _propTypes2['default'].any,
+    mountOnEnter: _propTypes2['default'].bool,
+    unmountOnExit: _propTypes2['default'].bool,
+    onPaneEnter: _propTypes2['default'].func.isRequired,
+    onPaneExited: _propTypes2['default'].func.isRequired,
+    exiting: _propTypes2['default'].bool.isRequired
   })
 };
 
@@ -25850,7 +27641,7 @@ var contextTypes = {
  * conflict with the top level one.
  */
 var childContextTypes = {
-  $bs_tabContainer: _react.PropTypes.oneOf([null])
+  $bs_tabContainer: _propTypes2['default'].oneOf([null])
 };
 
 var TabPane = function (_React$Component) {
@@ -25940,30 +27731,30 @@ var TabPane = function (_React$Component) {
   };
 
   TabPane.prototype.render = function render() {
-    var _props = this.props;
-    var eventKey = _props.eventKey;
-    var className = _props.className;
-    var onEnter = _props.onEnter;
-    var onEntering = _props.onEntering;
-    var onEntered = _props.onEntered;
-    var onExit = _props.onExit;
-    var onExiting = _props.onExiting;
-    var onExited = _props.onExited;
-    var propsUnmountOnExit = _props.unmountOnExit;
-    var props = (0, _objectWithoutProperties3['default'])(_props, ['eventKey', 'className', 'onEnter', 'onEntering', 'onEntered', 'onExit', 'onExiting', 'onExited', 'unmountOnExit']);
-    var _context = this.context;
-    var tabContent = _context.$bs_tabContent;
-    var tabContainer = _context.$bs_tabContainer;
+    var _props = this.props,
+        eventKey = _props.eventKey,
+        className = _props.className,
+        onEnter = _props.onEnter,
+        onEntering = _props.onEntering,
+        onEntered = _props.onEntered,
+        onExit = _props.onExit,
+        onExiting = _props.onExiting,
+        onExited = _props.onExited,
+        propsMountOnEnter = _props.mountOnEnter,
+        propsUnmountOnExit = _props.unmountOnExit,
+        props = (0, _objectWithoutProperties3['default'])(_props, ['eventKey', 'className', 'onEnter', 'onEntering', 'onEntered', 'onExit', 'onExiting', 'onExited', 'mountOnEnter', 'unmountOnExit']);
+    var _context = this.context,
+        tabContent = _context.$bs_tabContent,
+        tabContainer = _context.$bs_tabContainer;
 
-    var _splitBsPropsAndOmit = (0, _bootstrapUtils.splitBsPropsAndOmit)(props, ['animation']);
-
-    var bsProps = _splitBsPropsAndOmit[0];
-    var elementProps = _splitBsPropsAndOmit[1];
-
+    var _splitBsPropsAndOmit = (0, _bootstrapUtils.splitBsPropsAndOmit)(props, ['animation']),
+        bsProps = _splitBsPropsAndOmit[0],
+        elementProps = _splitBsPropsAndOmit[1];
 
     var active = this.isActive();
     var animation = this.getAnimation();
 
+    var mountOnEnter = propsMountOnEnter != null ? propsMountOnEnter : tabContent && tabContent.mountOnEnter;
     var unmountOnExit = propsUnmountOnExit != null ? propsUnmountOnExit : tabContent && tabContent.unmountOnExit;
 
     if (!active && !animation && unmountOnExit) {
@@ -26006,6 +27797,7 @@ var TabPane = function (_React$Component) {
           onExit: onExit,
           onExiting: onExiting,
           onExited: (0, _createChainedFunction2['default'])(this.handleExited, onExited),
+          mountOnEnter: mountOnEnter,
           unmountOnExit: unmountOnExit
         },
         pane
@@ -26025,7 +27817,7 @@ TabPane.childContextTypes = childContextTypes;
 exports['default'] = (0, _bootstrapUtils.bsClass)('tab-pane', TabPane);
 module.exports = exports['default'];
 }).call(this,require('_process'))
-},{"./Fade":177,"./utils/bootstrapUtils":248,"./utils/createChainedFunction":250,"_process":154,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":456,"react-prop-types/lib/elementType":271,"warning":463}],238:[function(require,module,exports){
+},{"./Fade":186,"./utils/bootstrapUtils":257,"./utils/createChainedFunction":259,"_process":155,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"prop-types":159,"react":463,"react-prop-types/lib/elementType":280,"warning":470}],247:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -26058,16 +27850,20 @@ var _react = require('react');
 
 var _react2 = _interopRequireDefault(_react);
 
+var _propTypes = require('prop-types');
+
+var _propTypes2 = _interopRequireDefault(_propTypes);
+
 var _bootstrapUtils = require('./utils/bootstrapUtils');
 
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'default': obj }; }
 
 var propTypes = {
-  striped: _react2['default'].PropTypes.bool,
-  bordered: _react2['default'].PropTypes.bool,
-  condensed: _react2['default'].PropTypes.bool,
-  hover: _react2['default'].PropTypes.bool,
-  responsive: _react2['default'].PropTypes.bool
+  striped: _propTypes2['default'].bool,
+  bordered: _propTypes2['default'].bool,
+  condensed: _propTypes2['default'].bool,
+  hover: _propTypes2['default'].bool,
+  responsive: _propTypes2['default'].bool
 };
 
 var defaultProps = {
@@ -26089,20 +27885,18 @@ var Table = function (_React$Component) {
   Table.prototype.render = function render() {
     var _extends2;
 
-    var _props = this.props;
-    var striped = _props.striped;
-    var bordered = _props.bordered;
-    var condensed = _props.condensed;
-    var hover = _props.hover;
-    var responsive = _props.responsive;
-    var className = _props.className;
-    var props = (0, _objectWithoutProperties3['default'])(_props, ['striped', 'bordered', 'condensed', 'hover', 'responsive', 'className']);
+    var _props = this.props,
+        striped = _props.striped,
+        bordered = _props.bordered,
+        condensed = _props.condensed,
+        hover = _props.hover,
+        responsive = _props.responsive,
+        className = _props.className,
+        props = (0, _objectWithoutProperties3['default'])(_props, ['striped', 'bordered', 'condensed', 'hover', 'responsive', 'className']);
 
-    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props);
-
-    var bsProps = _splitBsProps[0];
-    var elementProps = _splitBsProps[1];
-
+    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props),
+        bsProps = _splitBsProps[0],
+        elementProps = _splitBsProps[1];
 
     var classes = (0, _extends4['default'])({}, (0, _bootstrapUtils.getClassSet)(bsProps), (_extends2 = {}, _extends2[(0, _bootstrapUtils.prefix)(bsProps, 'striped')] = striped, _extends2[(0, _bootstrapUtils.prefix)(bsProps, 'bordered')] = bordered, _extends2[(0, _bootstrapUtils.prefix)(bsProps, 'condensed')] = condensed, _extends2[(0, _bootstrapUtils.prefix)(bsProps, 'hover')] = hover, _extends2));
 
@@ -26129,7 +27923,7 @@ Table.defaultProps = defaultProps;
 
 exports['default'] = (0, _bootstrapUtils.bsClass)('table', Table);
 module.exports = exports['default'];
-},{"./utils/bootstrapUtils":248,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":456}],239:[function(require,module,exports){
+},{"./utils/bootstrapUtils":257,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"prop-types":159,"react":463}],248:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -26157,6 +27951,10 @@ var _inherits3 = _interopRequireDefault(_inherits2);
 var _react = require('react');
 
 var _react2 = _interopRequireDefault(_react);
+
+var _propTypes = require('prop-types');
+
+var _propTypes2 = _interopRequireDefault(_propTypes);
 
 var _isRequiredForA11y = require('react-prop-types/lib/isRequiredForA11y');
 
@@ -26198,16 +27996,16 @@ var propTypes = {
    *
    * @controllable onSelect
    */
-  activeKey: _react2['default'].PropTypes.any,
+  activeKey: _propTypes2['default'].any,
 
   /**
    * Navigation style
    */
-  bsStyle: _react2['default'].PropTypes.oneOf(['tabs', 'pills']),
+  bsStyle: _propTypes2['default'].oneOf(['tabs', 'pills']),
 
-  animation: _react2['default'].PropTypes.bool,
+  animation: _propTypes2['default'].bool,
 
-  id: (0, _isRequiredForA11y2['default'])(_react2['default'].PropTypes.oneOfType([_react2['default'].PropTypes.string, _react2['default'].PropTypes.number])),
+  id: (0, _isRequiredForA11y2['default'])(_propTypes2['default'].oneOfType([_propTypes2['default'].string, _propTypes2['default'].number])),
 
   /**
    * Callback fired when a Tab is selected.
@@ -26221,17 +28019,23 @@ var propTypes = {
    *
    * @controllable activeKey
    */
-  onSelect: _react2['default'].PropTypes.func,
+  onSelect: _propTypes2['default'].func,
+
+  /**
+   * Wait until the first "enter" transition to mount tabs (add them to the DOM)
+   */
+  mountOnEnter: _propTypes2['default'].bool,
 
   /**
    * Unmount tabs (remove it from the DOM) when it is no longer visible
    */
-  unmountOnExit: _react2['default'].PropTypes.bool
+  unmountOnExit: _propTypes2['default'].bool
 };
 
 var defaultProps = {
   bsStyle: 'tabs',
   animation: true,
+  mountOnEnter: false,
   unmountOnExit: false
 };
 
@@ -26255,11 +28059,11 @@ var Tabs = function (_React$Component) {
   }
 
   Tabs.prototype.renderTab = function renderTab(child) {
-    var _child$props = child.props;
-    var title = _child$props.title;
-    var eventKey = _child$props.eventKey;
-    var disabled = _child$props.disabled;
-    var tabClassName = _child$props.tabClassName;
+    var _child$props = child.props,
+        title = _child$props.title,
+        eventKey = _child$props.eventKey,
+        disabled = _child$props.disabled,
+        tabClassName = _child$props.tabClassName;
 
     if (title == null) {
       return null;
@@ -26277,18 +28081,19 @@ var Tabs = function (_React$Component) {
   };
 
   Tabs.prototype.render = function render() {
-    var _props = this.props;
-    var id = _props.id;
-    var onSelect = _props.onSelect;
-    var animation = _props.animation;
-    var unmountOnExit = _props.unmountOnExit;
-    var bsClass = _props.bsClass;
-    var className = _props.className;
-    var style = _props.style;
-    var children = _props.children;
-    var _props$activeKey = _props.activeKey;
-    var activeKey = _props$activeKey === undefined ? getDefaultActiveKey(children) : _props$activeKey;
-    var props = (0, _objectWithoutProperties3['default'])(_props, ['id', 'onSelect', 'animation', 'unmountOnExit', 'bsClass', 'className', 'style', 'children', 'activeKey']);
+    var _props = this.props,
+        id = _props.id,
+        onSelect = _props.onSelect,
+        animation = _props.animation,
+        mountOnEnter = _props.mountOnEnter,
+        unmountOnExit = _props.unmountOnExit,
+        bsClass = _props.bsClass,
+        className = _props.className,
+        style = _props.style,
+        children = _props.children,
+        _props$activeKey = _props.activeKey,
+        activeKey = _props$activeKey === undefined ? getDefaultActiveKey(children) : _props$activeKey,
+        props = (0, _objectWithoutProperties3['default'])(_props, ['id', 'onSelect', 'animation', 'mountOnEnter', 'unmountOnExit', 'bsClass', 'className', 'style', 'children', 'activeKey']);
 
 
     return _react2['default'].createElement(
@@ -26315,6 +28120,7 @@ var Tabs = function (_React$Component) {
           {
             bsClass: bsClass,
             animation: animation,
+            mountOnEnter: mountOnEnter,
             unmountOnExit: unmountOnExit
           },
           children
@@ -26333,7 +28139,7 @@ Tabs.defaultProps = defaultProps;
 
 exports['default'] = (0, _uncontrollable2['default'])(Tabs, { activeKey: 'onSelect' });
 module.exports = exports['default'];
-},{"./Nav":208,"./NavItem":210,"./TabContainer":235,"./TabContent":236,"./utils/ValidComponentChildren":247,"./utils/bootstrapUtils":248,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"react":456,"react-prop-types/lib/isRequiredForA11y":272,"uncontrollable":458}],240:[function(require,module,exports){
+},{"./Nav":217,"./NavItem":219,"./TabContainer":244,"./TabContent":245,"./utils/ValidComponentChildren":256,"./utils/bootstrapUtils":257,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"prop-types":159,"react":463,"react-prop-types/lib/isRequiredForA11y":281,"uncontrollable":465}],249:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -26366,6 +28172,10 @@ var _react = require('react');
 
 var _react2 = _interopRequireDefault(_react);
 
+var _propTypes = require('prop-types');
+
+var _propTypes2 = _interopRequireDefault(_propTypes);
+
 var _SafeAnchor = require('./SafeAnchor');
 
 var _SafeAnchor2 = _interopRequireDefault(_SafeAnchor);
@@ -26375,9 +28185,9 @@ var _bootstrapUtils = require('./utils/bootstrapUtils');
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'default': obj }; }
 
 var propTypes = {
-  src: _react2['default'].PropTypes.string,
-  alt: _react2['default'].PropTypes.string,
-  href: _react2['default'].PropTypes.string
+  src: _propTypes2['default'].string,
+  alt: _propTypes2['default'].string,
+  href: _propTypes2['default'].string
 };
 
 var Thumbnail = function (_React$Component) {
@@ -26389,18 +28199,16 @@ var Thumbnail = function (_React$Component) {
   }
 
   Thumbnail.prototype.render = function render() {
-    var _props = this.props;
-    var src = _props.src;
-    var alt = _props.alt;
-    var className = _props.className;
-    var children = _props.children;
-    var props = (0, _objectWithoutProperties3['default'])(_props, ['src', 'alt', 'className', 'children']);
+    var _props = this.props,
+        src = _props.src,
+        alt = _props.alt,
+        className = _props.className,
+        children = _props.children,
+        props = (0, _objectWithoutProperties3['default'])(_props, ['src', 'alt', 'className', 'children']);
 
-    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props);
-
-    var bsProps = _splitBsProps[0];
-    var elementProps = _splitBsProps[1];
-
+    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props),
+        bsProps = _splitBsProps[0],
+        elementProps = _splitBsProps[1];
 
     var Component = elementProps.href ? _SafeAnchor2['default'] : 'div';
     var classes = (0, _bootstrapUtils.getClassSet)(bsProps);
@@ -26426,7 +28234,7 @@ Thumbnail.propTypes = propTypes;
 
 exports['default'] = (0, _bootstrapUtils.bsClass)('thumbnail', Thumbnail);
 module.exports = exports['default'];
-},{"./SafeAnchor":231,"./utils/bootstrapUtils":248,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":456}],241:[function(require,module,exports){
+},{"./SafeAnchor":240,"./utils/bootstrapUtils":257,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"prop-types":159,"react":463}],250:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -26459,6 +28267,10 @@ var _react = require('react');
 
 var _react2 = _interopRequireDefault(_react);
 
+var _propTypes = require('prop-types');
+
+var _propTypes2 = _interopRequireDefault(_propTypes);
+
 var _isRequiredForA11y = require('react-prop-types/lib/isRequiredForA11y');
 
 var _isRequiredForA11y2 = _interopRequireDefault(_isRequiredForA11y);
@@ -26473,30 +28285,30 @@ var propTypes = {
    * @type {string|number}
    * @required
    */
-  id: (0, _isRequiredForA11y2['default'])(_react2['default'].PropTypes.oneOfType([_react2['default'].PropTypes.string, _react2['default'].PropTypes.number])),
+  id: (0, _isRequiredForA11y2['default'])(_propTypes2['default'].oneOfType([_propTypes2['default'].string, _propTypes2['default'].number])),
 
   /**
    * Sets the direction the Tooltip is positioned towards.
    */
-  placement: _react2['default'].PropTypes.oneOf(['top', 'right', 'bottom', 'left']),
+  placement: _propTypes2['default'].oneOf(['top', 'right', 'bottom', 'left']),
 
   /**
    * The "top" position value for the Tooltip.
    */
-  positionTop: _react2['default'].PropTypes.oneOfType([_react2['default'].PropTypes.number, _react2['default'].PropTypes.string]),
+  positionTop: _propTypes2['default'].oneOfType([_propTypes2['default'].number, _propTypes2['default'].string]),
   /**
    * The "left" position value for the Tooltip.
    */
-  positionLeft: _react2['default'].PropTypes.oneOfType([_react2['default'].PropTypes.number, _react2['default'].PropTypes.string]),
+  positionLeft: _propTypes2['default'].oneOfType([_propTypes2['default'].number, _propTypes2['default'].string]),
 
   /**
    * The "top" position value for the Tooltip arrow.
    */
-  arrowOffsetTop: _react2['default'].PropTypes.oneOfType([_react2['default'].PropTypes.number, _react2['default'].PropTypes.string]),
+  arrowOffsetTop: _propTypes2['default'].oneOfType([_propTypes2['default'].number, _propTypes2['default'].string]),
   /**
    * The "left" position value for the Tooltip arrow.
    */
-  arrowOffsetLeft: _react2['default'].PropTypes.oneOfType([_react2['default'].PropTypes.number, _react2['default'].PropTypes.string])
+  arrowOffsetLeft: _propTypes2['default'].oneOfType([_propTypes2['default'].number, _propTypes2['default'].string])
 };
 
 var defaultProps = {
@@ -26514,22 +28326,20 @@ var Tooltip = function (_React$Component) {
   Tooltip.prototype.render = function render() {
     var _extends2;
 
-    var _props = this.props;
-    var placement = _props.placement;
-    var positionTop = _props.positionTop;
-    var positionLeft = _props.positionLeft;
-    var arrowOffsetTop = _props.arrowOffsetTop;
-    var arrowOffsetLeft = _props.arrowOffsetLeft;
-    var className = _props.className;
-    var style = _props.style;
-    var children = _props.children;
-    var props = (0, _objectWithoutProperties3['default'])(_props, ['placement', 'positionTop', 'positionLeft', 'arrowOffsetTop', 'arrowOffsetLeft', 'className', 'style', 'children']);
+    var _props = this.props,
+        placement = _props.placement,
+        positionTop = _props.positionTop,
+        positionLeft = _props.positionLeft,
+        arrowOffsetTop = _props.arrowOffsetTop,
+        arrowOffsetLeft = _props.arrowOffsetLeft,
+        className = _props.className,
+        style = _props.style,
+        children = _props.children,
+        props = (0, _objectWithoutProperties3['default'])(_props, ['placement', 'positionTop', 'positionLeft', 'arrowOffsetTop', 'arrowOffsetLeft', 'className', 'style', 'children']);
 
-    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props);
-
-    var bsProps = _splitBsProps[0];
-    var elementProps = _splitBsProps[1];
-
+    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props),
+        bsProps = _splitBsProps[0],
+        elementProps = _splitBsProps[1];
 
     var classes = (0, _extends4['default'])({}, (0, _bootstrapUtils.getClassSet)(bsProps), (_extends2 = {}, _extends2[placement] = true, _extends2));
 
@@ -26567,7 +28377,7 @@ Tooltip.defaultProps = defaultProps;
 
 exports['default'] = (0, _bootstrapUtils.bsClass)('tooltip', Tooltip);
 module.exports = exports['default'];
-},{"./utils/bootstrapUtils":248,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":456,"react-prop-types/lib/isRequiredForA11y":272}],242:[function(require,module,exports){
+},{"./utils/bootstrapUtils":257,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"prop-types":159,"react":463,"react-prop-types/lib/isRequiredForA11y":281}],251:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -26615,15 +28425,13 @@ var Well = function (_React$Component) {
   }
 
   Well.prototype.render = function render() {
-    var _props = this.props;
-    var className = _props.className;
-    var props = (0, _objectWithoutProperties3['default'])(_props, ['className']);
+    var _props = this.props,
+        className = _props.className,
+        props = (0, _objectWithoutProperties3['default'])(_props, ['className']);
 
-    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props);
-
-    var bsProps = _splitBsProps[0];
-    var elementProps = _splitBsProps[1];
-
+    var _splitBsProps = (0, _bootstrapUtils.splitBsProps)(props),
+        bsProps = _splitBsProps[0],
+        elementProps = _splitBsProps[1];
 
     var classes = (0, _bootstrapUtils.getClassSet)(bsProps);
 
@@ -26637,11 +28445,11 @@ var Well = function (_React$Component) {
 
 exports['default'] = (0, _bootstrapUtils.bsClass)('well', (0, _bootstrapUtils.bsSizes)([_StyleConfig.Size.LARGE, _StyleConfig.Size.SMALL], Well));
 module.exports = exports['default'];
-},{"./utils/StyleConfig":245,"./utils/bootstrapUtils":248,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":456}],243:[function(require,module,exports){
+},{"./utils/StyleConfig":254,"./utils/bootstrapUtils":257,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/objectWithoutProperties":18,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":463}],252:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
-exports.utils = exports.Well = exports.Tooltip = exports.Thumbnail = exports.Tabs = exports.TabPane = exports.Table = exports.TabContent = exports.TabContainer = exports.Tab = exports.SplitButton = exports.SafeAnchor = exports.Row = exports.ResponsiveEmbed = exports.Radio = exports.ProgressBar = exports.Popover = exports.PanelGroup = exports.Panel = exports.Pagination = exports.Pager = exports.PageItem = exports.PageHeader = exports.OverlayTrigger = exports.Overlay = exports.NavItem = exports.NavDropdown = exports.NavbarBrand = exports.Navbar = exports.Nav = exports.ModalTitle = exports.ModalHeader = exports.ModalFooter = exports.ModalBody = exports.Modal = exports.MenuItem = exports.Media = exports.ListGroupItem = exports.ListGroup = exports.Label = exports.Jumbotron = exports.InputGroup = exports.Image = exports.HelpBlock = exports.Grid = exports.Glyphicon = exports.FormGroup = exports.FormControl = exports.Form = exports.Fade = exports.DropdownButton = exports.Dropdown = exports.Collapse = exports.Col = exports.ControlLabel = exports.Clearfix = exports.Checkbox = exports.CarouselItem = exports.Carousel = exports.ButtonToolbar = exports.ButtonGroup = exports.Button = exports.BreadcrumbItem = exports.Breadcrumb = exports.Badge = exports.Alert = exports.Accordion = undefined;
+exports.utils = exports.Well = exports.Tooltip = exports.Thumbnail = exports.Tabs = exports.TabPane = exports.Table = exports.TabContent = exports.TabContainer = exports.Tab = exports.SplitButton = exports.SafeAnchor = exports.Row = exports.ResponsiveEmbed = exports.Radio = exports.ProgressBar = exports.Popover = exports.PanelGroup = exports.Panel = exports.PaginationButton = exports.Pagination = exports.Pager = exports.PageItem = exports.PageHeader = exports.OverlayTrigger = exports.Overlay = exports.NavItem = exports.NavDropdown = exports.NavbarBrand = exports.Navbar = exports.Nav = exports.ModalTitle = exports.ModalHeader = exports.ModalFooter = exports.ModalBody = exports.Modal = exports.MenuItem = exports.Media = exports.ListGroupItem = exports.ListGroup = exports.Label = exports.Jumbotron = exports.InputGroup = exports.Image = exports.HelpBlock = exports.Grid = exports.Glyphicon = exports.FormGroup = exports.FormControl = exports.Form = exports.Fade = exports.DropdownButton = exports.Dropdown = exports.Collapse = exports.Col = exports.ControlLabel = exports.Clearfix = exports.Checkbox = exports.CarouselItem = exports.Carousel = exports.ButtonToolbar = exports.ButtonGroup = exports.Button = exports.BreadcrumbItem = exports.Breadcrumb = exports.Badge = exports.Alert = exports.Accordion = undefined;
 
 var _Accordion2 = require('./Accordion');
 
@@ -26835,6 +28643,10 @@ var _Pagination2 = require('./Pagination');
 
 var _Pagination3 = _interopRequireDefault(_Pagination2);
 
+var _PaginationButton2 = require('./PaginationButton');
+
+var _PaginationButton3 = _interopRequireDefault(_PaginationButton2);
+
 var _Panel2 = require('./Panel');
 
 var _Panel3 = _interopRequireDefault(_Panel2);
@@ -26963,6 +28775,7 @@ exports.PageHeader = _PageHeader3['default'];
 exports.PageItem = _PageItem3['default'];
 exports.Pager = _Pager3['default'];
 exports.Pagination = _Pagination3['default'];
+exports.PaginationButton = _PaginationButton3['default'];
 exports.Panel = _Panel3['default'];
 exports.PanelGroup = _PanelGroup3['default'];
 exports.Popover = _Popover3['default'];
@@ -26982,7 +28795,7 @@ exports.Thumbnail = _Thumbnail3['default'];
 exports.Tooltip = _Tooltip3['default'];
 exports.Well = _Well3['default'];
 exports.utils = _utils;
-},{"./Accordion":157,"./Alert":158,"./Badge":159,"./Breadcrumb":160,"./BreadcrumbItem":161,"./Button":162,"./ButtonGroup":163,"./ButtonToolbar":164,"./Carousel":165,"./CarouselItem":167,"./Checkbox":168,"./Clearfix":169,"./Col":170,"./Collapse":171,"./ControlLabel":172,"./Dropdown":173,"./DropdownButton":174,"./Fade":177,"./Form":178,"./FormControl":179,"./FormGroup":182,"./Glyphicon":183,"./Grid":184,"./HelpBlock":185,"./Image":186,"./InputGroup":187,"./Jumbotron":190,"./Label":191,"./ListGroup":192,"./ListGroupItem":193,"./Media":194,"./MenuItem":201,"./Modal":202,"./ModalBody":203,"./ModalFooter":205,"./ModalHeader":206,"./ModalTitle":207,"./Nav":208,"./NavDropdown":209,"./NavItem":210,"./Navbar":211,"./NavbarBrand":212,"./Overlay":216,"./OverlayTrigger":217,"./PageHeader":218,"./PageItem":219,"./Pager":220,"./Pagination":222,"./Panel":224,"./PanelGroup":225,"./Popover":226,"./ProgressBar":227,"./Radio":228,"./ResponsiveEmbed":229,"./Row":230,"./SafeAnchor":231,"./SplitButton":232,"./Tab":234,"./TabContainer":235,"./TabContent":236,"./TabPane":237,"./Table":238,"./Tabs":239,"./Thumbnail":240,"./Tooltip":241,"./Well":242,"./utils":252}],244:[function(require,module,exports){
+},{"./Accordion":166,"./Alert":167,"./Badge":168,"./Breadcrumb":169,"./BreadcrumbItem":170,"./Button":171,"./ButtonGroup":172,"./ButtonToolbar":173,"./Carousel":174,"./CarouselItem":176,"./Checkbox":177,"./Clearfix":178,"./Col":179,"./Collapse":180,"./ControlLabel":181,"./Dropdown":182,"./DropdownButton":183,"./Fade":186,"./Form":187,"./FormControl":188,"./FormGroup":191,"./Glyphicon":192,"./Grid":193,"./HelpBlock":194,"./Image":195,"./InputGroup":196,"./Jumbotron":199,"./Label":200,"./ListGroup":201,"./ListGroupItem":202,"./Media":203,"./MenuItem":210,"./Modal":211,"./ModalBody":212,"./ModalFooter":214,"./ModalHeader":215,"./ModalTitle":216,"./Nav":217,"./NavDropdown":218,"./NavItem":219,"./Navbar":220,"./NavbarBrand":221,"./Overlay":225,"./OverlayTrigger":226,"./PageHeader":227,"./PageItem":228,"./Pager":229,"./Pagination":231,"./PaginationButton":232,"./Panel":233,"./PanelGroup":234,"./Popover":235,"./ProgressBar":236,"./Radio":237,"./ResponsiveEmbed":238,"./Row":239,"./SafeAnchor":240,"./SplitButton":241,"./Tab":243,"./TabContainer":244,"./TabContent":245,"./TabPane":246,"./Table":247,"./Tabs":248,"./Thumbnail":249,"./Tooltip":250,"./Well":251,"./utils":261}],253:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -27054,7 +28867,7 @@ function exclusiveRoles() {
     return null;
   });
 }
-},{"./ValidComponentChildren":247,"react-prop-types/lib/utils/createChainableTypeChecker":273}],245:[function(require,module,exports){
+},{"./ValidComponentChildren":256,"react-prop-types/lib/utils/createChainableTypeChecker":282}],254:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -27090,7 +28903,7 @@ var Style = exports.Style = {
   LINK: 'link',
   INVERSE: 'inverse'
 };
-},{}],246:[function(require,module,exports){
+},{}],255:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -27204,7 +29017,7 @@ var ReactTransitionEvents = {
 
 exports['default'] = ReactTransitionEvents;
 module.exports = exports['default'];
-},{}],247:[function(require,module,exports){
+},{}],256:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -27397,7 +29210,7 @@ exports['default'] = {
   toArray: toArray
 };
 module.exports = exports['default'];
-},{"react":456}],248:[function(require,module,exports){
+},{"react":463}],257:[function(require,module,exports){
 (function (process){
 'use strict';
 
@@ -27422,7 +29235,9 @@ var _invariant = require('invariant');
 
 var _invariant2 = _interopRequireDefault(_invariant);
 
-var _react = require('react');
+var _propTypes = require('prop-types');
+
+var _propTypes2 = _interopRequireDefault(_propTypes);
 
 var _StyleConfig = require('./StyleConfig');
 
@@ -27453,7 +29268,7 @@ var bsClass = exports.bsClass = curry(function (defaultClass, Component) {
   var propTypes = Component.propTypes || (Component.propTypes = {});
   var defaultProps = Component.defaultProps || (Component.defaultProps = {});
 
-  propTypes.bsClass = _react.PropTypes.string;
+  propTypes.bsClass = _propTypes2['default'].string;
   defaultProps.bsClass = defaultClass;
 
   return Component;
@@ -27474,7 +29289,7 @@ var bsStyles = exports.bsStyles = curry(function (styles, defaultStyle, Componen
     }
   });
 
-  var propType = _react.PropTypes.oneOf(existing);
+  var propType = _propTypes2['default'].oneOf(existing);
 
   // expose the values on the propType function for documentation
   Component.STYLES = propType._values = existing;
@@ -27516,7 +29331,7 @@ var bsSizes = exports.bsSizes = curry(function (sizes, defaultSize, Component) {
     values.push(size);
   });
 
-  var propType = _react.PropTypes.oneOf(values);
+  var propType = _propTypes2['default'].oneOf(values);
   propType._values = values;
 
   // expose the values on the propType function for documentation
@@ -27569,8 +29384,8 @@ function isBsProp(propName) {
 function splitBsProps(props) {
   var elementProps = {};
   (0, _entries2['default'])(props).forEach(function (_ref) {
-    var propName = _ref[0];
-    var propValue = _ref[1];
+    var propName = _ref[0],
+        propValue = _ref[1];
 
     if (!isBsProp(propName)) {
       elementProps[propName] = propValue;
@@ -27588,8 +29403,8 @@ function splitBsPropsAndOmit(props, omittedPropNames) {
 
   var elementProps = {};
   (0, _entries2['default'])(props).forEach(function (_ref2) {
-    var propName = _ref2[0];
-    var propValue = _ref2[1];
+    var propName = _ref2[0],
+        propValue = _ref2[1];
 
     if (!isBsProp(propName) && !isOmittedProp[propName]) {
       elementProps[propName] = propValue;
@@ -27613,7 +29428,7 @@ function addStyle(Component) {
 
 var _curry = exports._curry = curry;
 }).call(this,require('_process'))
-},{"./StyleConfig":245,"_process":154,"babel-runtime/core-js/object/entries":7,"babel-runtime/helpers/extends":16,"invariant":145,"react":456}],249:[function(require,module,exports){
+},{"./StyleConfig":254,"_process":155,"babel-runtime/core-js/object/entries":7,"babel-runtime/helpers/extends":16,"invariant":148,"prop-types":159}],258:[function(require,module,exports){
 "use strict";
 
 exports.__esModule = true;
@@ -27622,7 +29437,7 @@ function capitalize(string) {
   return "" + string.charAt(0).toUpperCase() + string.slice(1);
 }
 module.exports = exports["default"];
-},{}],250:[function(require,module,exports){
+},{}],259:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -27664,7 +29479,7 @@ function createChainedFunction() {
 
 exports['default'] = createChainedFunction;
 module.exports = exports['default'];
-},{}],251:[function(require,module,exports){
+},{}],260:[function(require,module,exports){
 (function (process){
 'use strict';
 
@@ -27753,7 +29568,7 @@ function _resetWarned() {
   warned = {};
 }
 }).call(this,require('_process'))
-},{"_process":154,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/possibleConstructorReturn":19,"babel-runtime/helpers/typeof":20,"warning":463}],252:[function(require,module,exports){
+},{"_process":155,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/possibleConstructorReturn":19,"babel-runtime/helpers/typeof":20,"warning":470}],261:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -27778,7 +29593,7 @@ function _interopRequireWildcard(obj) { if (obj && obj.__esModule) { return obj;
 exports.bootstrapUtils = _bootstrapUtils;
 exports.createChainedFunction = _createChainedFunction3['default'];
 exports.ValidComponentChildren = _ValidComponentChildren3['default'];
-},{"./ValidComponentChildren":247,"./bootstrapUtils":248,"./createChainedFunction":250}],253:[function(require,module,exports){
+},{"./ValidComponentChildren":256,"./bootstrapUtils":257,"./createChainedFunction":259}],262:[function(require,module,exports){
 "use strict";
 
 exports.__esModule = true;
@@ -27798,8 +29613,8 @@ function splitComponentProps(props, Component) {
   var childProps = {};
 
   (0, _entries2["default"])(props).forEach(function (_ref) {
-    var propName = _ref[0];
-    var propValue = _ref[1];
+    var propName = _ref[0],
+        propValue = _ref[1];
 
     if (componentPropTypes[propName]) {
       parentProps[propName] = propValue;
@@ -27811,12 +29626,12 @@ function splitComponentProps(props, Component) {
   return [parentProps, childProps];
 }
 module.exports = exports["default"];
-},{"babel-runtime/core-js/object/entries":7}],254:[function(require,module,exports){
+},{"babel-runtime/core-js/object/entries":7}],263:[function(require,module,exports){
 'use strict';
 
 module.exports = require('react/lib/ReactDOM');
 
-},{"react/lib/ReactDOM":321}],255:[function(require,module,exports){
+},{"react/lib/ReactDOM":329}],264:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -28020,6 +29835,12 @@ var Modal = _react2.default.createClass({
     enforceFocus: _react2.default.PropTypes.bool,
 
     /**
+     * When `true` The modal will restore focus to previously focused element once
+     * modal is hidden
+     */
+    restoreFocus: _react2.default.PropTypes.bool,
+
+    /**
      * Callback fired before the Modal transitions in
      */
     onEnter: _react2.default.PropTypes.func,
@@ -28065,6 +29886,7 @@ var Modal = _react2.default.createClass({
       keyboard: true,
       autoFocus: true,
       enforceFocus: true,
+      restoreFocus: true,
       onHide: noop,
       manager: modalManager,
       renderBackdrop: function renderBackdrop(props) {
@@ -28072,36 +29894,49 @@ var Modal = _react2.default.createClass({
       }
     };
   },
+  omitProps: function omitProps(props, propTypes) {
+
+    var keys = Object.keys(props);
+    var newProps = {};
+    keys.map(function (prop) {
+      if (!Object.prototype.hasOwnProperty.call(propTypes, prop)) {
+        newProps[prop] = props[prop];
+      }
+    });
+
+    return newProps;
+  },
   getInitialState: function getInitialState() {
     return { exited: !this.props.show };
   },
   render: function render() {
-    var _props = this.props;
-    var show = _props.show;
-    var container = _props.container;
-    var children = _props.children;
-    var Transition = _props.transition;
-    var backdrop = _props.backdrop;
-    var dialogTransitionTimeout = _props.dialogTransitionTimeout;
-    var className = _props.className;
-    var style = _props.style;
-    var onExit = _props.onExit;
-    var onExiting = _props.onExiting;
-    var onEnter = _props.onEnter;
-    var onEntering = _props.onEntering;
-    var onEntered = _props.onEntered;
+    var _props = this.props,
+        show = _props.show,
+        container = _props.container,
+        children = _props.children,
+        Transition = _props.transition,
+        backdrop = _props.backdrop,
+        dialogTransitionTimeout = _props.dialogTransitionTimeout,
+        className = _props.className,
+        style = _props.style,
+        onExit = _props.onExit,
+        onExiting = _props.onExiting,
+        onEnter = _props.onEnter,
+        onEntering = _props.onEntering,
+        onEntered = _props.onEntered;
 
 
     var dialog = _react2.default.Children.only(children);
+    var filteredProps = this.omitProps(this.props, Modal.propTypes);
 
     var mountModal = show || Transition && !this.state.exited;
     if (!mountModal) {
       return null;
     }
 
-    var _dialog$props = dialog.props;
-    var role = _dialog$props.role;
-    var tabIndex = _dialog$props.tabIndex;
+    var _dialog$props = dialog.props,
+        role = _dialog$props.role,
+        tabIndex = _dialog$props.tabIndex;
 
 
     if (role === undefined || tabIndex === undefined) {
@@ -28138,12 +29973,13 @@ var Modal = _react2.default.createClass({
       },
       _react2.default.createElement(
         'div',
-        {
+        _extends({
           ref: 'modal',
-          role: role || 'dialog',
+          role: role || 'dialog'
+        }, filteredProps, {
           style: style,
           className: className
-        },
+        }),
         backdrop && this.renderBackdrop(),
         dialog
       )
@@ -28152,12 +29988,12 @@ var Modal = _react2.default.createClass({
   renderBackdrop: function renderBackdrop() {
     var _this = this;
 
-    var _props2 = this.props;
-    var backdropStyle = _props2.backdropStyle;
-    var backdropClassName = _props2.backdropClassName;
-    var renderBackdrop = _props2.renderBackdrop;
-    var Transition = _props2.transition;
-    var backdropTransitionTimeout = _props2.backdropTransitionTimeout;
+    var _props2 = this.props,
+        backdropStyle = _props2.backdropStyle,
+        backdropClassName = _props2.backdropClassName,
+        renderBackdrop = _props2.renderBackdrop,
+        Transition = _props2.transition,
+        backdropTransitionTimeout = _props2.backdropTransitionTimeout;
 
 
     var backdropRef = function backdropRef(ref) {
@@ -28219,9 +30055,9 @@ var Modal = _react2.default.createClass({
     }
   },
   componentWillUnmount: function componentWillUnmount() {
-    var _props3 = this.props;
-    var show = _props3.show;
-    var transition = _props3.transition;
+    var _props3 = this.props,
+        show = _props3.show,
+        transition = _props3.transition;
 
 
     if (show || transition && !this.state.exited) {
@@ -28251,7 +30087,9 @@ var Modal = _react2.default.createClass({
 
     this._onFocusinListener.remove();
 
-    this.restoreLastFocus();
+    if (this.props.restoreFocus) {
+      this.restoreLastFocus();
+    }
   },
   setMountNode: function setMountNode(ref) {
     this.mountNode = ref ? ref.getMountNode() : ref;
@@ -28347,7 +30185,7 @@ Modal.Manager = _ModalManager2.default;
 
 exports.default = Modal;
 module.exports = exports['default'];
-},{"./ModalManager":256,"./Portal":258,"./utils/addEventListener":262,"./utils/addFocusListener":263,"./utils/getContainer":265,"./utils/ownerDocument":268,"dom-helpers/activeElement":116,"dom-helpers/query/contains":126,"dom-helpers/util/inDOM":143,"react":456,"react-prop-types/lib/componentOrElement":270,"react-prop-types/lib/elementType":271,"warning":463}],256:[function(require,module,exports){
+},{"./ModalManager":265,"./Portal":267,"./utils/addEventListener":271,"./utils/addFocusListener":272,"./utils/getContainer":274,"./utils/ownerDocument":277,"dom-helpers/activeElement":118,"dom-helpers/query/contains":129,"dom-helpers/util/inDOM":146,"react":463,"react-prop-types/lib/componentOrElement":279,"react-prop-types/lib/elementType":280,"warning":470}],265:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -28430,12 +30268,11 @@ function removeContainerStyle(_ref, container) {
 
 var ModalManager = function () {
   function ModalManager() {
-    var _ref2 = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {};
-
-    var _ref2$hideSiblingNode = _ref2.hideSiblingNodes;
-    var hideSiblingNodes = _ref2$hideSiblingNode === undefined ? true : _ref2$hideSiblingNode;
-    var _ref2$handleContainer = _ref2.handleContainerOverflow;
-    var handleContainerOverflow = _ref2$handleContainer === undefined ? true : _ref2$handleContainer;
+    var _ref2 = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {},
+        _ref2$hideSiblingNode = _ref2.hideSiblingNodes,
+        hideSiblingNodes = _ref2$hideSiblingNode === undefined ? true : _ref2$hideSiblingNode,
+        _ref2$handleContainer = _ref2.handleContainerOverflow,
+        handleContainerOverflow = _ref2$handleContainer === undefined ? true : _ref2$handleContainer;
 
     _classCallCheck(this, ModalManager);
 
@@ -28535,7 +30372,7 @@ var ModalManager = function () {
 
 exports.default = ModalManager;
 module.exports = exports['default'];
-},{"./utils/isOverflowing":266,"./utils/manageAriaHidden":267,"dom-helpers/class":119,"dom-helpers/style":135,"dom-helpers/util/scrollbarSize":144}],257:[function(require,module,exports){
+},{"./utils/isOverflowing":275,"./utils/manageAriaHidden":276,"dom-helpers/class":121,"dom-helpers/style":138,"dom-helpers/util/scrollbarSize":147}],266:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -28605,17 +30442,16 @@ var Overlay = function (_React$Component) {
   }, {
     key: 'render',
     value: function render() {
-      var _props = this.props;
-      var container = _props.container;
-      var containerPadding = _props.containerPadding;
-      var target = _props.target;
-      var placement = _props.placement;
-      var shouldUpdatePosition = _props.shouldUpdatePosition;
-      var rootClose = _props.rootClose;
-      var children = _props.children;
-      var Transition = _props.transition;
-
-      var props = _objectWithoutProperties(_props, ['container', 'containerPadding', 'target', 'placement', 'shouldUpdatePosition', 'rootClose', 'children', 'transition']);
+      var _props = this.props,
+          container = _props.container,
+          containerPadding = _props.containerPadding,
+          target = _props.target,
+          placement = _props.placement,
+          shouldUpdatePosition = _props.shouldUpdatePosition,
+          rootClose = _props.rootClose,
+          children = _props.children,
+          Transition = _props.transition,
+          props = _objectWithoutProperties(_props, ['container', 'containerPadding', 'target', 'placement', 'shouldUpdatePosition', 'rootClose', 'children', 'transition']);
 
       // Don't un-render the overlay while it's transitioning out.
 
@@ -28637,11 +30473,11 @@ var Overlay = function (_React$Component) {
       );
 
       if (Transition) {
-        var onExit = props.onExit;
-        var onExiting = props.onExiting;
-        var onEnter = props.onEnter;
-        var onEntering = props.onEntering;
-        var onEntered = props.onEntered;
+        var onExit = props.onExit,
+            onExiting = props.onExiting,
+            onEnter = props.onEnter,
+            onEntering = props.onEntering,
+            onEntered = props.onEntered;
 
         // This animates the child node by injecting props, so it must precede
         // anything that adds a wrapping div.
@@ -28764,7 +30600,7 @@ Overlay.propTypes = _extends({}, _Portal2.default.propTypes, _Position2.default.
 
 exports.default = Overlay;
 module.exports = exports['default'];
-},{"./Portal":258,"./Position":259,"./RootCloseWrapper":260,"react":456,"react-prop-types/lib/elementType":271}],258:[function(require,module,exports){
+},{"./Portal":267,"./Position":268,"./RootCloseWrapper":269,"react":463,"react-prop-types/lib/elementType":280}],267:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -28882,7 +30718,7 @@ var Portal = _react2.default.createClass({
 
 exports.default = Portal;
 module.exports = exports['default'];
-},{"./utils/getContainer":265,"./utils/ownerDocument":268,"react":456,"react-dom":254,"react-prop-types/lib/componentOrElement":270}],259:[function(require,module,exports){
+},{"./utils/getContainer":274,"./utils/ownerDocument":277,"react":463,"react-dom":263,"react-prop-types/lib/componentOrElement":279}],268:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -28981,17 +30817,15 @@ var Position = function (_React$Component) {
   }, {
     key: 'render',
     value: function render() {
-      var _props = this.props;
-      var children = _props.children;
-      var className = _props.className;
+      var _props = this.props,
+          children = _props.children,
+          className = _props.className,
+          props = _objectWithoutProperties(_props, ['children', 'className']);
 
-      var props = _objectWithoutProperties(_props, ['children', 'className']);
-
-      var _state = this.state;
-      var positionLeft = _state.positionLeft;
-      var positionTop = _state.positionTop;
-
-      var arrowPosition = _objectWithoutProperties(_state, ['positionLeft', 'positionTop']);
+      var _state = this.state,
+          positionLeft = _state.positionLeft,
+          positionTop = _state.positionTop,
+          arrowPosition = _objectWithoutProperties(_state, ['positionLeft', 'positionTop']);
 
       // These should not be forwarded to the child.
 
@@ -29094,7 +30928,7 @@ Position.defaultProps = {
 
 exports.default = Position;
 module.exports = exports['default'];
-},{"./utils/calculatePosition":264,"./utils/getContainer":265,"./utils/ownerDocument":268,"classnames":21,"react":456,"react-dom":254,"react-prop-types/lib/componentOrElement":270}],260:[function(require,module,exports){
+},{"./utils/calculatePosition":273,"./utils/getContainer":274,"./utils/ownerDocument":277,"classnames":21,"react":463,"react-dom":263,"react-prop-types/lib/componentOrElement":279}],269:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -29131,6 +30965,8 @@ function _possibleConstructorReturn(self, call) { if (!self) { throw new Referen
 
 function _inherits(subClass, superClass) { if (typeof superClass !== "function" && superClass !== null) { throw new TypeError("Super expression must either be null or a function, not " + typeof superClass); } subClass.prototype = Object.create(superClass && superClass.prototype, { constructor: { value: subClass, enumerable: false, writable: true, configurable: true } }); if (superClass) Object.setPrototypeOf ? Object.setPrototypeOf(subClass, superClass) : subClass.__proto__ = superClass; }
 
+var escapeKeyCode = 27;
+
 function isLeftClickEvent(event) {
   return event.button === 0;
 }
@@ -29138,6 +30974,13 @@ function isLeftClickEvent(event) {
 function isModifiedEvent(event) {
   return !!(event.metaKey || event.altKey || event.ctrlKey || event.shiftKey);
 }
+
+/**
+ * The `<RootCloseWrapper/>` component registers your callback on the document
+ * when rendered. Powers the `<Overlay/>` component. This is used achieve modal
+ * style behavior where your callback is triggered when the user tries to
+ * interact with the rest of the document or hits the `esc` key.
+ */
 
 var RootCloseWrapper = function (_React$Component) {
   _inherits(RootCloseWrapper, _React$Component);
@@ -29151,15 +30994,15 @@ var RootCloseWrapper = function (_React$Component) {
       _this.preventMouseRootClose = isModifiedEvent(e) || !isLeftClickEvent(e) || (0, _contains2.default)(_reactDom2.default.findDOMNode(_this), e.target);
     };
 
-    _this.handleMouse = function () {
+    _this.handleMouse = function (e) {
       if (!_this.preventMouseRootClose && _this.props.onRootClose) {
-        _this.props.onRootClose();
+        _this.props.onRootClose(e);
       }
     };
 
     _this.handleKeyUp = function (e) {
-      if (e.keyCode === 27 && _this.props.onRootClose) {
-        _this.props.onRootClose();
+      if (e.keyCode === escapeKeyCode && _this.props.onRootClose) {
+        _this.props.onRootClose(e);
       }
     };
 
@@ -29231,22 +31074,23 @@ var RootCloseWrapper = function (_React$Component) {
   return RootCloseWrapper;
 }(_react2.default.Component);
 
-exports.default = RootCloseWrapper;
-
-
 RootCloseWrapper.displayName = 'RootCloseWrapper';
 
 RootCloseWrapper.propTypes = {
-  onRootClose: _react2.default.PropTypes.func,
-  children: _react2.default.PropTypes.element,
-
   /**
-   * Disable the the RootCloseWrapper, preventing it from triggering
-   * `onRootClose`.
+   * Callback fired after click or mousedown. Also triggers when user hits `esc`.
+   */
+  onRootClose: _react2.default.PropTypes.func,
+  /**
+   * Children to render.
+   */
+  children: _react2.default.PropTypes.element,
+  /**
+   * Disable the the RootCloseWrapper, preventing it from triggering `onRootClose`.
    */
   disabled: _react2.default.PropTypes.bool,
   /**
-   * Choose which document mouse event to bind to
+   * Choose which document mouse event to bind to.
    */
   event: _react2.default.PropTypes.oneOf(['click', 'mousedown'])
 };
@@ -29254,8 +31098,10 @@ RootCloseWrapper.propTypes = {
 RootCloseWrapper.defaultProps = {
   event: 'click'
 };
+
+exports.default = RootCloseWrapper;
 module.exports = exports['default'];
-},{"./utils/addEventListener":262,"./utils/ownerDocument":268,"dom-helpers/query/contains":126,"react":456,"react-dom":254}],261:[function(require,module,exports){
+},{"./utils/addEventListener":271,"./utils/ownerDocument":277,"dom-helpers/query/contains":129,"react":463,"react-dom":263}],270:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -29267,6 +31113,18 @@ var _extends = Object.assign || function (target) { for (var i = 1; i < argument
 
 var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
 
+var _classnames = require('classnames');
+
+var _classnames2 = _interopRequireDefault(_classnames);
+
+var _on = require('dom-helpers/events/on');
+
+var _on2 = _interopRequireDefault(_on);
+
+var _properties = require('dom-helpers/transition/properties');
+
+var _properties2 = _interopRequireDefault(_properties);
+
 var _react = require('react');
 
 var _react2 = _interopRequireDefault(_react);
@@ -29274,18 +31132,6 @@ var _react2 = _interopRequireDefault(_react);
 var _reactDom = require('react-dom');
 
 var _reactDom2 = _interopRequireDefault(_reactDom);
-
-var _properties = require('dom-helpers/transition/properties');
-
-var _properties2 = _interopRequireDefault(_properties);
-
-var _on = require('dom-helpers/events/on');
-
-var _on2 = _interopRequireDefault(_on);
-
-var _classnames = require('classnames');
-
-var _classnames2 = _interopRequireDefault(_classnames);
 
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
@@ -29311,7 +31157,7 @@ var EXITING = exports.EXITING = 4;
  * but is specifically optimized for transitioning a single child "in" or "out".
  *
  * You don't even need to use class based css transitions if you don't want to (but it is easiest).
- * The extensive set of lifecyle callbacks means you have control over
+ * The extensive set of lifecycle callbacks means you have control over
  * the transitioning now at each step of the way.
  */
 
@@ -29324,12 +31170,23 @@ var Transition = function (_React$Component) {
     var _this = _possibleConstructorReturn(this, (Transition.__proto__ || Object.getPrototypeOf(Transition)).call(this, props, context));
 
     var initialStatus = void 0;
+    _this.nextStatus = null;
+
     if (props.in) {
-      // Start enter transition in componentDidMount.
-      initialStatus = props.transitionAppear ? EXITED : ENTERED;
+      if (props.transitionAppear) {
+        initialStatus = EXITED;
+        _this.nextStatus = ENTERING;
+      } else {
+        initialStatus = ENTERED;
+      }
     } else {
-      initialStatus = props.unmountOnExit ? UNMOUNTED : EXITED;
+      if (props.unmountOnExit || props.mountOnEnter) {
+        initialStatus = UNMOUNTED;
+      } else {
+        initialStatus = EXITED;
+      }
     }
+
     _this.state = { status: initialStatus };
 
     _this.nextCallback = null;
@@ -29339,57 +31196,31 @@ var Transition = function (_React$Component) {
   _createClass(Transition, [{
     key: 'componentDidMount',
     value: function componentDidMount() {
-      if (this.props.transitionAppear && this.props.in) {
-        this.performEnter(this.props);
-      }
+      this.updateStatus();
     }
   }, {
     key: 'componentWillReceiveProps',
     value: function componentWillReceiveProps(nextProps) {
-      if (nextProps.in && this.props.unmountOnExit) {
-        if (this.state.status === UNMOUNTED) {
-          // Start enter transition in componentDidUpdate.
+      var status = this.state.status;
+
+
+      if (nextProps.in) {
+        if (status === UNMOUNTED) {
           this.setState({ status: EXITED });
         }
+        if (status !== ENTERING && status !== ENTERED) {
+          this.nextStatus = ENTERING;
+        }
       } else {
-        this._needsUpdate = true;
+        if (status === ENTERING || status === ENTERED) {
+          this.nextStatus = EXITING;
+        }
       }
     }
   }, {
     key: 'componentDidUpdate',
     value: function componentDidUpdate() {
-      var status = this.state.status;
-
-      if (this.props.unmountOnExit && status === EXITED) {
-        // EXITED is always a transitional state to either ENTERING or UNMOUNTED
-        // when using unmountOnExit.
-        if (this.props.in) {
-          this.performEnter(this.props);
-        } else {
-          this.setState({ status: UNMOUNTED });
-        }
-
-        return;
-      }
-
-      // guard ensures we are only responding to prop changes
-      if (this._needsUpdate) {
-        this._needsUpdate = false;
-
-        if (this.props.in) {
-          if (status === EXITING) {
-            this.performEnter(this.props);
-          } else if (status === EXITED) {
-            this.performEnter(this.props);
-          }
-          // Otherwise we're already entering or entered.
-        } else {
-          if (status === ENTERING || status === ENTERED) {
-            this.performExit(this.props);
-          }
-          // Otherwise we're already exited or exiting.
-        }
-      }
+      this.updateStatus();
     }
   }, {
     key: 'componentWillUnmount',
@@ -29397,46 +31228,45 @@ var Transition = function (_React$Component) {
       this.cancelNextCallback();
     }
   }, {
-    key: 'performEnter',
-    value: function performEnter(props) {
+    key: 'updateStatus',
+    value: function updateStatus() {
       var _this2 = this;
 
-      this.cancelNextCallback();
-      var node = _reactDom2.default.findDOMNode(this);
+      if (this.nextStatus !== null) {
+        // nextStatus will always be ENTERING or EXITING.
+        this.cancelNextCallback();
+        var node = _reactDom2.default.findDOMNode(this);
 
-      // Not this.props, because we might be about to receive new props.
-      props.onEnter(node);
+        if (this.nextStatus === ENTERING) {
+          this.props.onEnter(node);
 
-      this.safeSetState({ status: ENTERING }, function () {
-        _this2.props.onEntering(node);
+          this.safeSetState({ status: ENTERING }, function () {
+            _this2.props.onEntering(node);
 
-        _this2.onTransitionEnd(node, function () {
-          _this2.safeSetState({ status: ENTERED }, function () {
-            _this2.props.onEntered(node);
+            _this2.onTransitionEnd(node, function () {
+              _this2.safeSetState({ status: ENTERED }, function () {
+                _this2.props.onEntered(node);
+              });
+            });
           });
-        });
-      });
-    }
-  }, {
-    key: 'performExit',
-    value: function performExit(props) {
-      var _this3 = this;
+        } else {
+          this.props.onExit(node);
 
-      this.cancelNextCallback();
-      var node = _reactDom2.default.findDOMNode(this);
+          this.safeSetState({ status: EXITING }, function () {
+            _this2.props.onExiting(node);
 
-      // Not this.props, because we might be about to receive new props.
-      props.onExit(node);
-
-      this.safeSetState({ status: EXITING }, function () {
-        _this3.props.onExiting(node);
-
-        _this3.onTransitionEnd(node, function () {
-          _this3.safeSetState({ status: EXITED }, function () {
-            _this3.props.onExited(node);
+            _this2.onTransitionEnd(node, function () {
+              _this2.safeSetState({ status: EXITED }, function () {
+                _this2.props.onExited(node);
+              });
+            });
           });
-        });
-      });
+        }
+
+        this.nextStatus = null;
+      } else if (this.props.unmountOnExit && this.state.status === EXITED) {
+        this.setState({ status: UNMOUNTED });
+      }
     }
   }, {
     key: 'cancelNextCallback',
@@ -29457,14 +31287,14 @@ var Transition = function (_React$Component) {
   }, {
     key: 'setNextCallback',
     value: function setNextCallback(callback) {
-      var _this4 = this;
+      var _this3 = this;
 
       var active = true;
 
       this.nextCallback = function (event) {
         if (active) {
           active = false;
-          _this4.nextCallback = null;
+          _this3.nextCallback = null;
 
           callback(event);
         }
@@ -29496,11 +31326,10 @@ var Transition = function (_React$Component) {
         return null;
       }
 
-      var _props = this.props;
-      var children = _props.children;
-      var className = _props.className;
-
-      var childProps = _objectWithoutProperties(_props, ['children', 'className']);
+      var _props = this.props,
+          children = _props.children,
+          className = _props.className,
+          childProps = _objectWithoutProperties(_props, ['children', 'className']);
 
       Object.keys(Transition.propTypes).forEach(function (key) {
         return delete childProps[key];
@@ -29532,6 +31361,11 @@ Transition.propTypes = {
    * Show the component; triggers the enter or exit animation
    */
   in: _react2.default.PropTypes.bool,
+
+  /**
+   * Wait until the first "enter" transition to mount the component (add it to the DOM)
+   */
+  mountOnEnter: _react2.default.PropTypes.bool,
 
   /**
    * Unmount the component (remove it from the DOM) when it is not shown
@@ -29619,7 +31453,7 @@ Transition.defaultProps = {
 };
 
 exports.default = Transition;
-},{"classnames":21,"dom-helpers/events/on":124,"dom-helpers/transition/properties":137,"react":456,"react-dom":254}],262:[function(require,module,exports){
+},{"classnames":21,"dom-helpers/events/on":127,"dom-helpers/transition/properties":141,"react":463,"react-dom":263}],271:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -29647,7 +31481,7 @@ var _off2 = _interopRequireDefault(_off);
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
 module.exports = exports['default'];
-},{"dom-helpers/events/off":123,"dom-helpers/events/on":124}],263:[function(require,module,exports){
+},{"dom-helpers/events/off":126,"dom-helpers/events/on":127}],272:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -29679,7 +31513,7 @@ function addFocusListener(handler) {
   return { remove: remove };
 }
 module.exports = exports['default'];
-},{}],264:[function(require,module,exports){
+},{}],273:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -29763,11 +31597,9 @@ function getLeftDelta(left, overlayWidth, container, padding) {
 function calculatePosition(placement, overlayNode, target, container, padding) {
   var childOffset = container.tagName === 'BODY' ? (0, _offset2.default)(target) : (0, _position2.default)(target, container);
 
-  var _getOffset2 = (0, _offset2.default)(overlayNode);
-
-  var overlayHeight = _getOffset2.height;
-  var overlayWidth = _getOffset2.width;
-
+  var _getOffset2 = (0, _offset2.default)(overlayNode),
+      overlayHeight = _getOffset2.height,
+      overlayWidth = _getOffset2.width;
 
   var positionLeft = void 0,
       positionTop = void 0,
@@ -29809,7 +31641,7 @@ function calculatePosition(placement, overlayNode, target, container, padding) {
   return { positionLeft: positionLeft, positionTop: positionTop, arrowOffsetLeft: arrowOffsetLeft, arrowOffsetTop: arrowOffsetTop };
 }
 module.exports = exports['default'];
-},{"./ownerDocument":268,"dom-helpers/query/offset":128,"dom-helpers/query/position":130,"dom-helpers/query/scrollTop":133}],265:[function(require,module,exports){
+},{"./ownerDocument":277,"dom-helpers/query/offset":131,"dom-helpers/query/position":133,"dom-helpers/query/scrollTop":136}],274:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -29828,7 +31660,7 @@ function getContainer(container, defaultContainer) {
   return _reactDom2.default.findDOMNode(container) || defaultContainer;
 }
 module.exports = exports['default'];
-},{"react-dom":254}],266:[function(require,module,exports){
+},{"react-dom":263}],275:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -29870,7 +31702,7 @@ function isOverflowing(container) {
   return win || isBody(container) ? bodyIsOverflowing(container) : container.scrollHeight > container.clientHeight;
 }
 module.exports = exports['default'];
-},{"dom-helpers/ownerDocument":125,"dom-helpers/query/isWindow":127}],267:[function(require,module,exports){
+},{"dom-helpers/ownerDocument":128,"dom-helpers/query/isWindow":130}],276:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -29883,8 +31715,8 @@ exports.showSiblings = showSiblings;
 var BLACKLIST = ['template', 'script', 'style'];
 
 var isHidable = function isHidable(_ref) {
-  var nodeType = _ref.nodeType;
-  var tagName = _ref.tagName;
+  var nodeType = _ref.nodeType,
+      tagName = _ref.tagName;
   return nodeType === 1 && BLACKLIST.indexOf(tagName.toLowerCase()) === -1;
 };
 
@@ -29920,7 +31752,7 @@ function showSiblings(container, mountNode) {
     return ariaHidden(false, node);
   });
 }
-},{}],268:[function(require,module,exports){
+},{}],277:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -29942,7 +31774,7 @@ var _ownerDocument2 = _interopRequireDefault(_ownerDocument);
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
 module.exports = exports['default'];
-},{"dom-helpers/ownerDocument":125,"react-dom":254}],269:[function(require,module,exports){
+},{"dom-helpers/ownerDocument":128,"react-dom":263}],278:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -29982,7 +31814,7 @@ function all() {
 
   return (0, _createChainableTypeChecker2.default)(allPropTypes);
 }
-},{"./utils/createChainableTypeChecker":273}],270:[function(require,module,exports){
+},{"./utils/createChainableTypeChecker":282}],279:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -30015,7 +31847,7 @@ function validate(props, propName, componentName, location, propFullName) {
 }
 
 exports.default = (0, _createChainableTypeChecker2.default)(validate);
-},{"./utils/createChainableTypeChecker":273,"react":456}],271:[function(require,module,exports){
+},{"./utils/createChainableTypeChecker":282,"react":463}],280:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -30048,7 +31880,7 @@ function elementType(props, propName, componentName, location, propFullName) {
 }
 
 exports.default = (0, _createChainableTypeChecker2.default)(elementType);
-},{"./utils/createChainableTypeChecker":273,"react":456}],272:[function(require,module,exports){
+},{"./utils/createChainableTypeChecker":282,"react":463}],281:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -30069,7 +31901,7 @@ function isRequiredForA11y(validator) {
     return validator.apply(undefined, [props, propName, componentName, location, propFullName].concat(args));
   };
 }
-},{}],273:[function(require,module,exports){
+},{}],282:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -30110,7 +31942,7 @@ function createChainableTypeChecker(validate) {
 
   return chainedCheckType;
 }
-},{}],274:[function(require,module,exports){
+},{}],283:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -30127,6 +31959,10 @@ var _react = require('react');
 
 var _react2 = _interopRequireDefault(_react);
 
+var _propTypes = require('prop-types');
+
+var _propTypes2 = _interopRequireDefault(_propTypes);
+
 var _icons = require('./icons');
 
 var _icons2 = _interopRequireDefault(_icons);
@@ -30140,75 +31976,73 @@ function generateIcon(network) {
 
   var iconConfig = _icons2.default[network.toLowerCase()];
 
-  return _react2.default.createClass({
-    propTypes: {
-      className: _react2.default.PropTypes.string,
-      iconBgStyle: _react2.default.PropTypes.object,
-      logoFillColor: _react2.default.PropTypes.string,
-      round: _react2.default.PropTypes.bool,
-      size: _react2.default.PropTypes.number
-    },
-
-    getDefaultProps: function getDefaultProps() {
-      return {
-        logoFillColor: 'white',
-        size: 64
-      };
-    },
-    render: function render() {
-      var _props = this.props;
-      var className = _props.className;
-      var iconBgStyle = _props.iconBgStyle;
-      var logoFillColor = _props.logoFillColor;
-      var round = _props.round;
-      var size = _props.size;
+  var Icon = function Icon(props) {
+    var className = props.className,
+        iconBgStyle = props.iconBgStyle,
+        logoFillColor = props.logoFillColor,
+        round = props.round,
+        size = props.size;
 
 
-      var baseStyle = {
-        width: size,
-        height: size
-      };
+    var baseStyle = {
+      width: size,
+      height: size
+    };
 
-      var classes = 'social-icon social-icon--' + network + ' ' + (className || '');
+    var classes = 'social-icon social-icon--' + network + ' ' + (className || '');
 
-      var finalIconBgStyle = (0, _extends3.default)({}, iconBgStyle);
+    var finalIconBgStyle = (0, _extends3.default)({}, iconBgStyle);
 
-      return _react2.default.createElement(
-        'div',
-        { style: baseStyle },
+    return _react2.default.createElement(
+      'div',
+      { style: baseStyle },
+      _react2.default.createElement(
+        'svg',
+        {
+          viewBox: '0 0 64 64',
+          fill: logoFillColor,
+          width: size,
+          height: size,
+          className: classes },
         _react2.default.createElement(
-          'svg',
-          {
-            viewBox: '0 0 64 64',
-            fill: logoFillColor,
-            width: size,
-            height: size,
-            className: classes },
-          _react2.default.createElement(
-            'g',
-            null,
-            !round ? _react2.default.createElement('rect', {
-              width: '64',
-              height: '64',
-              fill: iconConfig.color,
-              style: finalIconBgStyle }) : _react2.default.createElement('circle', {
-              cx: '32',
-              cy: '32',
-              r: '31',
-              fill: iconConfig.color,
-              style: finalIconBgStyle })
-          ),
-          _react2.default.createElement(
-            'g',
-            null,
-            _react2.default.createElement('path', { d: iconConfig.icon })
-          )
+          'g',
+          null,
+          !round ? _react2.default.createElement('rect', {
+            width: '64',
+            height: '64',
+            fill: iconConfig.color,
+            style: finalIconBgStyle }) : _react2.default.createElement('circle', {
+            cx: '32',
+            cy: '32',
+            r: '31',
+            fill: iconConfig.color,
+            style: finalIconBgStyle })
+        ),
+        _react2.default.createElement(
+          'g',
+          null,
+          _react2.default.createElement('path', { d: iconConfig.icon })
         )
-      );
-    }
-  });
+      )
+    );
+  };
+
+  Icon.propTypes = {
+    className: _propTypes2.default.string,
+    iconBgStyle: _propTypes2.default.object,
+    logoFillColor: _propTypes2.default.string,
+    round: _propTypes2.default.bool,
+    size: _propTypes2.default.number
+  };
+
+  Icon.defaultProps = {
+    logoFillColor: 'white',
+    size: 64
+  };
+
+  return Icon;
 }
-},{"./icons":275,"babel-runtime/helpers/extends":16,"react":456}],275:[function(require,module,exports){
+},{"./icons":284,"babel-runtime/helpers/extends":16,"prop-types":159,"react":463}],284:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -30245,10 +32079,25 @@ exports.default = {
     icon: 'M44.94,44.84h-0.2c-2.17-.36-3.66-1.92-4.92-3.37C39.1,40.66,38,38.81,36.7,39c-1.85.3-.93,3.52-1.71,4.9-0.62,1.11-3.29.91-5.12,0.71-5.79-.62-8.75-3.77-11.35-7.14A64.13,64.13,0,0,1,11.6,26a10.59,10.59,0,0,1-1.51-4.49C11,20.7,12.56,21,14.11,21c1.31,0,3.36-.29,4.32.2C19,21.46,19.57,23,20,24a37.18,37.18,0,0,0,3.31,5.82c0.56,0.81,1.41,2.35,2.41,2.14s1.06-2.63,1.1-4.18c0-1.77,0-4-.5-4.9S25,22,24.15,21.47c0.73-1.49,2.72-1.63,5.12-1.63,2,0,4.84-.23,5.62,1.12s0.25,3.85.2,5.71c-0.06,2.09-.41,4.25,1,5.21,1.09-.12,1.68-1.2,2.31-2A28,28,0,0,0,41.72,24c0.44-1,.91-2.65,1.71-3,1.21-.47,3.15-0.1,4.92-0.1,1.46,0,4.05-.41,4.52.61,0.39,0.85-.75,3-1.1,3.57a61.88,61.88,0,0,1-4.12,5.61c-0.58.78-1.78,2-1.71,3.27,0.05,0.94,1,1.67,1.71,2.35a33.12,33.12,0,0,1,3.92,4.18c0.47,0.62,1.5,2,1.4,2.76C52.66,45.81,46.88,44.24,44.94,44.84Z',
     mask: 'M0,0v64h64V0H0z M44.94,44.84h-0.2c-2.17-.36-3.66-1.92-4.92-3.37C39.1,40.66,38,38.81,36.7,39c-1.85.3-.93,3.52-1.71,4.9-0.62,1.11-3.29.91-5.12,0.71-5.79-.62-8.75-3.77-11.35-7.14A64.13,64.13,0,0,1,11.6,26a10.59,10.59,0,0,1-1.51-4.49C11,20.7,12.56,21,14.11,21c1.31,0,3.36-.29,4.32.2C19,21.46,19.57,23,20,24a37.18,37.18,0,0,0,3.31,5.82c0.56,0.81,1.41,2.35,2.41,2.14s1.06-2.63,1.1-4.18c0-1.77,0-4-.5-4.9S25,22,24.15,21.47c0.73-1.49,2.72-1.63,5.12-1.63,2,0,4.84-.23,5.62,1.12s0.25,3.85.2,5.71c-0.06,2.09-.41,4.25,1,5.21,1.09-.12,1.68-1.2,2.31-2A28,28,0,0,0,41.72,24c0.44-1,.91-2.65,1.71-3,1.21-.47,3.15-0.1,4.92-0.1,1.46,0,4.05-.41,4.52.61,0.39,0.85-.75,3-1.1,3.57a61.88,61.88,0,0,1-4.12,5.61c-0.58.78-1.78,2-1.71,3.27,0.05,0.94,1,1.67,1.71,2.35a33.12,33.12,0,0,1,3.92,4.18c0.47,0.62,1.5,2,1.4,2.76C52.66,45.81,46.88,44.24,44.94,44.84Z',
     color: '#45668e'
+  },
+  ok: {
+    icon: 'M39,30c-1,0-3,2-7,2s-6-2-7-2c-1.1,0-2,0.9-2,2c0,1,0.6,1.5,1,1.7c1.2,0.7,5,2.3,5,2.3l-4.3,5.4   c0,0-0.8,0.9-0.8,1.6c0,1.1,0.9,2,2,2c1,0,1.5-0.7,1.5-0.7S32,39,32,39c0,0,4.5,5.3,4.5,5.3S37,45,38,45c1.1,0,2-0.9,2-2   c0-0.6-0.8-1.6-0.8-1.6L35,36c0,0,3.8-1.6,5-2.3c0.4-0.3,1-0.7,1-1.7C41,30.9,40.1,30,39,30z M32,15c-3.9,0-7,3.1-7,7s3.1,7,7,7c3.9,0,7-3.1,7-7S35.9,15,32,15z M32,25.5   c-1.9,0-3.5-1.6-3.5-3.5c0-1.9,1.6-3.5,3.5-3.5c1.9,0,3.5,1.6,3.5,3.5C35.5,23.9,33.9,22.5,35,22.5z ',
+    mask: 'M45,1H5C2.8,1,1,2.8,1,5v40c0,2.2,1.8,4,4,4h40c2.2,0,4-1.8,4-4V5C49,2.8,47.2,1,45,1z',
+    color: '#f2720c'
+  },
+  telegram: {
+    icon: 'm45.90873,15.44335c-0.6901,-0.0281 -1.37668,0.14048 -1.96142,0.41265c-0.84989,0.32661 -8.63939,3.33986 -16.5237,6.39174c-3.9685,1.53296 -7.93349,3.06593 -10.98537,4.24067c-3.05012,1.1765 -5.34694,2.05098 -5.4681,2.09312c-0.80775,0.28096 -1.89996,0.63566 -2.82712,1.72788c-0.23354,0.27218 -0.46884,0.62161 -0.58825,1.10275c-0.11941,0.48114 -0.06673,1.09222 0.16682,1.5716c0.46533,0.96052 1.25376,1.35737 2.18443,1.71383c3.09051,0.99037 6.28638,1.93508 8.93263,2.8236c0.97632,3.44171 1.91401,6.89571 2.84116,10.34268c0.30554,0.69185 0.97105,0.94823 1.65764,0.95525l-0.00351,0.03512c0,0 0.53908,0.05268 1.06412,-0.07375c0.52679,-0.12292 1.18879,-0.42846 1.79109,-0.99212c0.662,-0.62161 2.45836,-2.38812 3.47683,-3.38552l7.6736,5.66477l0.06146,0.03512c0,0 0.84989,0.59703 2.09312,0.68132c0.62161,0.04214 1.4399,-0.07726 2.14229,-0.59176c0.70766,-0.51626 1.1765,-1.34683 1.396,-2.29506c0.65673,-2.86224 5.00979,-23.57745 5.75257,-27.00686l-0.02107,0.08077c0.51977,-1.93157 0.32837,-3.70159 -0.87096,-4.74991c-0.60054,-0.52152 -1.2924,-0.7498 -1.98425,-0.77965l0,0.00176zm-0.2072,3.29069c0.04741,0.0439 0.0439,0.0439 0.00351,0.04741c-0.01229,-0.00351 0.14048,0.2072 -0.15804,1.32576l-0.01229,0.04214l-0.00878,0.03863c-0.75858,3.50668 -5.15554,24.40802 -5.74203,26.96472c-0.08077,0.34417 -0.11414,0.31959 -0.09482,0.29852c-0.1756,-0.02634 -0.50045,-0.16506 -0.52679,-0.1756l-13.13468,-9.70175c4.4988,-4.33199 9.09945,-8.25307 13.744,-12.43229c0.8218,-0.41265 0.68483,-1.68573 -0.29852,-1.70681c-1.04305,0.24584 -1.92279,0.99564 -2.8798,1.47502c-5.49971,3.2626 -11.11882,6.13186 -16.55882,9.49279c-2.792,-0.97105 -5.57873,-1.77704 -8.15298,-2.57601c2.2336,-0.89555 4.00889,-1.55579 5.75608,-2.23009c3.05188,-1.1765 7.01687,-2.7042 10.98537,-4.24067c7.94051,-3.06944 15.92667,-6.16346 16.62028,-6.43037l0.05619,-0.02283l0.05268,-0.02283c0.19316,-0.0878 0.30378,-0.09658 0.35471,-0.10009c0,0 -0.01756,-0.05795 -0.00351,-0.04566l-0.00176,0zm-20.91715,22.0638l2.16687,1.60145c-0.93418,0.91311 -1.81743,1.77353 -2.45485,2.38812l0.28798,-3.98957',
+    mask: 'M0,0v64h64V0H0z M32,48c-1.6,0-3.1-0.2-4.5-0.7c0.6-1,1.3-2.2,1.6-3.4c0.2-0.7,1.1-4.4,1.1-4.4 c0.6,1.1,2.2,2,3.9,2c5.1,0,8.6-4.7,8.6-11c0-4.7-4-9.2-10.1-9.2c-7.6,0-11.4,5.5-11.4,10c0,2.8,1,5.2,3.3,6.1 c0.4,0.1,0.7,0,0.8-0.4c0.1-0.3,0.2-1,0.3-1.3c0.1-0.4,0.1-0.5-0.2-0.9c-0.6-0.8-1.1-1.7-1.1-3.1c0-4,3-7.7,7.9-7.7 c4.3,0,6.7,2.6,6.7,6.1c0,4.6-2,8.5-5.1,8.5c-1.7,0-2.9-1.4-2.5-3.1c0.5-2,1.4-4.2,1.4-5.7c0-1.3-0.7-2.4-2.2-2.4 c-1.7,0-3.1,1.8-3.1,4.1c0,1.5,0.5,2.5,0.5,2.5s-1.8,7.4-2.1,8.7c-0.3,1.2-0.3,2.6-0.3,3.7C19.9,44.2,16,38.6,16,32 c0-8.8,7.2-16,16-16c8.8,0,16,7.2,16,16C48,40.8,40.8,48,32,48z',
+    color: '#37aee2'
+  },
+  whatsapp: {
+    icon: 'm42.32286,33.93287c-0.5178,-0.2589 -3.04726,-1.49644 -3.52105,-1.66732c-0.4712,-0.17346 -0.81554,-0.2589 -1.15987,0.2589c-0.34175,0.51004 -1.33075,1.66474 -1.63108,2.00648c-0.30032,0.33658 -0.60064,0.36247 -1.11327,0.12945c-0.5178,-0.2589 -2.17994,-0.80259 -4.14759,-2.56312c-1.53269,-1.37217 -2.56312,-3.05503 -2.86603,-3.57283c-0.30033,-0.5178 -0.03366,-0.80259 0.22524,-1.06149c0.23301,-0.23301 0.5178,-0.59547 0.7767,-0.90616c0.25372,-0.31068 0.33657,-0.5178 0.51262,-0.85437c0.17088,-0.36246 0.08544,-0.64725 -0.04402,-0.90615c-0.12945,-0.2589 -1.15987,-2.79613 -1.58964,-3.80584c-0.41424,-1.00971 -0.84142,-0.88027 -1.15987,-0.88027c-0.29773,-0.02588 -0.64208,-0.02588 -0.98382,-0.02588c-0.34693,0 -0.90616,0.12945 -1.37736,0.62136c-0.4712,0.5178 -1.80194,1.76053 -1.80194,4.27186c0,2.51134 1.84596,4.945 2.10227,5.30747c0.2589,0.33657 3.63497,5.51458 8.80262,7.74113c1.23237,0.5178 2.1903,0.82848 2.94111,1.08738c1.23237,0.38836 2.35599,0.33657 3.24402,0.20712c0.99159,-0.15534 3.04985,-1.24272 3.47963,-2.45956c0.44013,-1.21683 0.44013,-2.22654 0.31068,-2.45955c-0.12945,-0.23301 -0.46601,-0.36247 -0.98382,-0.59548m-9.40068,12.84407l-0.02589,0c-3.05503,0 -6.08417,-0.82849 -8.72495,-2.38189l-0.62136,-0.37023l-6.47252,1.68286l1.73463,-6.29129l-0.41424,-0.64725c-1.70875,-2.71846 -2.6149,-5.85116 -2.6149,-9.07706c0,-9.39809 7.68934,-17.06155 17.15993,-17.06155c4.58253,0 8.88029,1.78642 12.11655,5.02268c3.23625,3.21036 5.02267,7.50812 5.02267,12.06476c-0.0078,9.3981 -7.69712,17.06155 -17.14699,17.06155m14.58906,-31.58846c-3.93529,-3.80584 -9.1133,-5.95471 -14.62789,-5.95471c-11.36055,0 -20.60848,9.2065 -20.61625,20.52564c0,3.61684 0.94757,7.14565 2.75211,10.26282l-2.92557,10.63564l10.93337,-2.85309c3.0136,1.63108 6.4052,2.4958 9.85634,2.49839l0.01037,0c11.36574,0 20.61884,-9.2091 20.62403,-20.53082c0,-5.48093 -2.14111,-10.64081 -6.03239,-14.51915',
+    mask: 'M0,0v64h64V0H0z M32,48c-1.6,0-3.1-0.2-4.5-0.7c0.6-1,1.3-2.2,1.6-3.4c0.2-0.7,1.1-4.4,1.1-4.4 c0.6,1.1,2.2,2,3.9,2c5.1,0,8.6-4.7,8.6-11c0-4.7-4-9.2-10.1-9.2c-7.6,0-11.4,5.5-11.4,10c0,2.8,1,5.2,3.3,6.1 c0.4,0.1,0.7,0,0.8-0.4c0.1-0.3,0.2-1,0.3-1.3c0.1-0.4,0.1-0.5-0.2-0.9c-0.6-0.8-1.1-1.7-1.1-3.1c0-4,3-7.7,7.9-7.7 c4.3,0,6.7,2.6,6.7,6.1c0,4.6-2,8.5-5.1,8.5c-1.7,0-2.9-1.4-2.5-3.1c0.5-2,1.4-4.2,1.4-5.7c0-1.3-0.7-2.4-2.2-2.4 c-1.7,0-3.1,1.8-3.1,4.1c0,1.5,0.5,2.5,0.5,2.5s-1.8,7.4-2.1,8.7c-0.3,1.2-0.3,2.6-0.3,3.7C19.9,44.2,16,38.6,16,32 c0-8.8,7.2-16,16-16c8.8,0,16,7.2,16,16C48,40.8,40.8,48,32,48z',
+    color: '#2cb742'
   }
 };
 /* eslint-enable max-len */
-},{}],276:[function(require,module,exports){
+},{}],285:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -30271,13 +32120,13 @@ function _interopRequireWildcard(obj) { if (obj && obj.__esModule) { return obj;
 exports.generateShareIcon = _generateIcon.generateIcon;
 exports.ShareButtons = ShareButtons;
 exports.ShareCounts = ShareCounts;
-},{"./generateIcon":274,"./share-buttons":277,"./share-counts":279}],277:[function(require,module,exports){
+},{"./generateIcon":283,"./share-buttons":286,"./share-counts":288}],286:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
   value: true
 });
-exports.VKShareButton = exports.PinterestShareButton = exports.LinkedinShareButton = exports.GooglePlusShareButton = exports.TwitterShareButton = exports.FacebookShareButton = undefined;
+exports.OKShareButton = exports.VKShareButton = exports.PinterestShareButton = exports.LinkedinShareButton = exports.GooglePlusShareButton = exports.WhatsappShareButton = exports.TelegramShareButton = exports.TwitterShareButton = exports.FacebookShareButton = undefined;
 
 var _extends2 = require('babel-runtime/helpers/extends');
 
@@ -30311,6 +32160,10 @@ var _react = require('react');
 
 var _react2 = _interopRequireDefault(_react);
 
+var _propTypes = require('prop-types');
+
+var _propTypes2 = _interopRequireDefault(_propTypes);
+
 var _classnames = require('classnames');
 
 var _classnames2 = _interopRequireDefault(_classnames);
@@ -30325,14 +32178,13 @@ function _interopRequireWildcard(obj) { if (obj && obj.__esModule) { return obj;
 
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
-/* eslint-disable react/no-multi-comp */
-var supportedNetworks = (0, _keys2.default)(links);
+var supportedNetworks = (0, _keys2.default)(links); /* eslint-disable react/no-multi-comp */
 
 var ShareButton = function (_Component) {
   (0, _inherits3.default)(ShareButton, _Component);
 
   function ShareButton() {
-    var _Object$getPrototypeO;
+    var _ref;
 
     var _temp, _this, _ret;
 
@@ -30342,16 +32194,33 @@ var ShareButton = function (_Component) {
       args[_key] = arguments[_key];
     }
 
-    return _ret = (_temp = (_this = (0, _possibleConstructorReturn3.default)(this, (_Object$getPrototypeO = (0, _getPrototypeOf2.default)(ShareButton)).call.apply(_Object$getPrototypeO, [this].concat(args))), _this), _this.onClick = function (e) {
-      if (!_this.props.disabled) {
+    return _ret = (_temp = (_this = (0, _possibleConstructorReturn3.default)(this, (_ref = ShareButton.__proto__ || (0, _getPrototypeOf2.default)(ShareButton)).call.apply(_ref, [this].concat(args))), _this), _this.onClick = function (e) {
+      var _this$props = _this.props,
+          disabled = _this$props.disabled,
+          windowWidth = _this$props.windowWidth,
+          windowHeight = _this$props.windowHeight,
+          beforeOnClick = _this$props.beforeOnClick;
+
+
+      if (!disabled) {
         e.preventDefault();
 
         var windowOptions = {
-          height: _this.props.windowHeight,
-          width: _this.props.windowWidth
+          height: windowHeight,
+          width: windowWidth
         };
 
-        (0, _utils.windowOpen)(_this.link(), windowOptions);
+        var windowOpenBound = function windowOpenBound() {
+          return (0, _utils.windowOpen)(_this.link(), windowOptions);
+        };
+
+        if (beforeOnClick) {
+          beforeOnClick().then(function () {
+            return windowOpenBound();
+          });
+        } else {
+          windowOpenBound();
+        }
       }
     }, _temp), (0, _possibleConstructorReturn3.default)(_this, _ret);
   }
@@ -30359,23 +32228,23 @@ var ShareButton = function (_Component) {
   (0, _createClass3.default)(ShareButton, [{
     key: 'link',
     value: function link() {
-      var _props = this.props;
-      var url = _props.url;
-      var opts = _props.opts;
-      var network = _props.network;
+      var _props = this.props,
+          url = _props.url,
+          opts = _props.opts,
+          network = _props.network;
 
       return links[network](url, opts);
     }
   }, {
     key: 'render',
     value: function render() {
-      var _props2 = this.props;
-      var children = _props2.children;
-      var className = _props2.className;
-      var disabled = _props2.disabled;
-      var disabledStyle = _props2.disabledStyle;
-      var network = _props2.network;
-      var style = _props2.style;
+      var _props2 = this.props,
+          children = _props2.children,
+          className = _props2.className,
+          disabled = _props2.disabled,
+          disabledStyle = _props2.disabledStyle,
+          network = _props2.network,
+          style = _props2.style;
 
 
       var classes = (0, _classnames2.default)('SocialMediaShareButton', 'SocialMediaShareButton--' + network, {
@@ -30402,16 +32271,17 @@ var ShareButton = function (_Component) {
 
 
 ShareButton.propTypes = {
-  children: _react.PropTypes.node,
-  className: _react.PropTypes.string,
-  disabled: _react.PropTypes.bool,
-  disabledStyle: _react.PropTypes.object,
-  network: _react.PropTypes.oneOf(supportedNetworks),
-  opts: _react.PropTypes.object,
-  url: _react.PropTypes.string.isRequired,
-  style: _react.PropTypes.object,
-  windowWidth: _react.PropTypes.number,
-  windowHeight: _react.PropTypes.number
+  children: _propTypes2.default.node,
+  className: _propTypes2.default.string,
+  disabled: _propTypes2.default.bool,
+  disabledStyle: _propTypes2.default.object,
+  network: _propTypes2.default.oneOf(supportedNetworks),
+  opts: _propTypes2.default.object,
+  url: _propTypes2.default.string.isRequired,
+  style: _propTypes2.default.object,
+  windowWidth: _propTypes2.default.number,
+  windowHeight: _propTypes2.default.number,
+  beforeOnClick: _propTypes2.default.func
 };
 ShareButton.defaultProps = {
   disabledStyle: {
@@ -30420,24 +32290,19 @@ ShareButton.defaultProps = {
 };
 exports.default = ShareButton;
 function createShareButton(network) {
-  var optsMap = arguments.length <= 1 || arguments[1] === undefined ? function () {
+  var optsMap = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : function () {
     return {};
-  } : arguments[1];
+  };
   var propTypes = arguments[2];
-  var defaultProps = arguments.length <= 3 || arguments[3] === undefined ? {} : arguments[3];
+  var defaultProps = arguments.length > 3 && arguments[3] !== undefined ? arguments[3] : {};
 
-  var CreatedButton = _react2.default.createClass({
-    displayName: 'CreatedButton',
+  var CreatedButton = function CreatedButton(props) {
+    return _react2.default.createElement(ShareButton, (0, _extends3.default)({}, props, {
+      network: network,
+      opts: optsMap(props) }));
+  };
 
-    propTypes: propTypes,
-
-    render: function render() {
-      return _react2.default.createElement(ShareButton, (0, _extends3.default)({}, this.props, {
-        network: network,
-        opts: optsMap(this.props) }));
-    }
-  });
-
+  CreatedButton.propTypes = propTypes;
   CreatedButton.defaultProps = defaultProps;
 
   return CreatedButton;
@@ -30446,11 +32311,15 @@ function createShareButton(network) {
 var FacebookShareButton = exports.FacebookShareButton = createShareButton('facebook', function (props) {
   return {
     description: props.description,
-    title: props.title
+    title: props.title,
+    picture: props.picture,
+    hashtag: props.hashtag
   };
 }, {
-  description: _react.PropTypes.string,
-  title: _react.PropTypes.string.isRequired
+  description: _propTypes2.default.string,
+  title: _propTypes2.default.string,
+  picture: _propTypes2.default.string,
+  hashtag: _propTypes2.default.string
 }, {
   windowWidth: 550,
   windowHeight: 400
@@ -30463,10 +32332,37 @@ var TwitterShareButton = exports.TwitterShareButton = createShareButton('twitter
     via: props.via
   };
 }, {
-  hashtags: _react.PropTypes.arrayOf(_react.PropTypes.string),
-  title: _react.PropTypes.string,
-  via: _react.PropTypes.string
+  hashtags: _propTypes2.default.arrayOf(_propTypes2.default.string),
+  title: _propTypes2.default.string,
+  via: _propTypes2.default.string
 }, {
+  windowWidth: 550,
+  windowHeight: 400
+});
+
+var TelegramShareButton = exports.TelegramShareButton = createShareButton('telegram', function (props) {
+  return {
+    title: props.title,
+    via: props.via
+  };
+}, {
+  title: _propTypes2.default.string,
+  via: _propTypes2.default.string
+}, {
+  windowWidth: 550,
+  windowHeight: 400
+});
+
+var WhatsappShareButton = exports.WhatsappShareButton = createShareButton('whatsapp', function (props) {
+  return {
+    title: props.title,
+    separator: props.separator
+  };
+}, {
+  title: _propTypes2.default.string,
+  separator: _propTypes2.default.string
+}, {
+  separator: ' ',
   windowWidth: 550,
   windowHeight: 400
 });
@@ -30482,8 +32378,8 @@ var LinkedinShareButton = exports.LinkedinShareButton = createShareButton('linke
     description: props.description
   };
 }, {
-  title: _react.PropTypes.string,
-  description: _react.PropTypes.string
+  title: _propTypes2.default.string,
+  description: _propTypes2.default.string
 }, {
   windowWidth: 750,
   windowHeight: 600
@@ -30495,8 +32391,8 @@ var PinterestShareButton = exports.PinterestShareButton = createShareButton('pin
     description: props.description
   };
 }, {
-  media: _react.PropTypes.string.isRequired,
-  description: _react.PropTypes.string
+  media: _propTypes2.default.string.isRequired,
+  description: _propTypes2.default.string
 }, {
   windowWidth: 1000,
   windowHeight: 730
@@ -30505,21 +32401,39 @@ var PinterestShareButton = exports.PinterestShareButton = createShareButton('pin
 var VKShareButton = exports.VKShareButton = createShareButton('vk', function (props) {
   return {
     title: props.title,
-    description: props.description
+    description: props.description,
+    image: props.image
   };
 }, {
-  title: _react.PropTypes.string,
-  description: _react.PropTypes.string
+  title: _propTypes2.default.string,
+  description: _propTypes2.default.string,
+  image: _propTypes2.default.string
 }, {
   windowWidth: 660,
   windowHeight: 460
 });
-},{"./social-media-share-links":280,"./utils":281,"babel-runtime/core-js/object/get-prototype-of":8,"babel-runtime/core-js/object/keys":9,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/createClass":15,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"react":456}],278:[function(require,module,exports){
+
+var OKShareButton = exports.OKShareButton = createShareButton('ok', function (props) {
+  return {
+    title: props.title,
+    description: props.description,
+    image: props.image
+  };
+}, {
+  title: _propTypes2.default.string,
+  description: _propTypes2.default.string,
+  image: _propTypes2.default.string
+}, {
+  windowWidth: 660,
+  windowHeight: 460
+});
+},{"./social-media-share-links":289,"./utils":290,"babel-runtime/core-js/object/get-prototype-of":8,"babel-runtime/core-js/object/keys":9,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/createClass":15,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"prop-types":159,"react":463}],287:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
   value: true
 });
+exports.getVKShareCount = undefined;
 
 var _stringify = require('babel-runtime/core-js/json/stringify');
 
@@ -30529,6 +32443,7 @@ exports.getFacebookShareCount = getFacebookShareCount;
 exports.getGooglePlusShareCount = getGooglePlusShareCount;
 exports.getLinkedinShareCount = getLinkedinShareCount;
 exports.getPinterestShareCount = getPinterestShareCount;
+exports.getOKShareCount = getOKShareCount;
 
 var _jsonp = require('jsonp');
 
@@ -30607,21 +32522,99 @@ function getPinterestShareCount(shareUrl, callback) {
     callback(!!data ? data.count : undefined);
   });
 }
-},{"./utils":281,"babel-runtime/core-js/json/stringify":3,"jsonp":147,"platform":153}],279:[function(require,module,exports){
+
+function getVKShareCount(shareUrl, callback) {
+  if (!window.VK) {
+    window.VK = {
+      Share: {
+        count: function count(index, _count2) {
+          return window.VK.callbacks[index](_count2);
+        }
+      },
+      callbacks: []
+    };
+  }
+
+  var url = 'https://vk.com/share.php';
+  var index = window.VK.callbacks.length;
+
+  window.VK.callbacks.push(callback);
+
+  return (0, _jsonp2.default)(url + (0, _utils.objectToGetParams)({
+    act: 'count',
+    index: index,
+    url: shareUrl
+  }));
+}
+
+exports.getVKShareCount = getVKShareCount;
+function getOKShareCount(shareUrl, callback) {
+  if (!window.OK) {
+    window.OK = {
+      Share: {
+        count: function count(index, _count) {
+          return window.OK.callbacks[index](_count);
+        }
+      },
+      callbacks: []
+    };
+  }
+
+  var url = 'https://connect.ok.ru/dk';
+  var index = window.OK.callbacks.length;
+
+  window.ODKL = {
+    updateCount: function updateCount(a, b) {
+      window.OK.callbacks[index](b);
+    }
+  };
+  window.OK.callbacks.push(callback);
+
+  return (0, _jsonp2.default)(url + (0, _utils.objectToGetParams)({
+    'st.cmd': 'extLike',
+    uid: 'odklcnt0',
+    ref: shareUrl
+  }));
+}
+},{"./utils":290,"babel-runtime/core-js/json/stringify":3,"jsonp":150,"platform":154}],288:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
   value: true
 });
-exports.TwitterShareCount = exports.PinterestShareCount = exports.GooglePlusShareCount = exports.LinkedinShareCount = exports.FacebookShareCount = undefined;
+exports.TwitterShareCount = exports.OKShareCount = exports.VKShareCount = exports.PinterestShareCount = exports.GooglePlusShareCount = exports.LinkedinShareCount = exports.FacebookShareCount = undefined;
 
 var _extends2 = require('babel-runtime/helpers/extends');
 
 var _extends3 = _interopRequireDefault(_extends2);
 
+var _getPrototypeOf = require('babel-runtime/core-js/object/get-prototype-of');
+
+var _getPrototypeOf2 = _interopRequireDefault(_getPrototypeOf);
+
+var _classCallCheck2 = require('babel-runtime/helpers/classCallCheck');
+
+var _classCallCheck3 = _interopRequireDefault(_classCallCheck2);
+
+var _createClass2 = require('babel-runtime/helpers/createClass');
+
+var _createClass3 = _interopRequireDefault(_createClass2);
+
+var _possibleConstructorReturn2 = require('babel-runtime/helpers/possibleConstructorReturn');
+
+var _possibleConstructorReturn3 = _interopRequireDefault(_possibleConstructorReturn2);
+
+var _inherits2 = require('babel-runtime/helpers/inherits');
+
+var _inherits3 = _interopRequireDefault(_inherits2);
+
 var _react = require('react');
 
 var _react2 = _interopRequireDefault(_react);
+
+var _propTypes = require('prop-types');
+
+var _propTypes2 = _interopRequireDefault(_propTypes);
 
 var _classnames = require('classnames');
 
@@ -30631,64 +32624,85 @@ var _shareCountGetters = require('./share-count-getters');
 
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
-var SocialMediaShareCount = _react2.default.createClass({
-  displayName: 'SocialMediaShareCount',
+/* eslint-disable react/no-multi-comp */
+var SocialMediaShareCount = function (_Component) {
+  (0, _inherits3.default)(SocialMediaShareCount, _Component);
 
-  propTypes: {
-    children: _react2.default.PropTypes.func,
-    className: _react2.default.PropTypes.string,
-    getCount: _react2.default.PropTypes.func,
-    url: _react2.default.PropTypes.string.isRequired
-  },
+  function SocialMediaShareCount(props) {
+    (0, _classCallCheck3.default)(this, SocialMediaShareCount);
 
-  getInitialState: function getInitialState() {
-    return {
-      count: 0
-    };
-  },
-  componentDidMount: function componentDidMount() {
-    this.updateCount(this.props.url);
-  },
-  componentWillReceiveProps: function componentWillReceiveProps(nextProps) {
-    if (nextProps.url !== this.props.url) {
-      this.updateCount(nextProps.url);
-    }
-  },
-  updateCount: function updateCount(url) {
-    var _this = this;
+    var _this = (0, _possibleConstructorReturn3.default)(this, (SocialMediaShareCount.__proto__ || (0, _getPrototypeOf2.default)(SocialMediaShareCount)).call(this, props));
 
-    if (this.props.getCount) {
-      this.setState({
-        isLoading: true
-      });
-
-      this.props.getCount(url, function (count) {
-        if (_this.isMounted()) {
-          _this.setState({
-            count: count,
-            isLoading: false
-          });
-        }
-      });
-    }
-  },
-  render: function render() {
-    var _state = this.state;
-    var count = _state.count;
-    var isLoading = _state.isLoading;
-    var _props = this.props;
-    var children = _props.children;
-    var className = _props.className;
-
-
-    return _react2.default.createElement(
-      'div',
-      { className: (0, _classnames2.default)('SocialMediaShareCount', className) },
-      !isLoading && children(count || 0)
-    );
+    _this._isMounted = false;
+    _this.state = { count: 0 };
+    return _this;
   }
-}); /* eslint-disable react/no-multi-comp */
 
+  (0, _createClass3.default)(SocialMediaShareCount, [{
+    key: 'componentDidMount',
+    value: function componentDidMount() {
+      this._isMounted = true;
+      this.updateCount(this.props.url);
+    }
+  }, {
+    key: 'componentWillReceiveProps',
+    value: function componentWillReceiveProps(nextProps) {
+      if (nextProps.url !== this.props.url) {
+        this.updateCount(nextProps.url);
+      }
+    }
+  }, {
+    key: 'componentWillUnmount',
+    value: function componentWillUnmount() {
+      this._isMounted = false;
+    }
+  }, {
+    key: 'updateCount',
+    value: function updateCount(url) {
+      var _this2 = this;
+
+      if (this.props.getCount) {
+        this.setState({
+          isLoading: true
+        });
+
+        this.props.getCount(url, function (count) {
+          if (_this2._isMounted) {
+            _this2.setState({
+              count: count,
+              isLoading: false
+            });
+          }
+        });
+      }
+    }
+  }, {
+    key: 'render',
+    value: function render() {
+      var _state = this.state,
+          count = _state.count,
+          isLoading = _state.isLoading;
+      var _props = this.props,
+          children = _props.children,
+          className = _props.className;
+
+
+      return _react2.default.createElement(
+        'div',
+        { className: (0, _classnames2.default)('SocialMediaShareCount', className) },
+        !isLoading && children(count || 0)
+      );
+    }
+  }]);
+  return SocialMediaShareCount;
+}(_react.Component);
+
+SocialMediaShareCount.propTypes = {
+  children: _propTypes2.default.func,
+  className: _propTypes2.default.string,
+  getCount: _propTypes2.default.func,
+  url: _propTypes2.default.string.isRequired
+};
 
 SocialMediaShareCount.defaultProps = {
   children: function children(shareCount) {
@@ -30706,10 +32720,12 @@ var FacebookShareCount = exports.FacebookShareCount = shareCountFactory(_shareCo
 var LinkedinShareCount = exports.LinkedinShareCount = shareCountFactory(_shareCountGetters.getLinkedinShareCount);
 var GooglePlusShareCount = exports.GooglePlusShareCount = shareCountFactory(_shareCountGetters.getGooglePlusShareCount);
 var PinterestShareCount = exports.PinterestShareCount = shareCountFactory(_shareCountGetters.getPinterestShareCount);
+var VKShareCount = exports.VKShareCount = shareCountFactory(_shareCountGetters.getVKShareCount);
+var OKShareCount = exports.OKShareCount = shareCountFactory(_shareCountGetters.getOKShareCount);
 var TwitterShareCount = exports.TwitterShareCount = function TwitterShareCount() {
   throw new Error('TwitterShareCount was removed in version 1.3.0 because' + 'the Twitter API was shut down and there is no replacement. Please ' + 'remove it from your code.');
 };
-},{"./share-count-getters":278,"babel-runtime/helpers/extends":16,"classnames":21,"react":456}],280:[function(require,module,exports){
+},{"./share-count-getters":287,"babel-runtime/core-js/object/get-prototype-of":8,"babel-runtime/helpers/classCallCheck":14,"babel-runtime/helpers/createClass":15,"babel-runtime/helpers/extends":16,"babel-runtime/helpers/inherits":17,"babel-runtime/helpers/possibleConstructorReturn":19,"classnames":21,"prop-types":159,"react":463}],289:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -30717,11 +32733,14 @@ Object.defineProperty(exports, "__esModule", {
 });
 exports.email = email;
 exports.twitter = twitter;
+exports.telegram = telegram;
+exports.whatsapp = whatsapp;
 exports.facebook = facebook;
 exports.googlePlus = googlePlus;
 exports.linkedin = linkedin;
 exports.pinterest = pinterest;
 exports.vk = vk;
+exports.ok = ok;
 
 var _assert = require('assert');
 
@@ -30740,10 +32759,10 @@ function email(subject, body) {
 }
 
 function twitter(url, _ref) {
-  var title = _ref.title;
-  var via = _ref.via;
-  var _ref$hashtags = _ref.hashtags;
-  var hashtags = _ref$hashtags === undefined ? [] : _ref$hashtags;
+  var title = _ref.title,
+      via = _ref.via,
+      _ref$hashtags = _ref.hashtags,
+      hashtags = _ref$hashtags === undefined ? [] : _ref$hashtags;
 
   (0, _assert2.default)(url, 'twitter.url');
   (0, _assert2.default)(Array.isArray(hashtags), 'twitter.hashtags is not an array');
@@ -30756,16 +32775,40 @@ function twitter(url, _ref) {
   });
 }
 
-function facebook(url, _ref2) {
+function telegram(url, _ref2) {
   var title = _ref2.title;
-  var description = _ref2.description;
+
+  (0, _assert2.default)(url, 'telegram.url');
+  return 'https://telegram.me/share/' + (0, _utils.objectToGetParams)({
+    url: url,
+    text: title
+  });
+}
+
+function whatsapp(url, _ref3) {
+  var title = _ref3.title,
+      separator = _ref3.separator;
+
+  (0, _assert2.default)(url, 'whatsapp.url');
+  return 'whatsapp://send' + (0, _utils.objectToGetParams)({
+    text: title + separator + url
+  });
+}
+
+function facebook(url, _ref4) {
+  var title = _ref4.title,
+      description = _ref4.description,
+      picture = _ref4.picture,
+      hashtag = _ref4.hashtag;
 
   (0, _assert2.default)(url, 'facebook.url');
 
-  return 'https://facebook.com/sharer.php' + (0, _utils.objectToGetParams)({
+  return 'https://www.facebook.com/sharer/sharer.php' + (0, _utils.objectToGetParams)({
     u: url,
     title: title,
-    description: description
+    description: description,
+    picture: picture,
+    hashtag: hashtag
   });
 }
 
@@ -30775,9 +32818,9 @@ function googlePlus(url) {
   return 'https://plus.google.com/share' + (0, _utils.objectToGetParams)({ url: url });
 }
 
-function linkedin(url, _ref3) {
-  var title = _ref3.title;
-  var description = _ref3.description;
+function linkedin(url, _ref5) {
+  var title = _ref5.title,
+      description = _ref5.description;
 
   (0, _assert2.default)(url, 'linkedin.url');
 
@@ -30788,9 +32831,9 @@ function linkedin(url, _ref3) {
   });
 }
 
-function pinterest(url, _ref4) {
-  var media = _ref4.media;
-  var description = _ref4.description;
+function pinterest(url, _ref6) {
+  var media = _ref6.media,
+      description = _ref6.description;
 
   (0, _assert2.default)(url, 'pinterest.url');
   (0, _assert2.default)(media, 'pinterest.media');
@@ -30802,19 +32845,36 @@ function pinterest(url, _ref4) {
   });
 }
 
-function vk(url, _ref5) {
-  var title = _ref5.title;
-  var description = _ref5.description;
+function vk(url, _ref7) {
+  var title = _ref7.title,
+      description = _ref7.description,
+      image = _ref7.image;
 
   (0, _assert2.default)(url, 'vk.url');
 
   return 'https://vk.com/share.php' + (0, _utils.objectToGetParams)({
     url: url,
     title: title,
-    description: description
+    description: description,
+    image: image
   });
 }
-},{"./utils":281,"assert":1}],281:[function(require,module,exports){
+
+function ok(url, _ref8) {
+  var title = _ref8.title,
+      description = _ref8.description,
+      image = _ref8.image;
+
+  (0, _assert2.default)(url, 'ok.url');
+
+  return 'https://connect.ok.ru/offer' + (0, _utils.objectToGetParams)({
+    url: url,
+    title: title,
+    description: description,
+    imageUrl: image
+  });
+}
+},{"./utils":290,"assert":1}],290:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -30842,11 +32902,11 @@ function objectToGetParams(object) {
   }).join('&');
 } /* eslint-disable prefer-template */
 function windowOpen(url, _ref) {
-  var name = _ref.name;
-  var _ref$height = _ref.height;
-  var height = _ref$height === undefined ? 400 : _ref$height;
-  var _ref$width = _ref.width;
-  var width = _ref$width === undefined ? 550 : _ref$width;
+  var name = _ref.name,
+      _ref$height = _ref.height,
+      height = _ref$height === undefined ? 400 : _ref$height,
+      _ref$width = _ref.width,
+      width = _ref$width === undefined ? 550 : _ref$width;
 
   var left = window.outerWidth / 2 + (window.screenX || window.screenLeft || 0) - width / 2;
   var top = window.outerHeight / 2 + (window.screenY || window.screenTop || 0) - height / 2;
@@ -30871,7 +32931,7 @@ function windowOpen(url, _ref) {
     return key + '=' + config[key];
   }).join(', '));
 }
-},{"babel-runtime/core-js/object/keys":9,"platform":153}],282:[function(require,module,exports){
+},{"babel-runtime/core-js/object/keys":9,"platform":154}],291:[function(require,module,exports){
 /**
  * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -30896,7 +32956,7 @@ var AutoFocusUtils = {
 };
 
 module.exports = AutoFocusUtils;
-},{"./ReactDOMComponentTree":325,"fbjs/lib/focusNode":440}],283:[function(require,module,exports){
+},{"./ReactDOMComponentTree":333,"fbjs/lib/focusNode":446}],292:[function(require,module,exports){
 /**
  * Copyright 2013-present Facebook, Inc.
  * All rights reserved.
@@ -31186,10 +33246,8 @@ function getNativeBeforeInputChars(topLevelType, nativeEvent) {
 function getFallbackBeforeInputChars(topLevelType, nativeEvent) {
   // If we are currently composing (IME) and using a fallback to do so,
   // try to extract the composed characters from the fallback object.
-  // If composition event is available, we extract a string only at
-  // compositionevent, otherwise extract it at fallback events.
   if (currentComposition) {
-    if (topLevelType === topLevelTypes.topCompositionEnd || !canUseCompositionEvent && isFallbackCompositionEnd(topLevelType, nativeEvent)) {
+    if (topLevelType === topLevelTypes.topCompositionEnd || isFallbackCompositionEnd(topLevelType, nativeEvent)) {
       var chars = currentComposition.getData();
       FallbackCompositionState.release(currentComposition);
       currentComposition = null;
@@ -31287,7 +33345,7 @@ var BeforeInputEventPlugin = {
 };
 
 module.exports = BeforeInputEventPlugin;
-},{"./EventConstants":297,"./EventPropagators":301,"./FallbackCompositionState":302,"./SyntheticCompositionEvent":385,"./SyntheticInputEvent":389,"fbjs/lib/ExecutionEnvironment":432,"fbjs/lib/keyOf":450}],284:[function(require,module,exports){
+},{"./EventConstants":306,"./EventPropagators":310,"./FallbackCompositionState":311,"./SyntheticCompositionEvent":391,"./SyntheticInputEvent":395,"fbjs/lib/ExecutionEnvironment":438,"fbjs/lib/keyOf":456}],293:[function(require,module,exports){
 /**
  * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -31436,7 +33494,7 @@ var CSSProperty = {
 };
 
 module.exports = CSSProperty;
-},{}],285:[function(require,module,exports){
+},{}],294:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-present, Facebook, Inc.
@@ -31644,7 +33702,7 @@ var CSSPropertyOperations = {
 
 module.exports = CSSPropertyOperations;
 }).call(this,require('_process'))
-},{"./CSSProperty":284,"./ReactInstrumentation":355,"./dangerousStyleValue":403,"_process":154,"fbjs/lib/ExecutionEnvironment":432,"fbjs/lib/camelizeStyleName":434,"fbjs/lib/hyphenateStyleName":445,"fbjs/lib/memoizeStringOnly":451,"fbjs/lib/warning":455}],286:[function(require,module,exports){
+},{"./CSSProperty":293,"./ReactInstrumentation":364,"./dangerousStyleValue":409,"_process":155,"fbjs/lib/ExecutionEnvironment":438,"fbjs/lib/camelizeStyleName":440,"fbjs/lib/hyphenateStyleName":451,"fbjs/lib/memoizeStringOnly":458,"fbjs/lib/warning":462}],295:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-present, Facebook, Inc.
@@ -31753,7 +33811,7 @@ PooledClass.addPoolingTo(CallbackQueue);
 
 module.exports = CallbackQueue;
 }).call(this,require('_process'))
-},{"./PooledClass":306,"./reactProdInvariant":422,"_process":154,"fbjs/lib/invariant":446,"object-assign":152}],287:[function(require,module,exports){
+},{"./PooledClass":315,"./reactProdInvariant":428,"_process":155,"fbjs/lib/invariant":452,"object-assign":153}],296:[function(require,module,exports){
 /**
  * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -31811,7 +33869,7 @@ function shouldUseChangeEvent(elem) {
 var doesChangeEventBubble = false;
 if (ExecutionEnvironment.canUseDOM) {
   // See `handleChange` comment below
-  doesChangeEventBubble = isEventSupported('change') && (!document.documentMode || document.documentMode > 8);
+  doesChangeEventBubble = isEventSupported('change') && (!('documentMode' in document) || document.documentMode > 8);
 }
 
 function manualDispatchChangeEvent(nativeEvent) {
@@ -31877,7 +33935,7 @@ if (ExecutionEnvironment.canUseDOM) {
   // deleting text, so we ignore its input events.
   // IE10+ fire input events to often, such when a placeholder
   // changes or when an input with a placeholder is focused.
-  isInputEventSupported = isEventSupported('input') && (!document.documentMode || document.documentMode > 11);
+  isInputEventSupported = isEventSupported('input') && (!('documentMode' in document) || document.documentMode > 11);
 }
 
 /**
@@ -32079,7 +34137,7 @@ var ChangeEventPlugin = {
 };
 
 module.exports = ChangeEventPlugin;
-},{"./EventConstants":297,"./EventPluginHub":298,"./EventPropagators":301,"./ReactDOMComponentTree":325,"./ReactUpdates":378,"./SyntheticEvent":387,"./getEventTarget":411,"./isEventSupported":418,"./isTextInputElement":419,"fbjs/lib/ExecutionEnvironment":432,"fbjs/lib/keyOf":450}],288:[function(require,module,exports){
+},{"./EventConstants":306,"./EventPluginHub":307,"./EventPropagators":310,"./ReactDOMComponentTree":333,"./ReactUpdates":384,"./SyntheticEvent":393,"./getEventTarget":417,"./isEventSupported":424,"./isTextInputElement":425,"fbjs/lib/ExecutionEnvironment":438,"fbjs/lib/keyOf":456}],297:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-present, Facebook, Inc.
@@ -32276,7 +34334,7 @@ var DOMChildrenOperations = {
 
 module.exports = DOMChildrenOperations;
 }).call(this,require('_process'))
-},{"./DOMLazyTree":289,"./Danger":293,"./ReactDOMComponentTree":325,"./ReactInstrumentation":355,"./ReactMultiChildUpdateTypes":360,"./createMicrosoftUnsafeLocalFunction":402,"./setInnerHTML":424,"./setTextContent":425,"_process":154}],289:[function(require,module,exports){
+},{"./DOMLazyTree":298,"./Danger":302,"./ReactDOMComponentTree":333,"./ReactInstrumentation":364,"./ReactMultiChildUpdateTypes":369,"./createMicrosoftUnsafeLocalFunction":408,"./setInnerHTML":430,"./setTextContent":431,"_process":155}],298:[function(require,module,exports){
 /**
  * Copyright 2015-present, Facebook, Inc.
  * All rights reserved.
@@ -32395,7 +34453,7 @@ DOMLazyTree.queueHTML = queueHTML;
 DOMLazyTree.queueText = queueText;
 
 module.exports = DOMLazyTree;
-},{"./DOMNamespaces":290,"./createMicrosoftUnsafeLocalFunction":402,"./setInnerHTML":424,"./setTextContent":425}],290:[function(require,module,exports){
+},{"./DOMNamespaces":299,"./createMicrosoftUnsafeLocalFunction":408,"./setInnerHTML":430,"./setTextContent":431}],299:[function(require,module,exports){
 /**
  * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -32416,7 +34474,7 @@ var DOMNamespaces = {
 };
 
 module.exports = DOMNamespaces;
-},{}],291:[function(require,module,exports){
+},{}],300:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-present, Facebook, Inc.
@@ -32445,6 +34503,7 @@ var DOMPropertyInjection = {
    * specifies how the associated DOM property should be accessed or rendered.
    */
   MUST_USE_PROPERTY: 0x1,
+  HAS_SIDE_EFFECTS: 0x2,
   HAS_BOOLEAN_VALUE: 0x4,
   HAS_NUMERIC_VALUE: 0x8,
   HAS_POSITIVE_NUMERIC_VALUE: 0x10 | 0x8,
@@ -32503,11 +34562,14 @@ var DOMPropertyInjection = {
         mutationMethod: null,
 
         mustUseProperty: checkMask(propConfig, Injection.MUST_USE_PROPERTY),
+        hasSideEffects: checkMask(propConfig, Injection.HAS_SIDE_EFFECTS),
         hasBooleanValue: checkMask(propConfig, Injection.HAS_BOOLEAN_VALUE),
         hasNumericValue: checkMask(propConfig, Injection.HAS_NUMERIC_VALUE),
         hasPositiveNumericValue: checkMask(propConfig, Injection.HAS_POSITIVE_NUMERIC_VALUE),
         hasOverloadedBooleanValue: checkMask(propConfig, Injection.HAS_OVERLOADED_BOOLEAN_VALUE)
       };
+
+      !(propertyInfo.mustUseProperty || !propertyInfo.hasSideEffects) ? process.env.NODE_ENV !== 'production' ? invariant(false, 'DOMProperty: Properties that have side effects must use property: %s', propName) : _prodInvariant('49', propName) : void 0;
       !(propertyInfo.hasBooleanValue + propertyInfo.hasNumericValue + propertyInfo.hasOverloadedBooleanValue <= 1) ? process.env.NODE_ENV !== 'production' ? invariant(false, 'DOMProperty: Value can be one of boolean, overloaded boolean, or numeric value, but not a combination: %s', propName) : _prodInvariant('50', propName) : void 0;
 
       if (process.env.NODE_ENV !== 'production') {
@@ -32579,6 +34641,11 @@ var DOMProperty = {
    *   initial render.
    * mustUseProperty:
    *   Whether the property must be accessed and mutated as an object property.
+   * hasSideEffects:
+   *   Whether or not setting a value causes side effects such as triggering
+   *   resources to be loaded or text selection changes. If true, we read from
+   *   the DOM before updating to ensure that the value is only set if it has
+   *   changed.
    * hasBooleanValue:
    *   Whether the property should be removed when set to a falsey value.
    * hasNumericValue:
@@ -32625,7 +34692,7 @@ var DOMProperty = {
 
 module.exports = DOMProperty;
 }).call(this,require('_process'))
-},{"./reactProdInvariant":422,"_process":154,"fbjs/lib/invariant":446}],292:[function(require,module,exports){
+},{"./reactProdInvariant":428,"_process":155,"fbjs/lib/invariant":452}],301:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-present, Facebook, Inc.
@@ -32642,6 +34709,7 @@ module.exports = DOMProperty;
 
 var DOMProperty = require('./DOMProperty');
 var ReactDOMComponentTree = require('./ReactDOMComponentTree');
+var ReactDOMInstrumentation = require('./ReactDOMInstrumentation');
 var ReactInstrumentation = require('./ReactInstrumentation');
 
 var quoteAttributeValueForBrowser = require('./quoteAttributeValueForBrowser');
@@ -32706,6 +34774,9 @@ var DOMPropertyOperations = {
    * @return {?string} Markup string, or null if the property was invalid.
    */
   createMarkupForProperty: function (name, value) {
+    if (process.env.NODE_ENV !== 'production') {
+      ReactDOMInstrumentation.debugTool.onCreateMarkupForProperty(name, value);
+    }
     var propertyInfo = DOMProperty.properties.hasOwnProperty(name) ? DOMProperty.properties[name] : null;
     if (propertyInfo) {
       if (shouldIgnoreValue(propertyInfo, value)) {
@@ -32756,9 +34827,14 @@ var DOMPropertyOperations = {
         this.deleteValueForProperty(node, name);
         return;
       } else if (propertyInfo.mustUseProperty) {
-        // Contrary to `setAttribute`, object properties are properly
-        // `toString`ed by IE8/9.
-        node[propertyInfo.propertyName] = value;
+        var propName = propertyInfo.propertyName;
+        // Must explicitly cast values for HAS_SIDE_EFFECTS-properties to the
+        // property type before comparing; only `value` does and is string.
+        if (!propertyInfo.hasSideEffects || '' + node[propName] !== '' + value) {
+          // Contrary to `setAttribute`, object properties are properly
+          // `toString`ed by IE8/9.
+          node[propName] = value;
+        }
       } else {
         var attributeName = propertyInfo.attributeName;
         var namespace = propertyInfo.attributeNamespace;
@@ -32778,6 +34854,7 @@ var DOMPropertyOperations = {
     }
 
     if (process.env.NODE_ENV !== 'production') {
+      ReactDOMInstrumentation.debugTool.onSetValueForProperty(node, name, value);
       var payload = {};
       payload[name] = value;
       ReactInstrumentation.debugTool.onHostOperation(ReactDOMComponentTree.getInstanceFromNode(node)._debugID, 'update attribute', payload);
@@ -32810,6 +34887,7 @@ var DOMPropertyOperations = {
   deleteValueForAttribute: function (node, name) {
     node.removeAttribute(name);
     if (process.env.NODE_ENV !== 'production') {
+      ReactDOMInstrumentation.debugTool.onDeleteValueForProperty(node, name);
       ReactInstrumentation.debugTool.onHostOperation(ReactDOMComponentTree.getInstanceFromNode(node)._debugID, 'remove attribute', name);
     }
   },
@@ -32829,9 +34907,12 @@ var DOMPropertyOperations = {
       } else if (propertyInfo.mustUseProperty) {
         var propName = propertyInfo.propertyName;
         if (propertyInfo.hasBooleanValue) {
+          // No HAS_SIDE_EFFECTS logic here, only `value` has it and is string.
           node[propName] = false;
         } else {
-          node[propName] = '';
+          if (!propertyInfo.hasSideEffects || '' + node[propName] !== '') {
+            node[propName] = '';
+          }
         }
       } else {
         node.removeAttribute(propertyInfo.attributeName);
@@ -32841,6 +34922,7 @@ var DOMPropertyOperations = {
     }
 
     if (process.env.NODE_ENV !== 'production') {
+      ReactDOMInstrumentation.debugTool.onDeleteValueForProperty(node, name);
       ReactInstrumentation.debugTool.onHostOperation(ReactDOMComponentTree.getInstanceFromNode(node)._debugID, 'remove attribute', name);
     }
   }
@@ -32849,7 +34931,7 @@ var DOMPropertyOperations = {
 
 module.exports = DOMPropertyOperations;
 }).call(this,require('_process'))
-},{"./DOMProperty":291,"./ReactDOMComponentTree":325,"./ReactInstrumentation":355,"./quoteAttributeValueForBrowser":421,"_process":154,"fbjs/lib/warning":455}],293:[function(require,module,exports){
+},{"./DOMProperty":300,"./ReactDOMComponentTree":333,"./ReactDOMInstrumentation":341,"./ReactInstrumentation":364,"./quoteAttributeValueForBrowser":427,"_process":155,"fbjs/lib/warning":462}],302:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-present, Facebook, Inc.
@@ -32871,9 +34953,107 @@ var ExecutionEnvironment = require('fbjs/lib/ExecutionEnvironment');
 
 var createNodesFromMarkup = require('fbjs/lib/createNodesFromMarkup');
 var emptyFunction = require('fbjs/lib/emptyFunction');
+var getMarkupWrap = require('fbjs/lib/getMarkupWrap');
 var invariant = require('fbjs/lib/invariant');
 
+var OPEN_TAG_NAME_EXP = /^(<[^ \/>]+)/;
+var RESULT_INDEX_ATTR = 'data-danger-index';
+
+/**
+ * Extracts the `nodeName` from a string of markup.
+ *
+ * NOTE: Extracting the `nodeName` does not require a regular expression match
+ * because we make assumptions about React-generated markup (i.e. there are no
+ * spaces surrounding the opening tag and there is at least one attribute).
+ *
+ * @param {string} markup String of markup.
+ * @return {string} Node name of the supplied markup.
+ * @see http://jsperf.com/extract-nodename
+ */
+function getNodeName(markup) {
+  return markup.substring(1, markup.indexOf(' '));
+}
+
 var Danger = {
+
+  /**
+   * Renders markup into an array of nodes. The markup is expected to render
+   * into a list of root nodes. Also, the length of `resultList` and
+   * `markupList` should be the same.
+   *
+   * @param {array<string>} markupList List of markup strings to render.
+   * @return {array<DOMElement>} List of rendered nodes.
+   * @internal
+   */
+  dangerouslyRenderMarkup: function (markupList) {
+    !ExecutionEnvironment.canUseDOM ? process.env.NODE_ENV !== 'production' ? invariant(false, 'dangerouslyRenderMarkup(...): Cannot render markup in a worker thread. Make sure `window` and `document` are available globally before requiring React when unit testing or use ReactDOMServer.renderToString for server rendering.') : _prodInvariant('51') : void 0;
+    var nodeName;
+    var markupByNodeName = {};
+    // Group markup by `nodeName` if a wrap is necessary, else by '*'.
+    for (var i = 0; i < markupList.length; i++) {
+      !markupList[i] ? process.env.NODE_ENV !== 'production' ? invariant(false, 'dangerouslyRenderMarkup(...): Missing markup.') : _prodInvariant('52') : void 0;
+      nodeName = getNodeName(markupList[i]);
+      nodeName = getMarkupWrap(nodeName) ? nodeName : '*';
+      markupByNodeName[nodeName] = markupByNodeName[nodeName] || [];
+      markupByNodeName[nodeName][i] = markupList[i];
+    }
+    var resultList = [];
+    var resultListAssignmentCount = 0;
+    for (nodeName in markupByNodeName) {
+      if (!markupByNodeName.hasOwnProperty(nodeName)) {
+        continue;
+      }
+      var markupListByNodeName = markupByNodeName[nodeName];
+
+      // This for-in loop skips the holes of the sparse array. The order of
+      // iteration should follow the order of assignment, which happens to match
+      // numerical index order, but we don't rely on that.
+      var resultIndex;
+      for (resultIndex in markupListByNodeName) {
+        if (markupListByNodeName.hasOwnProperty(resultIndex)) {
+          var markup = markupListByNodeName[resultIndex];
+
+          // Push the requested markup with an additional RESULT_INDEX_ATTR
+          // attribute.  If the markup does not start with a < character, it
+          // will be discarded below (with an appropriate console.error).
+          markupListByNodeName[resultIndex] = markup.replace(OPEN_TAG_NAME_EXP,
+          // This index will be parsed back out below.
+          '$1 ' + RESULT_INDEX_ATTR + '="' + resultIndex + '" ');
+        }
+      }
+
+      // Render each group of markup with similar wrapping `nodeName`.
+      var renderNodes = createNodesFromMarkup(markupListByNodeName.join(''), emptyFunction // Do nothing special with <script> tags.
+      );
+
+      for (var j = 0; j < renderNodes.length; ++j) {
+        var renderNode = renderNodes[j];
+        if (renderNode.hasAttribute && renderNode.hasAttribute(RESULT_INDEX_ATTR)) {
+
+          resultIndex = +renderNode.getAttribute(RESULT_INDEX_ATTR);
+          renderNode.removeAttribute(RESULT_INDEX_ATTR);
+
+          !!resultList.hasOwnProperty(resultIndex) ? process.env.NODE_ENV !== 'production' ? invariant(false, 'Danger: Assigning to an already-occupied result index.') : _prodInvariant('53') : void 0;
+
+          resultList[resultIndex] = renderNode;
+
+          // This should match resultList.length and markupList.length when
+          // we're done.
+          resultListAssignmentCount += 1;
+        } else if (process.env.NODE_ENV !== 'production') {
+          console.error('Danger: Discarding unexpected node:', renderNode);
+        }
+      }
+    }
+
+    // Although resultList was populated out of order, it should now be a dense
+    // array.
+    !(resultListAssignmentCount === resultList.length) ? process.env.NODE_ENV !== 'production' ? invariant(false, 'Danger: Did not assign to every index of resultList.') : _prodInvariant('54') : void 0;
+
+    !(resultList.length === markupList.length) ? process.env.NODE_ENV !== 'production' ? invariant(false, 'Danger: Expected markup to render %s nodes, but rendered %s.', markupList.length, resultList.length) : _prodInvariant('55', markupList.length, resultList.length) : void 0;
+
+    return resultList;
+  },
 
   /**
    * Replaces a node with a string of markup at its current position within its
@@ -32900,7 +35080,7 @@ var Danger = {
 
 module.exports = Danger;
 }).call(this,require('_process'))
-},{"./DOMLazyTree":289,"./reactProdInvariant":422,"_process":154,"fbjs/lib/ExecutionEnvironment":432,"fbjs/lib/createNodesFromMarkup":437,"fbjs/lib/emptyFunction":438,"fbjs/lib/invariant":446}],294:[function(require,module,exports){
+},{"./DOMLazyTree":298,"./reactProdInvariant":428,"_process":155,"fbjs/lib/ExecutionEnvironment":438,"fbjs/lib/createNodesFromMarkup":443,"fbjs/lib/emptyFunction":444,"fbjs/lib/getMarkupWrap":448,"fbjs/lib/invariant":452}],303:[function(require,module,exports){
 /**
  * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -32928,7 +35108,7 @@ var keyOf = require('fbjs/lib/keyOf');
 var DefaultEventPluginOrder = [keyOf({ ResponderEventPlugin: null }), keyOf({ SimpleEventPlugin: null }), keyOf({ TapEventPlugin: null }), keyOf({ EnterLeaveEventPlugin: null }), keyOf({ ChangeEventPlugin: null }), keyOf({ SelectEventPlugin: null }), keyOf({ BeforeInputEventPlugin: null })];
 
 module.exports = DefaultEventPluginOrder;
-},{"fbjs/lib/keyOf":450}],295:[function(require,module,exports){
+},{"fbjs/lib/keyOf":456}],304:[function(require,module,exports){
 /**
  * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -32979,7 +35159,7 @@ var DisabledInputUtils = {
 };
 
 module.exports = DisabledInputUtils;
-},{}],296:[function(require,module,exports){
+},{}],305:[function(require,module,exports){
 /**
  * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -33085,7 +35265,7 @@ var EnterLeaveEventPlugin = {
 };
 
 module.exports = EnterLeaveEventPlugin;
-},{"./EventConstants":297,"./EventPropagators":301,"./ReactDOMComponentTree":325,"./SyntheticMouseEvent":391,"fbjs/lib/keyOf":450}],297:[function(require,module,exports){
+},{"./EventConstants":306,"./EventPropagators":310,"./ReactDOMComponentTree":333,"./SyntheticMouseEvent":397,"fbjs/lib/keyOf":456}],306:[function(require,module,exports){
 /**
  * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -33183,7 +35363,7 @@ var EventConstants = {
 };
 
 module.exports = EventConstants;
-},{"fbjs/lib/keyMirror":449}],298:[function(require,module,exports){
+},{"fbjs/lib/keyMirror":455}],307:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-present, Facebook, Inc.
@@ -33242,12 +35422,6 @@ var executeDispatchesAndReleaseTopLevel = function (e) {
   return executeDispatchesAndRelease(e, false);
 };
 
-var getDictionaryKey = function (inst) {
-  // Prevents V8 performance issue:
-  // https://github.com/facebook/react/pull/7232
-  return '.' + inst._rootNodeID;
-};
-
 /**
  * This is a unified interface for event plugins to be installed and configured.
  *
@@ -33291,7 +35465,7 @@ var EventPluginHub = {
   },
 
   /**
-   * Stores `listener` at `listenerBank[registrationName][key]`. Is idempotent.
+   * Stores `listener` at `listenerBank[registrationName][id]`. Is idempotent.
    *
    * @param {object} inst The instance, which is the source of events.
    * @param {string} registrationName Name of listener (e.g. `onClick`).
@@ -33300,9 +35474,8 @@ var EventPluginHub = {
   putListener: function (inst, registrationName, listener) {
     !(typeof listener === 'function') ? process.env.NODE_ENV !== 'production' ? invariant(false, 'Expected %s listener to be a function, instead got type %s', registrationName, typeof listener) : _prodInvariant('94', registrationName, typeof listener) : void 0;
 
-    var key = getDictionaryKey(inst);
     var bankForRegistrationName = listenerBank[registrationName] || (listenerBank[registrationName] = {});
-    bankForRegistrationName[key] = listener;
+    bankForRegistrationName[inst._rootNodeID] = listener;
 
     var PluginModule = EventPluginRegistry.registrationNameModules[registrationName];
     if (PluginModule && PluginModule.didPutListener) {
@@ -33317,8 +35490,7 @@ var EventPluginHub = {
    */
   getListener: function (inst, registrationName) {
     var bankForRegistrationName = listenerBank[registrationName];
-    var key = getDictionaryKey(inst);
-    return bankForRegistrationName && bankForRegistrationName[key];
+    return bankForRegistrationName && bankForRegistrationName[inst._rootNodeID];
   },
 
   /**
@@ -33336,8 +35508,7 @@ var EventPluginHub = {
     var bankForRegistrationName = listenerBank[registrationName];
     // TODO: This should never be null -- when is it?
     if (bankForRegistrationName) {
-      var key = getDictionaryKey(inst);
-      delete bankForRegistrationName[key];
+      delete bankForRegistrationName[inst._rootNodeID];
     }
   },
 
@@ -33347,13 +35518,12 @@ var EventPluginHub = {
    * @param {object} inst The instance, which is the source of events.
    */
   deleteAllListeners: function (inst) {
-    var key = getDictionaryKey(inst);
     for (var registrationName in listenerBank) {
       if (!listenerBank.hasOwnProperty(registrationName)) {
         continue;
       }
 
-      if (!listenerBank[registrationName][key]) {
+      if (!listenerBank[registrationName][inst._rootNodeID]) {
         continue;
       }
 
@@ -33362,7 +35532,7 @@ var EventPluginHub = {
         PluginModule.willDeleteListener(inst, registrationName);
       }
 
-      delete listenerBank[registrationName][key];
+      delete listenerBank[registrationName][inst._rootNodeID];
     }
   },
 
@@ -33437,7 +35607,7 @@ var EventPluginHub = {
 
 module.exports = EventPluginHub;
 }).call(this,require('_process'))
-},{"./EventPluginRegistry":299,"./EventPluginUtils":300,"./ReactErrorUtils":346,"./accumulateInto":398,"./forEachAccumulated":407,"./reactProdInvariant":422,"_process":154,"fbjs/lib/invariant":446}],299:[function(require,module,exports){
+},{"./EventPluginRegistry":308,"./EventPluginUtils":309,"./ReactErrorUtils":355,"./accumulateInto":404,"./forEachAccumulated":413,"./reactProdInvariant":428,"_process":155,"fbjs/lib/invariant":452}],308:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-present, Facebook, Inc.
@@ -33687,7 +35857,7 @@ var EventPluginRegistry = {
 
 module.exports = EventPluginRegistry;
 }).call(this,require('_process'))
-},{"./reactProdInvariant":422,"_process":154,"fbjs/lib/invariant":446}],300:[function(require,module,exports){
+},{"./reactProdInvariant":428,"_process":155,"fbjs/lib/invariant":452}],309:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-present, Facebook, Inc.
@@ -33919,7 +36089,7 @@ var EventPluginUtils = {
 
 module.exports = EventPluginUtils;
 }).call(this,require('_process'))
-},{"./EventConstants":297,"./ReactErrorUtils":346,"./reactProdInvariant":422,"_process":154,"fbjs/lib/invariant":446,"fbjs/lib/warning":455}],301:[function(require,module,exports){
+},{"./EventConstants":306,"./ReactErrorUtils":355,"./reactProdInvariant":428,"_process":155,"fbjs/lib/invariant":452,"fbjs/lib/warning":462}],310:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-present, Facebook, Inc.
@@ -34059,7 +36229,7 @@ var EventPropagators = {
 
 module.exports = EventPropagators;
 }).call(this,require('_process'))
-},{"./EventConstants":297,"./EventPluginHub":298,"./EventPluginUtils":300,"./accumulateInto":398,"./forEachAccumulated":407,"_process":154,"fbjs/lib/warning":455}],302:[function(require,module,exports){
+},{"./EventConstants":306,"./EventPluginHub":307,"./EventPluginUtils":309,"./accumulateInto":404,"./forEachAccumulated":413,"_process":155,"fbjs/lib/warning":462}],311:[function(require,module,exports){
 /**
  * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -34155,7 +36325,7 @@ _assign(FallbackCompositionState.prototype, {
 PooledClass.addPoolingTo(FallbackCompositionState);
 
 module.exports = FallbackCompositionState;
-},{"./PooledClass":306,"./getTextContentAccessor":415,"object-assign":152}],303:[function(require,module,exports){
+},{"./PooledClass":315,"./getTextContentAccessor":421,"object-assign":153}],312:[function(require,module,exports){
 /**
  * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -34190,8 +36360,6 @@ var HTMLDOMPropertyConfig = {
     allowFullScreen: HAS_BOOLEAN_VALUE,
     allowTransparency: 0,
     alt: 0,
-    // specifies target context for links with `preload` type
-    as: 0,
     async: HAS_BOOLEAN_VALUE,
     autoComplete: 0,
     // autoFocus is polyfilled/normalized by AutoFocusUtils
@@ -34272,13 +36440,11 @@ var HTMLDOMPropertyConfig = {
     optimum: 0,
     pattern: 0,
     placeholder: 0,
-    playsInline: HAS_BOOLEAN_VALUE,
     poster: 0,
     preload: 0,
     profile: 0,
     radioGroup: 0,
     readOnly: HAS_BOOLEAN_VALUE,
-    referrerPolicy: 0,
     rel: 0,
     required: HAS_BOOLEAN_VALUE,
     reversed: HAS_BOOLEAN_VALUE,
@@ -34368,7 +36534,7 @@ var HTMLDOMPropertyConfig = {
 };
 
 module.exports = HTMLDOMPropertyConfig;
-},{"./DOMProperty":291}],304:[function(require,module,exports){
+},{"./DOMProperty":300}],313:[function(require,module,exports){
 /**
  * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -34378,7 +36544,6 @@ module.exports = HTMLDOMPropertyConfig;
  * of patent rights can be found in the PATENTS file in the same directory.
  *
  * @providesModule KeyEscapeUtils
- * 
  */
 
 'use strict';
@@ -34386,7 +36551,7 @@ module.exports = HTMLDOMPropertyConfig;
 /**
  * Escape and wrap key so it is safe to use as a reactid
  *
- * @param {string} key to be escaped.
+ * @param {*} key to be escaped.
  * @return {string} the escaped key.
  */
 
@@ -34428,7 +36593,7 @@ var KeyEscapeUtils = {
 };
 
 module.exports = KeyEscapeUtils;
-},{}],305:[function(require,module,exports){
+},{}],314:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-present, Facebook, Inc.
@@ -34447,7 +36612,6 @@ var _prodInvariant = require('./reactProdInvariant');
 
 var ReactPropTypes = require('./ReactPropTypes');
 var ReactPropTypeLocations = require('./ReactPropTypeLocations');
-var ReactPropTypesSecret = require('./ReactPropTypesSecret');
 
 var invariant = require('fbjs/lib/invariant');
 var warning = require('fbjs/lib/warning');
@@ -34510,7 +36674,7 @@ var LinkedValueUtils = {
   checkPropTypes: function (tagName, props, owner) {
     for (var propName in propTypes) {
       if (propTypes.hasOwnProperty(propName)) {
-        var error = propTypes[propName](props, propName, tagName, ReactPropTypeLocations.prop, null, ReactPropTypesSecret);
+        var error = propTypes[propName](props, propName, tagName, ReactPropTypeLocations.prop);
       }
       if (error instanceof Error && !(error.message in loggedTypeFailures)) {
         // Only monitor this failure once because there tends to be a lot of the
@@ -34567,7 +36731,7 @@ var LinkedValueUtils = {
 
 module.exports = LinkedValueUtils;
 }).call(this,require('_process'))
-},{"./ReactPropTypeLocations":365,"./ReactPropTypes":366,"./ReactPropTypesSecret":367,"./reactProdInvariant":422,"_process":154,"fbjs/lib/invariant":446,"fbjs/lib/warning":455}],306:[function(require,module,exports){
+},{"./ReactPropTypeLocations":374,"./ReactPropTypes":375,"./reactProdInvariant":428,"_process":155,"fbjs/lib/invariant":452,"fbjs/lib/warning":462}],315:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-present, Facebook, Inc.
@@ -34664,7 +36828,7 @@ var DEFAULT_POOLER = oneArgumentPooler;
  * Augments `CopyConstructor` to be a poolable class, augmenting only the class
  * itself (statically) not adding any prototypical fields. Any CopyConstructor
  * you give this may have a `poolSize` property, and will look for a
- * prototypical `destructor` on instances.
+ * prototypical `destructor` on instances (optional).
  *
  * @param {Function} CopyConstructor Constructor that can be used to reset.
  * @param {Function} pooler Customizable pooler.
@@ -34691,7 +36855,7 @@ var PooledClass = {
 
 module.exports = PooledClass;
 }).call(this,require('_process'))
-},{"./reactProdInvariant":422,"_process":154,"fbjs/lib/invariant":446}],307:[function(require,module,exports){
+},{"./reactProdInvariant":428,"_process":155,"fbjs/lib/invariant":452}],316:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-present, Facebook, Inc.
@@ -34710,7 +36874,6 @@ var _assign = require('object-assign');
 
 var ReactChildren = require('./ReactChildren');
 var ReactComponent = require('./ReactComponent');
-var ReactPureComponent = require('./ReactPureComponent');
 var ReactClass = require('./ReactClass');
 var ReactDOMFactories = require('./ReactDOMFactories');
 var ReactElement = require('./ReactElement');
@@ -34755,7 +36918,6 @@ var React = {
   },
 
   Component: ReactComponent,
-  PureComponent: ReactPureComponent,
 
   createElement: createElement,
   cloneElement: cloneElement,
@@ -34783,7 +36945,7 @@ var React = {
 
 module.exports = React;
 }).call(this,require('_process'))
-},{"./ReactChildren":312,"./ReactClass":314,"./ReactComponent":315,"./ReactDOMFactories":328,"./ReactElement":343,"./ReactElementValidator":344,"./ReactPropTypes":366,"./ReactPureComponent":368,"./ReactVersion":379,"./onlyChild":420,"_process":154,"fbjs/lib/warning":455,"object-assign":152}],308:[function(require,module,exports){
+},{"./ReactChildren":321,"./ReactClass":322,"./ReactComponent":323,"./ReactDOMFactories":337,"./ReactElement":352,"./ReactElementValidator":353,"./ReactPropTypes":375,"./ReactVersion":385,"./onlyChild":426,"_process":155,"fbjs/lib/warning":462,"object-assign":153}],317:[function(require,module,exports){
 /**
  * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -35077,19 +37239,6 @@ var ReactBrowserEventEmitter = _assign({}, ReactEventEmitterMixin, {
   },
 
   /**
-   * Protect against document.createEvent() returning null
-   * Some popup blocker extensions appear to do this:
-   * https://github.com/facebook/react/issues/6887
-   */
-  supportsEventPageXY: function () {
-    if (!document.createEvent) {
-      return false;
-    }
-    var ev = document.createEvent('MouseEvent');
-    return ev != null && 'pageX' in ev;
-  },
-
-  /**
    * Listens to window scroll and resize events. We cache scroll values so that
    * application code can access them without triggering reflows.
    *
@@ -35102,7 +37251,7 @@ var ReactBrowserEventEmitter = _assign({}, ReactEventEmitterMixin, {
    */
   ensureScrollValueMonitoring: function () {
     if (hasEventPageXY === undefined) {
-      hasEventPageXY = ReactBrowserEventEmitter.supportsEventPageXY();
+      hasEventPageXY = document.createEvent && 'pageX' in document.createEvent('MouseEvent');
     }
     if (!hasEventPageXY && !isMonitoringScrollValue) {
       var refresh = ViewportMetrics.refreshScrollValues;
@@ -35114,7 +37263,7 @@ var ReactBrowserEventEmitter = _assign({}, ReactEventEmitterMixin, {
 });
 
 module.exports = ReactBrowserEventEmitter;
-},{"./EventConstants":297,"./EventPluginRegistry":299,"./ReactEventEmitterMixin":347,"./ViewportMetrics":397,"./getVendorPrefixedEventName":416,"./isEventSupported":418,"object-assign":152}],309:[function(require,module,exports){
+},{"./EventConstants":306,"./EventPluginRegistry":308,"./ReactEventEmitterMixin":356,"./ViewportMetrics":403,"./getVendorPrefixedEventName":422,"./isEventSupported":424,"object-assign":153}],318:[function(require,module,exports){
 /**
  * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -35202,7 +37351,7 @@ var ReactCSSTransitionGroup = React.createClass({
 });
 
 module.exports = ReactCSSTransitionGroup;
-},{"./React":307,"./ReactCSSTransitionGroupChild":310,"./ReactTransitionGroup":376,"object-assign":152}],310:[function(require,module,exports){
+},{"./React":316,"./ReactCSSTransitionGroupChild":319,"./ReactTransitionGroup":382,"object-assign":153}],319:[function(require,module,exports){
 /**
  * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -35370,7 +37519,7 @@ var ReactCSSTransitionGroupChild = React.createClass({
 });
 
 module.exports = ReactCSSTransitionGroupChild;
-},{"./React":307,"./ReactDOM":321,"./ReactTransitionEvents":375,"./onlyChild":420,"fbjs/lib/CSSCore":430}],311:[function(require,module,exports){
+},{"./React":316,"./ReactDOM":329,"./ReactTransitionEvents":381,"./onlyChild":426,"fbjs/lib/CSSCore":436}],320:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2014-present, Facebook, Inc.
@@ -35387,36 +37536,21 @@ module.exports = ReactCSSTransitionGroupChild;
 
 var ReactReconciler = require('./ReactReconciler');
 
+var ReactComponentTreeDevtool = require('./ReactComponentTreeDevtool');
 var instantiateReactComponent = require('./instantiateReactComponent');
 var KeyEscapeUtils = require('./KeyEscapeUtils');
 var shouldUpdateReactComponent = require('./shouldUpdateReactComponent');
 var traverseAllChildren = require('./traverseAllChildren');
 var warning = require('fbjs/lib/warning');
 
-var ReactComponentTreeHook;
-
-if (typeof process !== 'undefined' && process.env && process.env.NODE_ENV === 'test') {
-  // Temporary hack.
-  // Inline requires don't work well with Jest:
-  // https://github.com/facebook/react/issues/7240
-  // Remove the inline requires when we don't need them anymore:
-  // https://github.com/facebook/react/pull/7178
-  ReactComponentTreeHook = require('./ReactComponentTreeHook');
-}
-
 function instantiateChild(childInstances, child, name, selfDebugID) {
   // We found a component instance.
   var keyUnique = childInstances[name] === undefined;
   if (process.env.NODE_ENV !== 'production') {
-    if (!ReactComponentTreeHook) {
-      ReactComponentTreeHook = require('./ReactComponentTreeHook');
-    }
-    if (!keyUnique) {
-      process.env.NODE_ENV !== 'production' ? warning(false, 'flattenChildren(...): Encountered two children with the same key, ' + '`%s`. Child keys must be unique; when two children share a key, only ' + 'the first child will be used.%s', KeyEscapeUtils.unescape(name), ReactComponentTreeHook.getStackAddendumByID(selfDebugID)) : void 0;
-    }
+    process.env.NODE_ENV !== 'production' ? warning(keyUnique, 'flattenChildren(...): Encountered two children with the same key, ' + '`%s`. Child keys must be unique; when two children share a key, only ' + 'the first child will be used.%s', KeyEscapeUtils.unescape(name), ReactComponentTreeDevtool.getStackAddendumByID(selfDebugID)) : void 0;
   }
   if (child != null && keyUnique) {
-    childInstances[name] = instantiateReactComponent(child, true);
+    childInstances[name] = instantiateReactComponent(child);
   }
 }
 
@@ -35434,7 +37568,7 @@ var ReactChildReconciler = {
    * @return {?object} A set of child instances.
    * @internal
    */
-  instantiateChildren: function (nestedChildNodes, transaction, context, selfDebugID // 0 in production and for roots
+  instantiateChildren: function (nestedChildNodes, transaction, context, selfDebugID // __DEV__ only
   ) {
     if (nestedChildNodes == null) {
       return null;
@@ -35461,8 +37595,7 @@ var ReactChildReconciler = {
    * @return {?object} A new set of child instances.
    * @internal
    */
-  updateChildren: function (prevChildren, nextChildren, mountImages, removedNodes, transaction, hostParent, hostContainerInfo, context, selfDebugID // 0 in production and for roots
-  ) {
+  updateChildren: function (prevChildren, nextChildren, removedNodes, transaction, context) {
     // We currently don't have a way to track moves here but if we use iterators
     // instead of for..in we can zip the iterators and check if an item has
     // moved.
@@ -35489,12 +37622,8 @@ var ReactChildReconciler = {
           ReactReconciler.unmountComponent(prevChild, false);
         }
         // The child must be instantiated before it's mounted.
-        var nextChildInstance = instantiateReactComponent(nextElement, true);
+        var nextChildInstance = instantiateReactComponent(nextElement);
         nextChildren[name] = nextChildInstance;
-        // Creating mount image now ensures refs are resolved in right order
-        // (see https://github.com/facebook/react/pull/7101 for explanation).
-        var nextChildMountImage = ReactReconciler.mountComponent(nextChildInstance, transaction, hostParent, hostContainerInfo, context, selfDebugID);
-        mountImages.push(nextChildMountImage);
       }
     }
     // Unmount children that are no longer present.
@@ -35527,7 +37656,7 @@ var ReactChildReconciler = {
 
 module.exports = ReactChildReconciler;
 }).call(this,require('_process'))
-},{"./KeyEscapeUtils":304,"./ReactComponentTreeHook":318,"./ReactReconciler":370,"./instantiateReactComponent":417,"./shouldUpdateReactComponent":426,"./traverseAllChildren":427,"_process":154,"fbjs/lib/warning":455}],312:[function(require,module,exports){
+},{"./KeyEscapeUtils":313,"./ReactComponentTreeDevtool":326,"./ReactReconciler":377,"./instantiateReactComponent":423,"./shouldUpdateReactComponent":432,"./traverseAllChildren":433,"_process":155,"fbjs/lib/warning":462}],321:[function(require,module,exports){
 /**
  * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -35719,64 +37848,7 @@ var ReactChildren = {
 };
 
 module.exports = ReactChildren;
-},{"./PooledClass":306,"./ReactElement":343,"./traverseAllChildren":427,"fbjs/lib/emptyFunction":438}],313:[function(require,module,exports){
-(function (process){
-/**
- * Copyright 2013-present, Facebook, Inc.
- * All rights reserved.
- *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
- *
- * @providesModule ReactChildrenMutationWarningHook
- */
-
-'use strict';
-
-var ReactComponentTreeHook = require('./ReactComponentTreeHook');
-
-var warning = require('fbjs/lib/warning');
-
-function handleElement(debugID, element) {
-  if (element == null) {
-    return;
-  }
-  if (element._shadowChildren === undefined) {
-    return;
-  }
-  if (element._shadowChildren === element.props.children) {
-    return;
-  }
-  var isMutated = false;
-  if (Array.isArray(element._shadowChildren)) {
-    if (element._shadowChildren.length === element.props.children.length) {
-      for (var i = 0; i < element._shadowChildren.length; i++) {
-        if (element._shadowChildren[i] !== element.props.children[i]) {
-          isMutated = true;
-        }
-      }
-    } else {
-      isMutated = true;
-    }
-  }
-  if (!Array.isArray(element._shadowChildren) || isMutated) {
-    process.env.NODE_ENV !== 'production' ? warning(false, 'Component\'s children should not be mutated.%s', ReactComponentTreeHook.getStackAddendumByID(debugID)) : void 0;
-  }
-}
-
-var ReactChildrenMutationWarningHook = {
-  onMountComponent: function (debugID) {
-    handleElement(debugID, ReactComponentTreeHook.getElement(debugID));
-  },
-  onUpdateComponent: function (debugID) {
-    handleElement(debugID, ReactComponentTreeHook.getElement(debugID));
-  }
-};
-
-module.exports = ReactChildrenMutationWarningHook;
-}).call(this,require('_process'))
-},{"./ReactComponentTreeHook":318,"_process":154,"fbjs/lib/warning":455}],314:[function(require,module,exports){
+},{"./PooledClass":315,"./ReactElement":352,"./traverseAllChildren":433,"fbjs/lib/emptyFunction":444}],322:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-present, Facebook, Inc.
@@ -36165,13 +38237,6 @@ function validateMethodOverride(isAlreadyDefined, name) {
  */
 function mixSpecIntoComponent(Constructor, spec) {
   if (!spec) {
-    if (process.env.NODE_ENV !== 'production') {
-      var typeofSpec = typeof spec;
-      var isMixinValid = typeofSpec === 'object' && spec !== null;
-
-      process.env.NODE_ENV !== 'production' ? warning(isMixinValid, '%s: You\'re attempting to include a mixin that is either null ' + 'or not an object. Check the mixins included by the component, ' + 'as well as any mixins they include themselves. ' + 'Expected object but got %s.', Constructor.displayName || 'ReactClass', spec === null ? null : typeofSpec) : void 0;
-    }
-
     return;
   }
 
@@ -36511,7 +38576,7 @@ var ReactClass = {
 
 module.exports = ReactClass;
 }).call(this,require('_process'))
-},{"./ReactComponent":315,"./ReactElement":343,"./ReactNoopUpdateQueue":362,"./ReactPropTypeLocationNames":364,"./ReactPropTypeLocations":365,"./reactProdInvariant":422,"_process":154,"fbjs/lib/emptyObject":439,"fbjs/lib/invariant":446,"fbjs/lib/keyMirror":449,"fbjs/lib/keyOf":450,"fbjs/lib/warning":455,"object-assign":152}],315:[function(require,module,exports){
+},{"./ReactComponent":323,"./ReactElement":352,"./ReactNoopUpdateQueue":371,"./ReactPropTypeLocationNames":373,"./ReactPropTypeLocations":374,"./reactProdInvariant":428,"_process":155,"fbjs/lib/emptyObject":445,"fbjs/lib/invariant":452,"fbjs/lib/keyMirror":455,"fbjs/lib/keyOf":456,"fbjs/lib/warning":462,"object-assign":153}],323:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-present, Facebook, Inc.
@@ -36632,7 +38697,7 @@ if (process.env.NODE_ENV !== 'production') {
 
 module.exports = ReactComponent;
 }).call(this,require('_process'))
-},{"./ReactNoopUpdateQueue":362,"./canDefineProperty":400,"./reactProdInvariant":422,"_process":154,"fbjs/lib/emptyObject":439,"fbjs/lib/invariant":446,"fbjs/lib/warning":455}],316:[function(require,module,exports){
+},{"./ReactNoopUpdateQueue":371,"./canDefineProperty":406,"./reactProdInvariant":428,"_process":155,"fbjs/lib/emptyObject":445,"fbjs/lib/invariant":452,"fbjs/lib/warning":462}],324:[function(require,module,exports){
 /**
  * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -36658,12 +38723,21 @@ var ReactComponentBrowserEnvironment = {
 
   processChildrenUpdates: ReactDOMIDOperations.dangerouslyProcessChildrenUpdates,
 
-  replaceNodeWithMarkup: DOMChildrenOperations.dangerouslyReplaceNodeWithMarkup
+  replaceNodeWithMarkup: DOMChildrenOperations.dangerouslyReplaceNodeWithMarkup,
+
+  /**
+   * If a particular environment requires that some resources be cleaned up,
+   * specify this in the injected Mixin. In the DOM, we would likely want to
+   * purge any cached node ID lookups.
+   *
+   * @private
+   */
+  unmountIDFromEnvironment: function (rootNodeID) {}
 
 };
 
 module.exports = ReactComponentBrowserEnvironment;
-},{"./DOMChildrenOperations":288,"./ReactDOMIDOperations":330}],317:[function(require,module,exports){
+},{"./DOMChildrenOperations":297,"./ReactDOMIDOperations":339}],325:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2014-present, Facebook, Inc.
@@ -36687,6 +38761,13 @@ var injected = false;
 var ReactComponentEnvironment = {
 
   /**
+   * Optionally injectable environment dependent cleanup hook. (server vs.
+   * browser etc). Example: A browser system caches DOM nodes based on component
+   * ID and must remove that cache entry when this instance is unmounted.
+   */
+  unmountIDFromEnvironment: null,
+
+  /**
    * Optionally injectable hook for swapping out mount images in the middle of
    * the tree.
    */
@@ -36701,6 +38782,7 @@ var ReactComponentEnvironment = {
   injection: {
     injectEnvironment: function (environment) {
       !!injected ? process.env.NODE_ENV !== 'production' ? invariant(false, 'ReactCompositeComponent: injectEnvironment() can only be called once.') : _prodInvariant('104') : void 0;
+      ReactComponentEnvironment.unmountIDFromEnvironment = environment.unmountIDFromEnvironment;
       ReactComponentEnvironment.replaceNodeWithMarkup = environment.replaceNodeWithMarkup;
       ReactComponentEnvironment.processChildrenUpdates = environment.processChildrenUpdates;
       injected = true;
@@ -36711,7 +38793,7 @@ var ReactComponentEnvironment = {
 
 module.exports = ReactComponentEnvironment;
 }).call(this,require('_process'))
-},{"./reactProdInvariant":422,"_process":154,"fbjs/lib/invariant":446}],318:[function(require,module,exports){
+},{"./reactProdInvariant":428,"_process":155,"fbjs/lib/invariant":452}],326:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2016-present, Facebook, Inc.
@@ -36721,7 +38803,7 @@ module.exports = ReactComponentEnvironment;
  * LICENSE file in the root directory of this source tree. An additional grant
  * of patent rights can be found in the PATENTS file in the same directory.
  *
- * @providesModule ReactComponentTreeHook
+ * @providesModule ReactComponentTreeDevtool
  */
 
 'use strict';
@@ -36733,138 +38815,36 @@ var ReactCurrentOwner = require('./ReactCurrentOwner');
 var invariant = require('fbjs/lib/invariant');
 var warning = require('fbjs/lib/warning');
 
-function isNative(fn) {
-  // Based on isNative() from Lodash
-  var funcToString = Function.prototype.toString;
-  var hasOwnProperty = Object.prototype.hasOwnProperty;
-  var reIsNative = RegExp('^' + funcToString
-  // Take an example native function source for comparison
-  .call(hasOwnProperty)
-  // Strip regex characters so we can use it for regex
-  .replace(/[\\^$.*+?()[\]{}|]/g, '\\$&')
-  // Remove hasOwnProperty from the template to make it generic
-  .replace(/hasOwnProperty|(function).*?(?=\\\()| for .+?(?=\\\])/g, '$1.*?') + '$');
-  try {
-    var source = funcToString.call(fn);
-    return reIsNative.test(source);
-  } catch (err) {
-    return false;
+var tree = {};
+var unmountedIDs = {};
+var rootIDs = {};
+
+function updateTree(id, update) {
+  if (!tree[id]) {
+    tree[id] = {
+      element: null,
+      parentID: null,
+      ownerID: null,
+      text: null,
+      childIDs: [],
+      displayName: 'Unknown',
+      isMounted: false,
+      updateCount: 0
+    };
+    // TODO: We need to do this awkward dance because TopLevelWrapper "never
+    // gets mounted" but its display name gets set in instantiateReactComponent
+    // before its debug ID is set to 0.
+    unmountedIDs[id] = true;
   }
-}
-
-var canUseCollections =
-// Array.from
-typeof Array.from === 'function' &&
-// Map
-typeof Map === 'function' && isNative(Map) &&
-// Map.prototype.keys
-Map.prototype != null && typeof Map.prototype.keys === 'function' && isNative(Map.prototype.keys) &&
-// Set
-typeof Set === 'function' && isNative(Set) &&
-// Set.prototype.keys
-Set.prototype != null && typeof Set.prototype.keys === 'function' && isNative(Set.prototype.keys);
-
-var itemMap;
-var rootIDSet;
-
-var itemByKey;
-var rootByKey;
-
-if (canUseCollections) {
-  itemMap = new Map();
-  rootIDSet = new Set();
-} else {
-  itemByKey = {};
-  rootByKey = {};
-}
-
-var unmountedIDs = [];
-
-// Use non-numeric keys to prevent V8 performance issues:
-// https://github.com/facebook/react/pull/7232
-function getKeyFromID(id) {
-  return '.' + id;
-}
-function getIDFromKey(key) {
-  return parseInt(key.substr(1), 10);
-}
-
-function get(id) {
-  if (canUseCollections) {
-    return itemMap.get(id);
-  } else {
-    var key = getKeyFromID(id);
-    return itemByKey[key];
-  }
-}
-
-function remove(id) {
-  if (canUseCollections) {
-    itemMap['delete'](id);
-  } else {
-    var key = getKeyFromID(id);
-    delete itemByKey[key];
-  }
-}
-
-function create(id, element, parentID) {
-  var item = {
-    element: element,
-    parentID: parentID,
-    text: null,
-    childIDs: [],
-    isMounted: false,
-    updateCount: 0
-  };
-
-  if (canUseCollections) {
-    itemMap.set(id, item);
-  } else {
-    var key = getKeyFromID(id);
-    itemByKey[key] = item;
-  }
-}
-
-function addRoot(id) {
-  if (canUseCollections) {
-    rootIDSet.add(id);
-  } else {
-    var key = getKeyFromID(id);
-    rootByKey[key] = true;
-  }
-}
-
-function removeRoot(id) {
-  if (canUseCollections) {
-    rootIDSet['delete'](id);
-  } else {
-    var key = getKeyFromID(id);
-    delete rootByKey[key];
-  }
-}
-
-function getRegisteredIDs() {
-  if (canUseCollections) {
-    return Array.from(itemMap.keys());
-  } else {
-    return Object.keys(itemByKey).map(getIDFromKey);
-  }
-}
-
-function getRootIDs() {
-  if (canUseCollections) {
-    return Array.from(rootIDSet.keys());
-  } else {
-    return Object.keys(rootByKey).map(getIDFromKey);
-  }
+  update(tree[id]);
 }
 
 function purgeDeep(id) {
-  var item = get(id);
+  var item = tree[id];
   if (item) {
     var childIDs = item.childIDs;
 
-    remove(id);
+    delete tree[id];
     childIDs.forEach(purgeDeep);
   }
 }
@@ -36873,109 +38853,103 @@ function describeComponentFrame(name, source, ownerName) {
   return '\n    in ' + name + (source ? ' (at ' + source.fileName.replace(/^.*[\\\/]/, '') + ':' + source.lineNumber + ')' : ownerName ? ' (created by ' + ownerName + ')' : '');
 }
 
-function getDisplayName(element) {
-  if (element == null) {
-    return '#empty';
-  } else if (typeof element === 'string' || typeof element === 'number') {
-    return '#text';
-  } else if (typeof element.type === 'string') {
-    return element.type;
-  } else {
-    return element.type.displayName || element.type.name || 'Unknown';
-  }
-}
-
 function describeID(id) {
-  var name = ReactComponentTreeHook.getDisplayName(id);
-  var element = ReactComponentTreeHook.getElement(id);
-  var ownerID = ReactComponentTreeHook.getOwnerID(id);
+  var name = ReactComponentTreeDevtool.getDisplayName(id);
+  var element = ReactComponentTreeDevtool.getElement(id);
+  var ownerID = ReactComponentTreeDevtool.getOwnerID(id);
   var ownerName;
   if (ownerID) {
-    ownerName = ReactComponentTreeHook.getDisplayName(ownerID);
+    ownerName = ReactComponentTreeDevtool.getDisplayName(ownerID);
   }
-  process.env.NODE_ENV !== 'production' ? warning(element, 'ReactComponentTreeHook: Missing React element for debugID %s when ' + 'building stack', id) : void 0;
+  process.env.NODE_ENV !== 'production' ? warning(element, 'ReactComponentTreeDevtool: Missing React element for debugID %s when ' + 'building stack', id) : void 0;
   return describeComponentFrame(name, element && element._source, ownerName);
 }
 
-var ReactComponentTreeHook = {
-  onSetChildren: function (id, nextChildIDs) {
-    var item = get(id);
-    item.childIDs = nextChildIDs;
-
-    for (var i = 0; i < nextChildIDs.length; i++) {
-      var nextChildID = nextChildIDs[i];
-      var nextChild = get(nextChildID);
-      !nextChild ? process.env.NODE_ENV !== 'production' ? invariant(false, 'Expected hook events to fire for the child before its parent includes it in onSetChildren().') : _prodInvariant('140') : void 0;
-      !(nextChild.childIDs != null || typeof nextChild.element !== 'object' || nextChild.element == null) ? process.env.NODE_ENV !== 'production' ? invariant(false, 'Expected onSetChildren() to fire for a container child before its parent includes it in onSetChildren().') : _prodInvariant('141') : void 0;
-      !nextChild.isMounted ? process.env.NODE_ENV !== 'production' ? invariant(false, 'Expected onMountComponent() to fire for the child before its parent includes it in onSetChildren().') : _prodInvariant('71') : void 0;
-      if (nextChild.parentID == null) {
-        nextChild.parentID = id;
-        // TODO: This shouldn't be necessary but mounting a new root during in
-        // componentWillMount currently causes not-yet-mounted components to
-        // be purged from our tree data so their parent ID is missing.
-      }
-      !(nextChild.parentID === id) ? process.env.NODE_ENV !== 'production' ? invariant(false, 'Expected onBeforeMountComponent() parent and onSetChildren() to be consistent (%s has parents %s and %s).', nextChildID, nextChild.parentID, id) : _prodInvariant('142', nextChildID, nextChild.parentID, id) : void 0;
-    }
+var ReactComponentTreeDevtool = {
+  onSetDisplayName: function (id, displayName) {
+    updateTree(id, function (item) {
+      return item.displayName = displayName;
+    });
   },
-  onBeforeMountComponent: function (id, element, parentID) {
-    create(id, element, parentID);
+  onSetChildren: function (id, nextChildIDs) {
+    updateTree(id, function (item) {
+      item.childIDs = nextChildIDs;
+
+      nextChildIDs.forEach(function (nextChildID) {
+        var nextChild = tree[nextChildID];
+        !nextChild ? process.env.NODE_ENV !== 'production' ? invariant(false, 'Expected devtool events to fire for the child before its parent includes it in onSetChildren().') : _prodInvariant('68') : void 0;
+        !(nextChild.displayName != null) ? process.env.NODE_ENV !== 'production' ? invariant(false, 'Expected onSetDisplayName() to fire for the child before its parent includes it in onSetChildren().') : _prodInvariant('69') : void 0;
+        !(nextChild.childIDs != null || nextChild.text != null) ? process.env.NODE_ENV !== 'production' ? invariant(false, 'Expected onSetChildren() or onSetText() to fire for the child before its parent includes it in onSetChildren().') : _prodInvariant('70') : void 0;
+        !nextChild.isMounted ? process.env.NODE_ENV !== 'production' ? invariant(false, 'Expected onMountComponent() to fire for the child before its parent includes it in onSetChildren().') : _prodInvariant('71') : void 0;
+        if (nextChild.parentID == null) {
+          nextChild.parentID = id;
+          // TODO: This shouldn't be necessary but mounting a new root during in
+          // componentWillMount currently causes not-yet-mounted components to
+          // be purged from our tree data so their parent ID is missing.
+        }
+        !(nextChild.parentID === id) ? process.env.NODE_ENV !== 'production' ? invariant(false, 'Expected onSetParent() and onSetChildren() to be consistent (%s has parents %s and %s).', nextChildID, nextChild.parentID, id) : _prodInvariant('72', nextChildID, nextChild.parentID, id) : void 0;
+      });
+    });
+  },
+  onSetOwner: function (id, ownerID) {
+    updateTree(id, function (item) {
+      return item.ownerID = ownerID;
+    });
+  },
+  onSetParent: function (id, parentID) {
+    updateTree(id, function (item) {
+      return item.parentID = parentID;
+    });
+  },
+  onSetText: function (id, text) {
+    updateTree(id, function (item) {
+      return item.text = text;
+    });
+  },
+  onBeforeMountComponent: function (id, element) {
+    updateTree(id, function (item) {
+      return item.element = element;
+    });
   },
   onBeforeUpdateComponent: function (id, element) {
-    var item = get(id);
-    if (!item || !item.isMounted) {
-      // We may end up here as a result of setState() in componentWillUnmount().
-      // In this case, ignore the element.
-      return;
-    }
-    item.element = element;
+    updateTree(id, function (item) {
+      return item.element = element;
+    });
   },
   onMountComponent: function (id) {
-    var item = get(id);
-    item.isMounted = true;
-    var isRoot = item.parentID === 0;
-    if (isRoot) {
-      addRoot(id);
-    }
+    updateTree(id, function (item) {
+      return item.isMounted = true;
+    });
+    delete unmountedIDs[id];
+  },
+  onMountRootComponent: function (id) {
+    rootIDs[id] = true;
   },
   onUpdateComponent: function (id) {
-    var item = get(id);
-    if (!item || !item.isMounted) {
-      // We may end up here as a result of setState() in componentWillUnmount().
-      // In this case, ignore the element.
-      return;
-    }
-    item.updateCount++;
+    updateTree(id, function (item) {
+      return item.updateCount++;
+    });
   },
   onUnmountComponent: function (id) {
-    var item = get(id);
-    if (item) {
-      // We need to check if it exists.
-      // `item` might not exist if it is inside an error boundary, and a sibling
-      // error boundary child threw while mounting. Then this instance never
-      // got a chance to mount, but it still gets an unmounting event during
-      // the error boundary cleanup.
-      item.isMounted = false;
-      var isRoot = item.parentID === 0;
-      if (isRoot) {
-        removeRoot(id);
-      }
-    }
-    unmountedIDs.push(id);
+    updateTree(id, function (item) {
+      return item.isMounted = false;
+    });
+    unmountedIDs[id] = true;
+    delete rootIDs[id];
   },
   purgeUnmountedComponents: function () {
-    if (ReactComponentTreeHook._preventPurging) {
+    if (ReactComponentTreeDevtool._preventPurging) {
       // Should only be used for testing.
       return;
     }
 
-    for (var i = 0; i < unmountedIDs.length; i++) {
-      var id = unmountedIDs[i];
+    for (var id in unmountedIDs) {
       purgeDeep(id);
     }
-    unmountedIDs.length = 0;
+    unmountedIDs = {};
   },
   isMounted: function (id) {
-    var item = get(id);
+    var item = tree[id];
     return item ? item.isMounted : false;
   },
   getCurrentStackAddendum: function (topElement) {
@@ -36990,73 +38964,62 @@ var ReactComponentTreeHook = {
     var currentOwner = ReactCurrentOwner.current;
     var id = currentOwner && currentOwner._debugID;
 
-    info += ReactComponentTreeHook.getStackAddendumByID(id);
+    info += ReactComponentTreeDevtool.getStackAddendumByID(id);
     return info;
   },
   getStackAddendumByID: function (id) {
     var info = '';
     while (id) {
       info += describeID(id);
-      id = ReactComponentTreeHook.getParentID(id);
+      id = ReactComponentTreeDevtool.getParentID(id);
     }
     return info;
   },
   getChildIDs: function (id) {
-    var item = get(id);
+    var item = tree[id];
     return item ? item.childIDs : [];
   },
   getDisplayName: function (id) {
-    var element = ReactComponentTreeHook.getElement(id);
-    if (!element) {
-      return null;
-    }
-    return getDisplayName(element);
+    var item = tree[id];
+    return item ? item.displayName : 'Unknown';
   },
   getElement: function (id) {
-    var item = get(id);
+    var item = tree[id];
     return item ? item.element : null;
   },
   getOwnerID: function (id) {
-    var element = ReactComponentTreeHook.getElement(id);
-    if (!element || !element._owner) {
-      return null;
-    }
-    return element._owner._debugID;
+    var item = tree[id];
+    return item ? item.ownerID : null;
   },
   getParentID: function (id) {
-    var item = get(id);
+    var item = tree[id];
     return item ? item.parentID : null;
   },
   getSource: function (id) {
-    var item = get(id);
+    var item = tree[id];
     var element = item ? item.element : null;
     var source = element != null ? element._source : null;
     return source;
   },
   getText: function (id) {
-    var element = ReactComponentTreeHook.getElement(id);
-    if (typeof element === 'string') {
-      return element;
-    } else if (typeof element === 'number') {
-      return '' + element;
-    } else {
-      return null;
-    }
+    var item = tree[id];
+    return item ? item.text : null;
   },
   getUpdateCount: function (id) {
-    var item = get(id);
+    var item = tree[id];
     return item ? item.updateCount : 0;
   },
-
-
-  getRegisteredIDs: getRegisteredIDs,
-
-  getRootIDs: getRootIDs
+  getRootIDs: function () {
+    return Object.keys(rootIDs);
+  },
+  getRegisteredIDs: function () {
+    return Object.keys(tree);
+  }
 };
 
-module.exports = ReactComponentTreeHook;
+module.exports = ReactComponentTreeDevtool;
 }).call(this,require('_process'))
-},{"./ReactCurrentOwner":320,"./reactProdInvariant":422,"_process":154,"fbjs/lib/invariant":446,"fbjs/lib/warning":455}],319:[function(require,module,exports){
+},{"./ReactCurrentOwner":328,"./reactProdInvariant":428,"_process":155,"fbjs/lib/invariant":452,"fbjs/lib/warning":462}],327:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-present, Facebook, Inc.
@@ -37083,19 +39046,14 @@ var ReactInstrumentation = require('./ReactInstrumentation');
 var ReactNodeTypes = require('./ReactNodeTypes');
 var ReactPropTypeLocations = require('./ReactPropTypeLocations');
 var ReactReconciler = require('./ReactReconciler');
+var ReactUpdateQueue = require('./ReactUpdateQueue');
 
 var checkReactTypeSpec = require('./checkReactTypeSpec');
+
 var emptyObject = require('fbjs/lib/emptyObject');
 var invariant = require('fbjs/lib/invariant');
-var shallowEqual = require('fbjs/lib/shallowEqual');
 var shouldUpdateReactComponent = require('./shouldUpdateReactComponent');
 var warning = require('fbjs/lib/warning');
-
-var CompositeTypes = {
-  ImpureClass: 0,
-  PureClass: 1,
-  StatelessFunctional: 2
-};
 
 function StatelessComponent(Component) {}
 StatelessComponent.prototype.render = function () {
@@ -37112,29 +39070,30 @@ function warnIfInvalidElement(Component, element) {
   }
 }
 
+function invokeComponentDidMountWithTimer() {
+  var publicInstance = this._instance;
+  if (this._debugID !== 0) {
+    ReactInstrumentation.debugTool.onBeginLifeCycleTimer(this._debugID, 'componentDidMount');
+  }
+  publicInstance.componentDidMount();
+  if (this._debugID !== 0) {
+    ReactInstrumentation.debugTool.onEndLifeCycleTimer(this._debugID, 'componentDidMount');
+  }
+}
+
+function invokeComponentDidUpdateWithTimer(prevProps, prevState, prevContext) {
+  var publicInstance = this._instance;
+  if (this._debugID !== 0) {
+    ReactInstrumentation.debugTool.onBeginLifeCycleTimer(this._debugID, 'componentDidUpdate');
+  }
+  publicInstance.componentDidUpdate(prevProps, prevState, prevContext);
+  if (this._debugID !== 0) {
+    ReactInstrumentation.debugTool.onEndLifeCycleTimer(this._debugID, 'componentDidUpdate');
+  }
+}
+
 function shouldConstruct(Component) {
-  return !!(Component.prototype && Component.prototype.isReactComponent);
-}
-
-function isPureComponent(Component) {
-  return !!(Component.prototype && Component.prototype.isPureReactComponent);
-}
-
-// Separated into a function to contain deoptimizations caused by try/finally.
-function measureLifeCyclePerf(fn, debugID, timerType) {
-  if (debugID === 0) {
-    // Top-level wrappers (see ReactMount) and empty components (see
-    // ReactDOMEmptyComponent) are invisible to hooks and devtools.
-    // Both are implementation details that should go away in the future.
-    return fn();
-  }
-
-  ReactInstrumentation.debugTool.onBeginLifeCycleTimer(debugID, timerType);
-  try {
-    return fn();
-  } finally {
-    ReactInstrumentation.debugTool.onEndLifeCycleTimer(debugID, timerType);
-  }
+  return Component.prototype && Component.prototype.isReactComponent;
 }
 
 /**
@@ -37186,8 +39145,7 @@ var ReactCompositeComponentMixin = {
    */
   construct: function (element) {
     this._currentElement = element;
-    this._rootNodeID = 0;
-    this._compositeType = null;
+    this._rootNodeID = null;
     this._instance = null;
     this._hostParent = null;
     this._hostContainerInfo = null;
@@ -37228,8 +39186,6 @@ var ReactCompositeComponentMixin = {
    * @internal
    */
   mountComponent: function (transaction, hostParent, hostContainerInfo, context) {
-    var _this = this;
-
     this._context = context;
     this._mountOrder = nextMountID++;
     this._hostParent = hostParent;
@@ -37240,26 +39196,16 @@ var ReactCompositeComponentMixin = {
 
     var Component = this._currentElement.type;
 
-    var updateQueue = transaction.getUpdateQueue();
-
     // Initialize the public class
-    var doConstruct = shouldConstruct(Component);
-    var inst = this._constructComponent(doConstruct, publicProps, publicContext, updateQueue);
+    var inst = this._constructComponent(publicProps, publicContext);
     var renderedElement;
 
     // Support functional components
-    if (!doConstruct && (inst == null || inst.render == null)) {
+    if (!shouldConstruct(Component) && (inst == null || inst.render == null)) {
       renderedElement = inst;
       warnIfInvalidElement(Component, renderedElement);
       !(inst === null || inst === false || ReactElement.isValidElement(inst)) ? process.env.NODE_ENV !== 'production' ? invariant(false, '%s(...): A valid React element (or null) must be returned. You may have returned undefined, an array or some other invalid object.', Component.displayName || Component.name || 'Component') : _prodInvariant('105', Component.displayName || Component.name || 'Component') : void 0;
       inst = new StatelessComponent(Component);
-      this._compositeType = CompositeTypes.StatelessFunctional;
-    } else {
-      if (isPureComponent(Component)) {
-        this._compositeType = CompositeTypes.PureClass;
-      } else {
-        this._compositeType = CompositeTypes.ImpureClass;
-      }
     }
 
     if (process.env.NODE_ENV !== 'production') {
@@ -37280,7 +39226,7 @@ var ReactCompositeComponentMixin = {
     inst.props = publicProps;
     inst.context = publicContext;
     inst.refs = emptyObject;
-    inst.updater = updateQueue;
+    inst.updater = ReactUpdateQueue;
 
     this._instance = inst;
 
@@ -37319,11 +39265,7 @@ var ReactCompositeComponentMixin = {
 
     if (inst.componentDidMount) {
       if (process.env.NODE_ENV !== 'production') {
-        transaction.getReactMountReady().enqueue(function () {
-          measureLifeCyclePerf(function () {
-            return inst.componentDidMount();
-          }, _this._debugID, 'componentDidMount');
-        });
+        transaction.getReactMountReady().enqueue(invokeComponentDidMountWithTimer, this);
       } else {
         transaction.getReactMountReady().enqueue(inst.componentDidMount, inst);
       }
@@ -37332,41 +39274,50 @@ var ReactCompositeComponentMixin = {
     return markup;
   },
 
-  _constructComponent: function (doConstruct, publicProps, publicContext, updateQueue) {
+  _constructComponent: function (publicProps, publicContext) {
     if (process.env.NODE_ENV !== 'production') {
       ReactCurrentOwner.current = this;
       try {
-        return this._constructComponentWithoutOwner(doConstruct, publicProps, publicContext, updateQueue);
+        return this._constructComponentWithoutOwner(publicProps, publicContext);
       } finally {
         ReactCurrentOwner.current = null;
       }
     } else {
-      return this._constructComponentWithoutOwner(doConstruct, publicProps, publicContext, updateQueue);
+      return this._constructComponentWithoutOwner(publicProps, publicContext);
     }
   },
 
-  _constructComponentWithoutOwner: function (doConstruct, publicProps, publicContext, updateQueue) {
+  _constructComponentWithoutOwner: function (publicProps, publicContext) {
     var Component = this._currentElement.type;
-
-    if (doConstruct) {
+    var instanceOrElement;
+    if (shouldConstruct(Component)) {
       if (process.env.NODE_ENV !== 'production') {
-        return measureLifeCyclePerf(function () {
-          return new Component(publicProps, publicContext, updateQueue);
-        }, this._debugID, 'ctor');
-      } else {
-        return new Component(publicProps, publicContext, updateQueue);
+        if (this._debugID !== 0) {
+          ReactInstrumentation.debugTool.onBeginLifeCycleTimer(this._debugID, 'ctor');
+        }
+      }
+      instanceOrElement = new Component(publicProps, publicContext, ReactUpdateQueue);
+      if (process.env.NODE_ENV !== 'production') {
+        if (this._debugID !== 0) {
+          ReactInstrumentation.debugTool.onEndLifeCycleTimer(this._debugID, 'ctor');
+        }
+      }
+    } else {
+      // This can still be an instance in case of factory components
+      // but we'll count this as time spent rendering as the more common case.
+      if (process.env.NODE_ENV !== 'production') {
+        if (this._debugID !== 0) {
+          ReactInstrumentation.debugTool.onBeginLifeCycleTimer(this._debugID, 'render');
+        }
+      }
+      instanceOrElement = Component(publicProps, publicContext, ReactUpdateQueue);
+      if (process.env.NODE_ENV !== 'production') {
+        if (this._debugID !== 0) {
+          ReactInstrumentation.debugTool.onEndLifeCycleTimer(this._debugID, 'render');
+        }
       }
     }
-
-    // This can still be an instance in case of factory components
-    // but we'll count this as time spent rendering as the more common case.
-    if (process.env.NODE_ENV !== 'production') {
-      return measureLifeCyclePerf(function () {
-        return Component(publicProps, publicContext, updateQueue);
-      }, this._debugID, 'render');
-    } else {
-      return Component(publicProps, publicContext, updateQueue);
-    }
+    return instanceOrElement;
   },
 
   performInitialMountWithErrorHandling: function (renderedElement, hostParent, hostContainerInfo, transaction, context) {
@@ -37395,19 +39346,17 @@ var ReactCompositeComponentMixin = {
 
   performInitialMount: function (renderedElement, hostParent, hostContainerInfo, transaction, context) {
     var inst = this._instance;
-
-    var debugID = 0;
-    if (process.env.NODE_ENV !== 'production') {
-      debugID = this._debugID;
-    }
-
     if (inst.componentWillMount) {
       if (process.env.NODE_ENV !== 'production') {
-        measureLifeCyclePerf(function () {
-          return inst.componentWillMount();
-        }, debugID, 'componentWillMount');
-      } else {
-        inst.componentWillMount();
+        if (this._debugID !== 0) {
+          ReactInstrumentation.debugTool.onBeginLifeCycleTimer(this._debugID, 'componentWillMount');
+        }
+      }
+      inst.componentWillMount();
+      if (process.env.NODE_ENV !== 'production') {
+        if (this._debugID !== 0) {
+          ReactInstrumentation.debugTool.onEndLifeCycleTimer(this._debugID, 'componentWillMount');
+        }
       }
       // When mounting, calls to `setState` by `componentWillMount` will set
       // `this._pendingStateQueue` without triggering a re-render.
@@ -37421,18 +39370,20 @@ var ReactCompositeComponentMixin = {
       renderedElement = this._renderValidatedComponent();
     }
 
-    var nodeType = ReactNodeTypes.getType(renderedElement);
-    this._renderedNodeType = nodeType;
-    var child = this._instantiateReactComponent(renderedElement, nodeType !== ReactNodeTypes.EMPTY /* shouldHaveDebugID */
-    );
+    this._renderedNodeType = ReactNodeTypes.getType(renderedElement);
+    var child = this._instantiateReactComponent(renderedElement);
     this._renderedComponent = child;
+    if (process.env.NODE_ENV !== 'production') {
+      if (child._debugID !== 0 && this._debugID !== 0) {
+        ReactInstrumentation.debugTool.onSetParent(child._debugID, this._debugID);
+      }
+    }
 
-    var markup = ReactReconciler.mountComponent(child, transaction, hostParent, hostContainerInfo, this._processChildContext(context), debugID);
+    var markup = ReactReconciler.mountComponent(child, transaction, hostParent, hostContainerInfo, this._processChildContext(context));
 
     if (process.env.NODE_ENV !== 'production') {
-      if (debugID !== 0) {
-        var childDebugIDs = child._debugID !== 0 ? [child._debugID] : [];
-        ReactInstrumentation.debugTool.onSetChildren(debugID, childDebugIDs);
+      if (this._debugID !== 0) {
+        ReactInstrumentation.debugTool.onSetChildren(this._debugID, child._debugID !== 0 ? [child._debugID] : []);
       }
     }
 
@@ -37453,22 +39404,24 @@ var ReactCompositeComponentMixin = {
     if (!this._renderedComponent) {
       return;
     }
-
     var inst = this._instance;
 
     if (inst.componentWillUnmount && !inst._calledComponentWillUnmount) {
       inst._calledComponentWillUnmount = true;
-
+      if (process.env.NODE_ENV !== 'production') {
+        if (this._debugID !== 0) {
+          ReactInstrumentation.debugTool.onBeginLifeCycleTimer(this._debugID, 'componentWillUnmount');
+        }
+      }
       if (safely) {
         var name = this.getName() + '.componentWillUnmount()';
         ReactErrorUtils.invokeGuardedCallback(name, inst.componentWillUnmount.bind(inst));
       } else {
-        if (process.env.NODE_ENV !== 'production') {
-          measureLifeCyclePerf(function () {
-            return inst.componentWillUnmount();
-          }, this._debugID, 'componentWillUnmount');
-        } else {
-          inst.componentWillUnmount();
+        inst.componentWillUnmount();
+      }
+      if (process.env.NODE_ENV !== 'production') {
+        if (this._debugID !== 0) {
+          ReactInstrumentation.debugTool.onEndLifeCycleTimer(this._debugID, 'componentWillUnmount');
         }
       }
     }
@@ -37492,7 +39445,7 @@ var ReactCompositeComponentMixin = {
     // These fields do not really need to be reset since this object is no
     // longer accessible.
     this._context = null;
-    this._rootNodeID = 0;
+    this._rootNodeID = null;
     this._topLevelWrapper = null;
 
     // Delete the reference from the instance to this internal representation
@@ -37555,21 +39508,13 @@ var ReactCompositeComponentMixin = {
   _processChildContext: function (currentContext) {
     var Component = this._currentElement.type;
     var inst = this._instance;
-    var childContext;
-
-    if (inst.getChildContext) {
-      if (process.env.NODE_ENV !== 'production') {
-        ReactInstrumentation.debugTool.onBeginProcessingChildContext();
-        try {
-          childContext = inst.getChildContext();
-        } finally {
-          ReactInstrumentation.debugTool.onEndProcessingChildContext();
-        }
-      } else {
-        childContext = inst.getChildContext();
-      }
+    if (process.env.NODE_ENV !== 'production') {
+      ReactInstrumentation.debugTool.onBeginProcessingChildContext();
     }
-
+    var childContext = inst.getChildContext && inst.getChildContext();
+    if (process.env.NODE_ENV !== 'production') {
+      ReactInstrumentation.debugTool.onEndProcessingChildContext();
+    }
     if (childContext) {
       !(typeof Component.childContextTypes === 'object') ? process.env.NODE_ENV !== 'production' ? invariant(false, '%s.getChildContext(): childContextTypes must be defined in order to use getChildContext().', this.getName() || 'ReactCompositeComponent') : _prodInvariant('107', this.getName() || 'ReactCompositeComponent') : void 0;
       if (process.env.NODE_ENV !== 'production') {
@@ -37642,6 +39587,7 @@ var ReactCompositeComponentMixin = {
 
     var willReceive = false;
     var nextContext;
+    var nextProps;
 
     // Determine if the context has changed or not
     if (this._context === nextUnmaskedContext) {
@@ -37651,8 +39597,7 @@ var ReactCompositeComponentMixin = {
       willReceive = true;
     }
 
-    var prevProps = prevParentElement.props;
-    var nextProps = nextParentElement.props;
+    nextProps = nextParentElement.props;
 
     // Not a simple state update but a props update
     if (prevParentElement !== nextParentElement) {
@@ -37664,29 +39609,31 @@ var ReactCompositeComponentMixin = {
     // immediately reconciled instead of waiting for the next batch.
     if (willReceive && inst.componentWillReceiveProps) {
       if (process.env.NODE_ENV !== 'production') {
-        measureLifeCyclePerf(function () {
-          return inst.componentWillReceiveProps(nextProps, nextContext);
-        }, this._debugID, 'componentWillReceiveProps');
-      } else {
-        inst.componentWillReceiveProps(nextProps, nextContext);
+        if (this._debugID !== 0) {
+          ReactInstrumentation.debugTool.onBeginLifeCycleTimer(this._debugID, 'componentWillReceiveProps');
+        }
+      }
+      inst.componentWillReceiveProps(nextProps, nextContext);
+      if (process.env.NODE_ENV !== 'production') {
+        if (this._debugID !== 0) {
+          ReactInstrumentation.debugTool.onEndLifeCycleTimer(this._debugID, 'componentWillReceiveProps');
+        }
       }
     }
 
     var nextState = this._processPendingState(nextProps, nextContext);
     var shouldUpdate = true;
 
-    if (!this._pendingForceUpdate) {
-      if (inst.shouldComponentUpdate) {
-        if (process.env.NODE_ENV !== 'production') {
-          shouldUpdate = measureLifeCyclePerf(function () {
-            return inst.shouldComponentUpdate(nextProps, nextState, nextContext);
-          }, this._debugID, 'shouldComponentUpdate');
-        } else {
-          shouldUpdate = inst.shouldComponentUpdate(nextProps, nextState, nextContext);
+    if (!this._pendingForceUpdate && inst.shouldComponentUpdate) {
+      if (process.env.NODE_ENV !== 'production') {
+        if (this._debugID !== 0) {
+          ReactInstrumentation.debugTool.onBeginLifeCycleTimer(this._debugID, 'shouldComponentUpdate');
         }
-      } else {
-        if (this._compositeType === CompositeTypes.PureClass) {
-          shouldUpdate = !shallowEqual(prevProps, nextProps) || !shallowEqual(inst.state, nextState);
+      }
+      shouldUpdate = inst.shouldComponentUpdate(nextProps, nextState, nextContext);
+      if (process.env.NODE_ENV !== 'production') {
+        if (this._debugID !== 0) {
+          ReactInstrumentation.debugTool.onEndLifeCycleTimer(this._debugID, 'shouldComponentUpdate');
         }
       }
     }
@@ -37748,8 +39695,6 @@ var ReactCompositeComponentMixin = {
    * @private
    */
   _performComponentUpdate: function (nextElement, nextProps, nextState, nextContext, transaction, unmaskedContext) {
-    var _this2 = this;
-
     var inst = this._instance;
 
     var hasComponentDidUpdate = Boolean(inst.componentDidUpdate);
@@ -37764,11 +39709,15 @@ var ReactCompositeComponentMixin = {
 
     if (inst.componentWillUpdate) {
       if (process.env.NODE_ENV !== 'production') {
-        measureLifeCyclePerf(function () {
-          return inst.componentWillUpdate(nextProps, nextState, nextContext);
-        }, this._debugID, 'componentWillUpdate');
-      } else {
-        inst.componentWillUpdate(nextProps, nextState, nextContext);
+        if (this._debugID !== 0) {
+          ReactInstrumentation.debugTool.onBeginLifeCycleTimer(this._debugID, 'componentWillUpdate');
+        }
+      }
+      inst.componentWillUpdate(nextProps, nextState, nextContext);
+      if (process.env.NODE_ENV !== 'production') {
+        if (this._debugID !== 0) {
+          ReactInstrumentation.debugTool.onEndLifeCycleTimer(this._debugID, 'componentWillUpdate');
+        }
       }
     }
 
@@ -37782,9 +39731,7 @@ var ReactCompositeComponentMixin = {
 
     if (hasComponentDidUpdate) {
       if (process.env.NODE_ENV !== 'production') {
-        transaction.getReactMountReady().enqueue(function () {
-          measureLifeCyclePerf(inst.componentDidUpdate.bind(inst, prevProps, prevState, prevContext), _this2._debugID, 'componentDidUpdate');
-        });
+        transaction.getReactMountReady().enqueue(invokeComponentDidUpdateWithTimer.bind(this, prevProps, prevState, prevContext), this);
       } else {
         transaction.getReactMountReady().enqueue(inst.componentDidUpdate.bind(inst, prevProps, prevState, prevContext), inst);
       }
@@ -37801,30 +39748,26 @@ var ReactCompositeComponentMixin = {
     var prevComponentInstance = this._renderedComponent;
     var prevRenderedElement = prevComponentInstance._currentElement;
     var nextRenderedElement = this._renderValidatedComponent();
-
-    var debugID = 0;
-    if (process.env.NODE_ENV !== 'production') {
-      debugID = this._debugID;
-    }
-
     if (shouldUpdateReactComponent(prevRenderedElement, nextRenderedElement)) {
       ReactReconciler.receiveComponent(prevComponentInstance, nextRenderedElement, transaction, this._processChildContext(context));
     } else {
       var oldHostNode = ReactReconciler.getHostNode(prevComponentInstance);
       ReactReconciler.unmountComponent(prevComponentInstance, false);
 
-      var nodeType = ReactNodeTypes.getType(nextRenderedElement);
-      this._renderedNodeType = nodeType;
-      var child = this._instantiateReactComponent(nextRenderedElement, nodeType !== ReactNodeTypes.EMPTY /* shouldHaveDebugID */
-      );
+      this._renderedNodeType = ReactNodeTypes.getType(nextRenderedElement);
+      var child = this._instantiateReactComponent(nextRenderedElement);
       this._renderedComponent = child;
+      if (process.env.NODE_ENV !== 'production') {
+        if (child._debugID !== 0 && this._debugID !== 0) {
+          ReactInstrumentation.debugTool.onSetParent(child._debugID, this._debugID);
+        }
+      }
 
-      var nextMarkup = ReactReconciler.mountComponent(child, transaction, this._hostParent, this._hostContainerInfo, this._processChildContext(context), debugID);
+      var nextMarkup = ReactReconciler.mountComponent(child, transaction, this._hostParent, this._hostContainerInfo, this._processChildContext(context));
 
       if (process.env.NODE_ENV !== 'production') {
-        if (debugID !== 0) {
-          var childDebugIDs = child._debugID !== 0 ? [child._debugID] : [];
-          ReactInstrumentation.debugTool.onSetChildren(debugID, childDebugIDs);
+        if (this._debugID !== 0) {
+          ReactInstrumentation.debugTool.onSetChildren(this._debugID, child._debugID !== 0 ? [child._debugID] : []);
         }
       }
 
@@ -37846,14 +39789,17 @@ var ReactCompositeComponentMixin = {
    */
   _renderValidatedComponentWithoutOwnerOrContext: function () {
     var inst = this._instance;
-    var renderedComponent;
 
     if (process.env.NODE_ENV !== 'production') {
-      renderedComponent = measureLifeCyclePerf(function () {
-        return inst.render();
-      }, this._debugID, 'render');
-    } else {
-      renderedComponent = inst.render();
+      if (this._debugID !== 0) {
+        ReactInstrumentation.debugTool.onBeginLifeCycleTimer(this._debugID, 'render');
+      }
+    }
+    var renderedComponent = inst.render();
+    if (process.env.NODE_ENV !== 'production') {
+      if (this._debugID !== 0) {
+        ReactInstrumentation.debugTool.onEndLifeCycleTimer(this._debugID, 'render');
+      }
     }
 
     if (process.env.NODE_ENV !== 'production') {
@@ -37873,15 +39819,11 @@ var ReactCompositeComponentMixin = {
    */
   _renderValidatedComponent: function () {
     var renderedComponent;
-    if (process.env.NODE_ENV !== 'production' || this._compositeType !== CompositeTypes.StatelessFunctional) {
-      ReactCurrentOwner.current = this;
-      try {
-        renderedComponent = this._renderValidatedComponentWithoutOwnerOrContext();
-      } finally {
-        ReactCurrentOwner.current = null;
-      }
-    } else {
+    ReactCurrentOwner.current = this;
+    try {
       renderedComponent = this._renderValidatedComponentWithoutOwnerOrContext();
+    } finally {
+      ReactCurrentOwner.current = null;
     }
     !(
     // TODO: An `isValidNode` function would probably be more appropriate
@@ -37904,7 +39846,7 @@ var ReactCompositeComponentMixin = {
     var publicComponentInstance = component.getPublicInstance();
     if (process.env.NODE_ENV !== 'production') {
       var componentName = component && component.getName ? component.getName() : 'a component';
-      process.env.NODE_ENV !== 'production' ? warning(publicComponentInstance != null || component._compositeType !== CompositeTypes.StatelessFunctional, 'Stateless function components cannot be given refs ' + '(See ref "%s" in %s created by %s). ' + 'Attempts to access this ref will fail.', ref, componentName, this.getName()) : void 0;
+      process.env.NODE_ENV !== 'production' ? warning(publicComponentInstance != null, 'Stateless function components cannot be given refs ' + '(See ref "%s" in %s created by %s). ' + 'Attempts to access this ref will fail.', ref, componentName, this.getName()) : void 0;
     }
     var refs = inst.refs === emptyObject ? inst.refs = {} : inst.refs;
     refs[ref] = publicComponentInstance;
@@ -37944,7 +39886,7 @@ var ReactCompositeComponentMixin = {
    */
   getPublicInstance: function () {
     var inst = this._instance;
-    if (this._compositeType === CompositeTypes.StatelessFunctional) {
+    if (inst instanceof StatelessComponent) {
       return null;
     }
     return inst;
@@ -37963,7 +39905,7 @@ var ReactCompositeComponent = {
 
 module.exports = ReactCompositeComponent;
 }).call(this,require('_process'))
-},{"./ReactComponentEnvironment":317,"./ReactCurrentOwner":320,"./ReactElement":343,"./ReactErrorUtils":346,"./ReactInstanceMap":354,"./ReactInstrumentation":355,"./ReactNodeTypes":361,"./ReactPropTypeLocations":365,"./ReactReconciler":370,"./checkReactTypeSpec":401,"./reactProdInvariant":422,"./shouldUpdateReactComponent":426,"_process":154,"fbjs/lib/emptyObject":439,"fbjs/lib/invariant":446,"fbjs/lib/shallowEqual":454,"fbjs/lib/warning":455,"object-assign":152}],320:[function(require,module,exports){
+},{"./ReactComponentEnvironment":325,"./ReactCurrentOwner":328,"./ReactElement":352,"./ReactErrorUtils":355,"./ReactInstanceMap":363,"./ReactInstrumentation":364,"./ReactNodeTypes":370,"./ReactPropTypeLocations":374,"./ReactReconciler":377,"./ReactUpdateQueue":383,"./checkReactTypeSpec":407,"./reactProdInvariant":428,"./shouldUpdateReactComponent":432,"_process":155,"fbjs/lib/emptyObject":445,"fbjs/lib/invariant":452,"fbjs/lib/warning":462,"object-assign":153}],328:[function(require,module,exports){
 /**
  * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -37995,7 +39937,7 @@ var ReactCurrentOwner = {
 };
 
 module.exports = ReactCurrentOwner;
-},{}],321:[function(require,module,exports){
+},{}],329:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-present, Facebook, Inc.
@@ -38026,7 +39968,7 @@ var warning = require('fbjs/lib/warning');
 
 ReactDefaultInjection.inject();
 
-var ReactDOM = {
+var React = {
   findDOMNode: findDOMNode,
   render: ReactMount.render,
   unmountComponentAtNode: ReactMount.unmountComponentAtNode,
@@ -38097,18 +40039,9 @@ if (process.env.NODE_ENV !== 'production') {
   }
 }
 
-if (process.env.NODE_ENV !== 'production') {
-  var ReactInstrumentation = require('./ReactInstrumentation');
-  var ReactDOMUnknownPropertyHook = require('./ReactDOMUnknownPropertyHook');
-  var ReactDOMNullInputValuePropHook = require('./ReactDOMNullInputValuePropHook');
-
-  ReactInstrumentation.debugTool.addHook(ReactDOMUnknownPropertyHook);
-  ReactInstrumentation.debugTool.addHook(ReactDOMNullInputValuePropHook);
-}
-
-module.exports = ReactDOM;
+module.exports = React;
 }).call(this,require('_process'))
-},{"./ReactDOMComponentTree":325,"./ReactDOMNullInputValuePropHook":332,"./ReactDOMUnknownPropertyHook":339,"./ReactDefaultInjection":342,"./ReactInstrumentation":355,"./ReactMount":358,"./ReactReconciler":370,"./ReactUpdates":378,"./ReactVersion":379,"./findDOMNode":405,"./getHostComponentFromComposite":412,"./renderSubtreeIntoContainer":423,"_process":154,"fbjs/lib/ExecutionEnvironment":432,"fbjs/lib/warning":455}],322:[function(require,module,exports){
+},{"./ReactDOMComponentTree":333,"./ReactDefaultInjection":351,"./ReactMount":367,"./ReactReconciler":377,"./ReactUpdates":384,"./ReactVersion":385,"./findDOMNode":411,"./getHostComponentFromComposite":418,"./renderSubtreeIntoContainer":429,"_process":155,"fbjs/lib/ExecutionEnvironment":438,"fbjs/lib/warning":462}],330:[function(require,module,exports){
 /**
  * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -38133,7 +40066,7 @@ var ReactDOMButton = {
 };
 
 module.exports = ReactDOMButton;
-},{"./DisabledInputUtils":295}],323:[function(require,module,exports){
+},{"./DisabledInputUtils":304}],331:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-present, Facebook, Inc.
@@ -38163,6 +40096,7 @@ var EventConstants = require('./EventConstants');
 var EventPluginHub = require('./EventPluginHub');
 var EventPluginRegistry = require('./EventPluginRegistry');
 var ReactBrowserEventEmitter = require('./ReactBrowserEventEmitter');
+var ReactComponentBrowserEnvironment = require('./ReactComponentBrowserEnvironment');
 var ReactDOMButton = require('./ReactDOMButton');
 var ReactDOMComponentFlags = require('./ReactDOMComponentFlags');
 var ReactDOMComponentTree = require('./ReactDOMComponentTree');
@@ -38278,7 +40212,7 @@ function assertValidProps(component, props) {
   }
   // Note the use of `==` which checks for null or undefined.
   if (voidElementTags[component._tag]) {
-    !(props.children == null && props.dangerouslySetInnerHTML == null) ? process.env.NODE_ENV !== 'production' ? invariant(false, '%s is a void element tag and must neither have `children` nor use `dangerouslySetInnerHTML`.%s', component._tag, component._currentElement._owner ? ' Check the render method of ' + component._currentElement._owner.getName() + '.' : '') : _prodInvariant('137', component._tag, component._currentElement._owner ? ' Check the render method of ' + component._currentElement._owner.getName() + '.' : '') : void 0;
+    !(props.children == null && props.dangerouslySetInnerHTML == null) ? process.env.NODE_ENV !== 'production' ? invariant(false, '%s is a void element tag and must not have `children` or use `props.dangerouslySetInnerHTML`.%s', component._tag, component._currentElement._owner ? ' Check the render method of ' + component._currentElement._owner.getName() + '.' : '') : _prodInvariant('59', component._tag, component._currentElement._owner ? ' Check the render method of ' + component._currentElement._owner.getName() + '.' : '') : void 0;
   }
   if (props.dangerouslySetInnerHTML != null) {
     !(props.children == null) ? process.env.NODE_ENV !== 'production' ? invariant(false, 'Can only set one of `children` or `props.dangerouslySetInnerHTML`.') : _prodInvariant('60') : void 0;
@@ -38332,13 +40266,12 @@ function optionPostMount() {
   ReactDOMOption.postMountWrapper(inst);
 }
 
-var setAndValidateContentChildDev = emptyFunction;
+var setContentChildForInstrumentation = emptyFunction;
 if (process.env.NODE_ENV !== 'production') {
-  setAndValidateContentChildDev = function (content) {
+  setContentChildForInstrumentation = function (content) {
     var hasExistingContent = this._contentDebugID != null;
     var debugID = this._debugID;
-    // This ID represents the inlined child that has no backing instance:
-    var contentDebugID = -debugID;
+    var contentDebugID = debugID + '#text';
 
     if (content == null) {
       if (hasExistingContent) {
@@ -38348,13 +40281,18 @@ if (process.env.NODE_ENV !== 'production') {
       return;
     }
 
-    validateDOMNesting(null, String(content), this, this._ancestorInfo);
     this._contentDebugID = contentDebugID;
+    var text = '' + content;
+
+    ReactInstrumentation.debugTool.onSetDisplayName(contentDebugID, '#text');
+    ReactInstrumentation.debugTool.onSetParent(contentDebugID, debugID);
+    ReactInstrumentation.debugTool.onSetText(contentDebugID, text);
+
     if (hasExistingContent) {
       ReactInstrumentation.debugTool.onBeforeUpdateComponent(contentDebugID, content);
       ReactInstrumentation.debugTool.onUpdateComponent(contentDebugID);
     } else {
-      ReactInstrumentation.debugTool.onBeforeMountComponent(contentDebugID, content, debugID);
+      ReactInstrumentation.debugTool.onBeforeMountComponent(contentDebugID, content);
       ReactInstrumentation.debugTool.onMountComponent(contentDebugID);
       ReactInstrumentation.debugTool.onSetChildren(debugID, [contentDebugID]);
     }
@@ -38515,15 +40453,15 @@ function ReactDOMComponent(element) {
   this._previousStyleCopy = null;
   this._hostNode = null;
   this._hostParent = null;
-  this._rootNodeID = 0;
-  this._domID = 0;
+  this._rootNodeID = null;
+  this._domID = null;
   this._hostContainerInfo = null;
   this._wrapperState = null;
   this._topLevelWrapper = null;
   this._flags = 0;
   if (process.env.NODE_ENV !== 'production') {
     this._ancestorInfo = null;
-    setAndValidateContentChildDev.call(this, null);
+    setContentChildForInstrumentation.call(this, null);
   }
 }
 
@@ -38537,7 +40475,7 @@ ReactDOMComponent.Mixin = {
    *
    * @internal
    * @param {ReactReconcileTransaction|ReactServerRenderingTransaction} transaction
-   * @param {?ReactDOMComponent} the parent component instance
+   * @param {?ReactDOMComponent} the containing DOM component instance
    * @param {?object} info about the host container
    * @param {object} context
    * @return {string} The computed markup.
@@ -38623,7 +40561,7 @@ ReactDOMComponent.Mixin = {
       if (parentInfo) {
         // parentInfo should always be present except for the top-level
         // component when server rendering
-        validateDOMNesting(this._tag, null, this, parentInfo);
+        validateDOMNesting(this._tag, this, parentInfo);
       }
       this._ancestorInfo = validateDOMNesting.updatedAncestorInfo(parentInfo, this._tag, this);
     }
@@ -38792,7 +40730,7 @@ ReactDOMComponent.Mixin = {
         // TODO: Validate that text is allowed as a child of this node
         ret = escapeTextContentForBrowser(contentToUse);
         if (process.env.NODE_ENV !== 'production') {
-          setAndValidateContentChildDev.call(this, contentToUse);
+          setContentChildForInstrumentation.call(this, contentToUse);
         }
       } else if (childrenToUse != null) {
         var mountImages = this.mountChildren(childrenToUse, transaction, context);
@@ -38829,7 +40767,7 @@ ReactDOMComponent.Mixin = {
       if (contentToUse != null) {
         // TODO: Validate that text is allowed as a child of this node
         if (process.env.NODE_ENV !== 'production') {
-          setAndValidateContentChildDev.call(this, contentToUse);
+          setContentChildForInstrumentation.call(this, contentToUse);
         }
         DOMLazyTree.queueText(lazyTree, contentToUse);
       } else if (childrenToUse != null) {
@@ -38875,6 +40813,7 @@ ReactDOMComponent.Mixin = {
         nextProps = ReactDOMButton.getHostProps(this, nextProps);
         break;
       case 'input':
+        ReactDOMInput.updateWrapper(this);
         lastProps = ReactDOMInput.getHostProps(this, lastProps);
         nextProps = ReactDOMInput.getHostProps(this, nextProps);
         break;
@@ -38887,6 +40826,7 @@ ReactDOMComponent.Mixin = {
         nextProps = ReactDOMSelect.getHostProps(this, nextProps);
         break;
       case 'textarea':
+        ReactDOMTextarea.updateWrapper(this);
         lastProps = ReactDOMTextarea.getHostProps(this, lastProps);
         nextProps = ReactDOMTextarea.getHostProps(this, nextProps);
         break;
@@ -38896,21 +40836,10 @@ ReactDOMComponent.Mixin = {
     this._updateDOMProperties(lastProps, nextProps, transaction);
     this._updateDOMChildren(lastProps, nextProps, transaction, context);
 
-    switch (this._tag) {
-      case 'input':
-        // Update the wrapper around inputs *after* updating props. This has to
-        // happen after `_updateDOMProperties`. Otherwise HTML5 input validations
-        // raise warnings and prevent the new value from being assigned.
-        ReactDOMInput.updateWrapper(this);
-        break;
-      case 'textarea':
-        ReactDOMTextarea.updateWrapper(this);
-        break;
-      case 'select':
-        // <select> value update needs to occur after <option> children
-        // reconciliation
-        transaction.getReactMountReady().enqueue(postUpdateSelectWrapper, this);
-        break;
+    if (this._tag === 'select') {
+      // <select> value update needs to occur after <option> children
+      // reconciliation
+      transaction.getReactMountReady().enqueue(postUpdateSelectWrapper, this);
     }
   },
 
@@ -39061,7 +40990,7 @@ ReactDOMComponent.Mixin = {
       if (lastContent !== nextContent) {
         this.updateTextContent('' + nextContent);
         if (process.env.NODE_ENV !== 'production') {
-          setAndValidateContentChildDev.call(this, nextContent);
+          setContentChildForInstrumentation.call(this, nextContent);
         }
       }
     } else if (nextHtml != null) {
@@ -39073,7 +41002,7 @@ ReactDOMComponent.Mixin = {
       }
     } else if (nextChildren != null) {
       if (process.env.NODE_ENV !== 'production') {
-        setAndValidateContentChildDev.call(this, null);
+        setContentChildForInstrumentation.call(this, null);
       }
 
       this.updateChildren(nextChildren, transaction, context);
@@ -39123,12 +41052,13 @@ ReactDOMComponent.Mixin = {
     this.unmountChildren(safely);
     ReactDOMComponentTree.uncacheNode(this);
     EventPluginHub.deleteAllListeners(this);
-    this._rootNodeID = 0;
-    this._domID = 0;
+    ReactComponentBrowserEnvironment.unmountIDFromEnvironment(this._rootNodeID);
+    this._rootNodeID = null;
+    this._domID = null;
     this._wrapperState = null;
 
     if (process.env.NODE_ENV !== 'production') {
-      setAndValidateContentChildDev.call(this, null);
+      setContentChildForInstrumentation.call(this, null);
     }
   },
 
@@ -39142,7 +41072,7 @@ _assign(ReactDOMComponent.prototype, ReactDOMComponent.Mixin, ReactMultiChild.Mi
 
 module.exports = ReactDOMComponent;
 }).call(this,require('_process'))
-},{"./AutoFocusUtils":282,"./CSSPropertyOperations":285,"./DOMLazyTree":289,"./DOMNamespaces":290,"./DOMProperty":291,"./DOMPropertyOperations":292,"./EventConstants":297,"./EventPluginHub":298,"./EventPluginRegistry":299,"./ReactBrowserEventEmitter":308,"./ReactDOMButton":322,"./ReactDOMComponentFlags":324,"./ReactDOMComponentTree":325,"./ReactDOMInput":331,"./ReactDOMOption":333,"./ReactDOMSelect":334,"./ReactDOMTextarea":337,"./ReactInstrumentation":355,"./ReactMultiChild":359,"./ReactServerRenderingTransaction":372,"./escapeTextContentForBrowser":404,"./isEventSupported":418,"./reactProdInvariant":422,"./validateDOMNesting":429,"_process":154,"fbjs/lib/emptyFunction":438,"fbjs/lib/invariant":446,"fbjs/lib/keyOf":450,"fbjs/lib/shallowEqual":454,"fbjs/lib/warning":455,"object-assign":152}],324:[function(require,module,exports){
+},{"./AutoFocusUtils":291,"./CSSPropertyOperations":294,"./DOMLazyTree":298,"./DOMNamespaces":299,"./DOMProperty":300,"./DOMPropertyOperations":301,"./EventConstants":306,"./EventPluginHub":307,"./EventPluginRegistry":308,"./ReactBrowserEventEmitter":317,"./ReactComponentBrowserEnvironment":324,"./ReactDOMButton":330,"./ReactDOMComponentFlags":332,"./ReactDOMComponentTree":333,"./ReactDOMInput":340,"./ReactDOMOption":342,"./ReactDOMSelect":343,"./ReactDOMTextarea":346,"./ReactInstrumentation":364,"./ReactMultiChild":368,"./ReactServerRenderingTransaction":379,"./escapeTextContentForBrowser":410,"./isEventSupported":424,"./reactProdInvariant":428,"./validateDOMNesting":435,"_process":155,"fbjs/lib/emptyFunction":444,"fbjs/lib/invariant":452,"fbjs/lib/keyOf":456,"fbjs/lib/shallowEqual":461,"fbjs/lib/warning":462,"object-assign":153}],332:[function(require,module,exports){
 /**
  * Copyright 2015-present, Facebook, Inc.
  * All rights reserved.
@@ -39161,7 +41091,7 @@ var ReactDOMComponentFlags = {
 };
 
 module.exports = ReactDOMComponentFlags;
-},{}],325:[function(require,module,exports){
+},{}],333:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-present, Facebook, Inc.
@@ -39247,7 +41177,7 @@ function precacheChildNodes(inst, node) {
     }
     var childInst = children[name];
     var childID = getRenderedHostOrTextFromComponent(childInst)._domID;
-    if (childID === 0) {
+    if (childID == null) {
       // We're currently unmounting this child in ReactMultiChild; skip it.
       continue;
     }
@@ -39352,7 +41282,7 @@ var ReactDOMComponentTree = {
 
 module.exports = ReactDOMComponentTree;
 }).call(this,require('_process'))
-},{"./DOMProperty":291,"./ReactDOMComponentFlags":324,"./reactProdInvariant":422,"_process":154,"fbjs/lib/invariant":446}],326:[function(require,module,exports){
+},{"./DOMProperty":300,"./ReactDOMComponentFlags":332,"./reactProdInvariant":428,"_process":155,"fbjs/lib/invariant":452}],334:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-present, Facebook, Inc.
@@ -39388,7 +41318,77 @@ function ReactDOMContainerInfo(topLevelWrapper, node) {
 
 module.exports = ReactDOMContainerInfo;
 }).call(this,require('_process'))
-},{"./validateDOMNesting":429,"_process":154}],327:[function(require,module,exports){
+},{"./validateDOMNesting":435,"_process":155}],335:[function(require,module,exports){
+(function (process){
+/**
+ * Copyright 2013-present, Facebook, Inc.
+ * All rights reserved.
+ *
+ * This source code is licensed under the BSD-style license found in the
+ * LICENSE file in the root directory of this source tree. An additional grant
+ * of patent rights can be found in the PATENTS file in the same directory.
+ *
+ * @providesModule ReactDOMDebugTool
+ */
+
+'use strict';
+
+var ReactDOMUnknownPropertyDevtool = require('./ReactDOMUnknownPropertyDevtool');
+var ReactDebugTool = require('./ReactDebugTool');
+
+var warning = require('fbjs/lib/warning');
+
+var eventHandlers = [];
+var handlerDoesThrowForEvent = {};
+
+function emitEvent(handlerFunctionName, arg1, arg2, arg3, arg4, arg5) {
+  if (process.env.NODE_ENV !== 'production') {
+    eventHandlers.forEach(function (handler) {
+      try {
+        if (handler[handlerFunctionName]) {
+          handler[handlerFunctionName](arg1, arg2, arg3, arg4, arg5);
+        }
+      } catch (e) {
+        process.env.NODE_ENV !== 'production' ? warning(handlerDoesThrowForEvent[handlerFunctionName], 'exception thrown by devtool while handling %s: %s', handlerFunctionName, e + '\n' + e.stack) : void 0;
+        handlerDoesThrowForEvent[handlerFunctionName] = true;
+      }
+    });
+  }
+}
+
+var ReactDOMDebugTool = {
+  addDevtool: function (devtool) {
+    ReactDebugTool.addDevtool(devtool);
+    eventHandlers.push(devtool);
+  },
+  removeDevtool: function (devtool) {
+    ReactDebugTool.removeDevtool(devtool);
+    for (var i = 0; i < eventHandlers.length; i++) {
+      if (eventHandlers[i] === devtool) {
+        eventHandlers.splice(i, 1);
+        i--;
+      }
+    }
+  },
+  onCreateMarkupForProperty: function (name, value) {
+    emitEvent('onCreateMarkupForProperty', name, value);
+  },
+  onSetValueForProperty: function (node, name, value) {
+    emitEvent('onSetValueForProperty', node, name, value);
+  },
+  onDeleteValueForProperty: function (node, name) {
+    emitEvent('onDeleteValueForProperty', node, name);
+  },
+  onTestEvent: function () {
+    emitEvent('onTestEvent');
+  }
+};
+
+ReactDOMDebugTool.addDevtool(ReactDOMUnknownPropertyDevtool);
+
+module.exports = ReactDOMDebugTool;
+}).call(this,require('_process'))
+},{"./ReactDOMUnknownPropertyDevtool":348,"./ReactDebugTool":349,"_process":155,"fbjs/lib/warning":462}],336:[function(require,module,exports){
 /**
  * Copyright 2014-present, Facebook, Inc.
  * All rights reserved.
@@ -39414,7 +41414,7 @@ var ReactDOMEmptyComponent = function (instantiate) {
   this._hostNode = null;
   this._hostParent = null;
   this._hostContainerInfo = null;
-  this._domID = 0;
+  this._domID = null;
 };
 _assign(ReactDOMEmptyComponent.prototype, {
   mountComponent: function (transaction, hostParent, hostContainerInfo, context) {
@@ -39449,7 +41449,7 @@ _assign(ReactDOMEmptyComponent.prototype, {
 });
 
 module.exports = ReactDOMEmptyComponent;
-},{"./DOMLazyTree":289,"./ReactDOMComponentTree":325,"object-assign":152}],328:[function(require,module,exports){
+},{"./DOMLazyTree":298,"./ReactDOMComponentTree":333,"object-assign":153}],337:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-present, Facebook, Inc.
@@ -39466,15 +41466,20 @@ module.exports = ReactDOMEmptyComponent;
 
 var ReactElement = require('./ReactElement');
 
+var mapObject = require('fbjs/lib/mapObject');
+
 /**
  * Create a factory that creates HTML tag elements.
  *
+ * @param {string} tag Tag name (e.g. `div`).
  * @private
  */
-var createDOMFactory = ReactElement.createFactory;
-if (process.env.NODE_ENV !== 'production') {
-  var ReactElementValidator = require('./ReactElementValidator');
-  createDOMFactory = ReactElementValidator.createFactory;
+function createDOMFactory(tag) {
+  if (process.env.NODE_ENV !== 'production') {
+    var ReactElementValidator = require('./ReactElementValidator');
+    return ReactElementValidator.createFactory(tag);
+  }
+  return ReactElement.createFactory(tag);
 }
 
 /**
@@ -39483,146 +41488,147 @@ if (process.env.NODE_ENV !== 'production') {
  *
  * @public
  */
-var ReactDOMFactories = {
-  a: createDOMFactory('a'),
-  abbr: createDOMFactory('abbr'),
-  address: createDOMFactory('address'),
-  area: createDOMFactory('area'),
-  article: createDOMFactory('article'),
-  aside: createDOMFactory('aside'),
-  audio: createDOMFactory('audio'),
-  b: createDOMFactory('b'),
-  base: createDOMFactory('base'),
-  bdi: createDOMFactory('bdi'),
-  bdo: createDOMFactory('bdo'),
-  big: createDOMFactory('big'),
-  blockquote: createDOMFactory('blockquote'),
-  body: createDOMFactory('body'),
-  br: createDOMFactory('br'),
-  button: createDOMFactory('button'),
-  canvas: createDOMFactory('canvas'),
-  caption: createDOMFactory('caption'),
-  cite: createDOMFactory('cite'),
-  code: createDOMFactory('code'),
-  col: createDOMFactory('col'),
-  colgroup: createDOMFactory('colgroup'),
-  data: createDOMFactory('data'),
-  datalist: createDOMFactory('datalist'),
-  dd: createDOMFactory('dd'),
-  del: createDOMFactory('del'),
-  details: createDOMFactory('details'),
-  dfn: createDOMFactory('dfn'),
-  dialog: createDOMFactory('dialog'),
-  div: createDOMFactory('div'),
-  dl: createDOMFactory('dl'),
-  dt: createDOMFactory('dt'),
-  em: createDOMFactory('em'),
-  embed: createDOMFactory('embed'),
-  fieldset: createDOMFactory('fieldset'),
-  figcaption: createDOMFactory('figcaption'),
-  figure: createDOMFactory('figure'),
-  footer: createDOMFactory('footer'),
-  form: createDOMFactory('form'),
-  h1: createDOMFactory('h1'),
-  h2: createDOMFactory('h2'),
-  h3: createDOMFactory('h3'),
-  h4: createDOMFactory('h4'),
-  h5: createDOMFactory('h5'),
-  h6: createDOMFactory('h6'),
-  head: createDOMFactory('head'),
-  header: createDOMFactory('header'),
-  hgroup: createDOMFactory('hgroup'),
-  hr: createDOMFactory('hr'),
-  html: createDOMFactory('html'),
-  i: createDOMFactory('i'),
-  iframe: createDOMFactory('iframe'),
-  img: createDOMFactory('img'),
-  input: createDOMFactory('input'),
-  ins: createDOMFactory('ins'),
-  kbd: createDOMFactory('kbd'),
-  keygen: createDOMFactory('keygen'),
-  label: createDOMFactory('label'),
-  legend: createDOMFactory('legend'),
-  li: createDOMFactory('li'),
-  link: createDOMFactory('link'),
-  main: createDOMFactory('main'),
-  map: createDOMFactory('map'),
-  mark: createDOMFactory('mark'),
-  menu: createDOMFactory('menu'),
-  menuitem: createDOMFactory('menuitem'),
-  meta: createDOMFactory('meta'),
-  meter: createDOMFactory('meter'),
-  nav: createDOMFactory('nav'),
-  noscript: createDOMFactory('noscript'),
-  object: createDOMFactory('object'),
-  ol: createDOMFactory('ol'),
-  optgroup: createDOMFactory('optgroup'),
-  option: createDOMFactory('option'),
-  output: createDOMFactory('output'),
-  p: createDOMFactory('p'),
-  param: createDOMFactory('param'),
-  picture: createDOMFactory('picture'),
-  pre: createDOMFactory('pre'),
-  progress: createDOMFactory('progress'),
-  q: createDOMFactory('q'),
-  rp: createDOMFactory('rp'),
-  rt: createDOMFactory('rt'),
-  ruby: createDOMFactory('ruby'),
-  s: createDOMFactory('s'),
-  samp: createDOMFactory('samp'),
-  script: createDOMFactory('script'),
-  section: createDOMFactory('section'),
-  select: createDOMFactory('select'),
-  small: createDOMFactory('small'),
-  source: createDOMFactory('source'),
-  span: createDOMFactory('span'),
-  strong: createDOMFactory('strong'),
-  style: createDOMFactory('style'),
-  sub: createDOMFactory('sub'),
-  summary: createDOMFactory('summary'),
-  sup: createDOMFactory('sup'),
-  table: createDOMFactory('table'),
-  tbody: createDOMFactory('tbody'),
-  td: createDOMFactory('td'),
-  textarea: createDOMFactory('textarea'),
-  tfoot: createDOMFactory('tfoot'),
-  th: createDOMFactory('th'),
-  thead: createDOMFactory('thead'),
-  time: createDOMFactory('time'),
-  title: createDOMFactory('title'),
-  tr: createDOMFactory('tr'),
-  track: createDOMFactory('track'),
-  u: createDOMFactory('u'),
-  ul: createDOMFactory('ul'),
-  'var': createDOMFactory('var'),
-  video: createDOMFactory('video'),
-  wbr: createDOMFactory('wbr'),
+var ReactDOMFactories = mapObject({
+  a: 'a',
+  abbr: 'abbr',
+  address: 'address',
+  area: 'area',
+  article: 'article',
+  aside: 'aside',
+  audio: 'audio',
+  b: 'b',
+  base: 'base',
+  bdi: 'bdi',
+  bdo: 'bdo',
+  big: 'big',
+  blockquote: 'blockquote',
+  body: 'body',
+  br: 'br',
+  button: 'button',
+  canvas: 'canvas',
+  caption: 'caption',
+  cite: 'cite',
+  code: 'code',
+  col: 'col',
+  colgroup: 'colgroup',
+  data: 'data',
+  datalist: 'datalist',
+  dd: 'dd',
+  del: 'del',
+  details: 'details',
+  dfn: 'dfn',
+  dialog: 'dialog',
+  div: 'div',
+  dl: 'dl',
+  dt: 'dt',
+  em: 'em',
+  embed: 'embed',
+  fieldset: 'fieldset',
+  figcaption: 'figcaption',
+  figure: 'figure',
+  footer: 'footer',
+  form: 'form',
+  h1: 'h1',
+  h2: 'h2',
+  h3: 'h3',
+  h4: 'h4',
+  h5: 'h5',
+  h6: 'h6',
+  head: 'head',
+  header: 'header',
+  hgroup: 'hgroup',
+  hr: 'hr',
+  html: 'html',
+  i: 'i',
+  iframe: 'iframe',
+  img: 'img',
+  input: 'input',
+  ins: 'ins',
+  kbd: 'kbd',
+  keygen: 'keygen',
+  label: 'label',
+  legend: 'legend',
+  li: 'li',
+  link: 'link',
+  main: 'main',
+  map: 'map',
+  mark: 'mark',
+  menu: 'menu',
+  menuitem: 'menuitem',
+  meta: 'meta',
+  meter: 'meter',
+  nav: 'nav',
+  noscript: 'noscript',
+  object: 'object',
+  ol: 'ol',
+  optgroup: 'optgroup',
+  option: 'option',
+  output: 'output',
+  p: 'p',
+  param: 'param',
+  picture: 'picture',
+  pre: 'pre',
+  progress: 'progress',
+  q: 'q',
+  rp: 'rp',
+  rt: 'rt',
+  ruby: 'ruby',
+  s: 's',
+  samp: 'samp',
+  script: 'script',
+  section: 'section',
+  select: 'select',
+  small: 'small',
+  source: 'source',
+  span: 'span',
+  strong: 'strong',
+  style: 'style',
+  sub: 'sub',
+  summary: 'summary',
+  sup: 'sup',
+  table: 'table',
+  tbody: 'tbody',
+  td: 'td',
+  textarea: 'textarea',
+  tfoot: 'tfoot',
+  th: 'th',
+  thead: 'thead',
+  time: 'time',
+  title: 'title',
+  tr: 'tr',
+  track: 'track',
+  u: 'u',
+  ul: 'ul',
+  'var': 'var',
+  video: 'video',
+  wbr: 'wbr',
 
   // SVG
-  circle: createDOMFactory('circle'),
-  clipPath: createDOMFactory('clipPath'),
-  defs: createDOMFactory('defs'),
-  ellipse: createDOMFactory('ellipse'),
-  g: createDOMFactory('g'),
-  image: createDOMFactory('image'),
-  line: createDOMFactory('line'),
-  linearGradient: createDOMFactory('linearGradient'),
-  mask: createDOMFactory('mask'),
-  path: createDOMFactory('path'),
-  pattern: createDOMFactory('pattern'),
-  polygon: createDOMFactory('polygon'),
-  polyline: createDOMFactory('polyline'),
-  radialGradient: createDOMFactory('radialGradient'),
-  rect: createDOMFactory('rect'),
-  stop: createDOMFactory('stop'),
-  svg: createDOMFactory('svg'),
-  text: createDOMFactory('text'),
-  tspan: createDOMFactory('tspan')
-};
+  circle: 'circle',
+  clipPath: 'clipPath',
+  defs: 'defs',
+  ellipse: 'ellipse',
+  g: 'g',
+  image: 'image',
+  line: 'line',
+  linearGradient: 'linearGradient',
+  mask: 'mask',
+  path: 'path',
+  pattern: 'pattern',
+  polygon: 'polygon',
+  polyline: 'polyline',
+  radialGradient: 'radialGradient',
+  rect: 'rect',
+  stop: 'stop',
+  svg: 'svg',
+  text: 'text',
+  tspan: 'tspan'
+
+}, createDOMFactory);
 
 module.exports = ReactDOMFactories;
 }).call(this,require('_process'))
-},{"./ReactElement":343,"./ReactElementValidator":344,"_process":154}],329:[function(require,module,exports){
+},{"./ReactElement":352,"./ReactElementValidator":353,"_process":155,"fbjs/lib/mapObject":457}],338:[function(require,module,exports){
 /**
  * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -39641,7 +41647,7 @@ var ReactDOMFeatureFlags = {
 };
 
 module.exports = ReactDOMFeatureFlags;
-},{}],330:[function(require,module,exports){
+},{}],339:[function(require,module,exports){
 /**
  * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -39676,7 +41682,7 @@ var ReactDOMIDOperations = {
 };
 
 module.exports = ReactDOMIDOperations;
-},{"./DOMChildrenOperations":288,"./ReactDOMComponentTree":325}],331:[function(require,module,exports){
+},{"./DOMChildrenOperations":297,"./ReactDOMComponentTree":333}],340:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-present, Facebook, Inc.
@@ -39705,6 +41711,7 @@ var warning = require('fbjs/lib/warning');
 
 var didWarnValueLink = false;
 var didWarnCheckedLink = false;
+var didWarnValueNull = false;
 var didWarnValueDefaultValue = false;
 var didWarnCheckedDefaultChecked = false;
 var didWarnControlledToUncontrolled = false;
@@ -39717,9 +41724,17 @@ function forceUpdateIfMounted() {
   }
 }
 
+function warnIfValueIsNull(props) {
+  if (props != null && props.value === null && !didWarnValueNull) {
+    process.env.NODE_ENV !== 'production' ? warning(false, '`value` prop on `input` should not be null. ' + 'Consider using the empty string to clear the component or `undefined` ' + 'for uncontrolled components.') : void 0;
+
+    didWarnValueNull = true;
+  }
+}
+
 function isControlled(props) {
   var usesChecked = props.type === 'checkbox' || props.type === 'radio';
-  return usesChecked ? props.checked != null : props.value != null;
+  return usesChecked ? props.checked !== undefined : props.value !== undefined;
 }
 
 /**
@@ -39746,14 +41761,7 @@ var ReactDOMInput = {
     var hostProps = _assign({
       // Make sure we set .type before any other properties (setting .value
       // before .type means .value is lost in IE11 and below)
-      type: undefined,
-      // Make sure we set .step before .value (setting .value before .step
-      // means .value is rounded on mount, based upon step precision)
-      step: undefined,
-      // Make sure we set .min & .max before .value (to ensure proper order
-      // in corner cases such as min or max deriving from value, e.g. Issue #7170)
-      min: undefined,
-      max: undefined
+      type: undefined
     }, DisabledInputUtils.getHostProps(inst, props), {
       defaultChecked: undefined,
       defaultValue: undefined,
@@ -39787,6 +41795,7 @@ var ReactDOMInput = {
         process.env.NODE_ENV !== 'production' ? warning(false, '%s contains an input of type %s with both value and defaultValue props. ' + 'Input elements must be either controlled or uncontrolled ' + '(specify either the value prop, or the defaultValue prop, but not ' + 'both). Decide between using a controlled or uncontrolled input ' + 'element and remove one of these props. More info: ' + 'https://fb.me/react-controlled-components', owner && owner.getName() || 'A component', props.type) : void 0;
         didWarnValueDefaultValue = true;
       }
+      warnIfValueIsNull(props);
     }
 
     var defaultValue = props.defaultValue;
@@ -39806,6 +41815,8 @@ var ReactDOMInput = {
     var props = inst._currentElement.props;
 
     if (process.env.NODE_ENV !== 'production') {
+      warnIfValueIsNull(props);
+
       var controlled = isControlled(props);
       var owner = inst._currentElement._owner;
 
@@ -39848,38 +41859,10 @@ var ReactDOMInput = {
   },
 
   postMountWrapper: function (inst) {
-    var props = inst._currentElement.props;
-
     // This is in postMount because we need access to the DOM node, which is not
     // available until after the component has mounted.
     var node = ReactDOMComponentTree.getNodeFromInstance(inst);
-
-    // Detach value from defaultValue. We won't do anything if we're working on
-    // submit or reset inputs as those values & defaultValues are linked. They
-    // are not resetable nodes so this operation doesn't matter and actually
-    // removes browser-default values (eg "Submit Query") when no value is
-    // provided.
-
-    switch (props.type) {
-      case 'submit':
-      case 'reset':
-        break;
-      case 'color':
-      case 'date':
-      case 'datetime':
-      case 'datetime-local':
-      case 'month':
-      case 'time':
-      case 'week':
-        // This fixes the no-show issue on iOS Safari and Android Chrome:
-        // https://github.com/facebook/react/issues/7233
-        node.value = '';
-        node.value = node.defaultValue;
-        break;
-      default:
-        node.value = node.value;
-        break;
-    }
+    node.value = node.value; // Detach value from defaultValue
 
     // Normally, we'd just do `node.checked = node.checked` upon initial mount, less this bug
     // this is needed to work around a chrome bug where setting defaultChecked
@@ -39887,14 +41870,10 @@ var ReactDOMInput = {
     // Reference: https://bugs.chromium.org/p/chromium/issues/detail?id=608416
     // We need to temporarily unset name to avoid disrupting radio button groups.
     var name = node.name;
-    if (name !== '') {
-      node.name = '';
-    }
+    node.name = undefined;
     node.defaultChecked = !node.defaultChecked;
     node.defaultChecked = !node.defaultChecked;
-    if (name !== '') {
-      node.name = name;
-    }
+    node.name = name;
   }
 };
 
@@ -39948,8 +41927,7 @@ function _handleChange(event) {
 
 module.exports = ReactDOMInput;
 }).call(this,require('_process'))
-},{"./DOMPropertyOperations":292,"./DisabledInputUtils":295,"./LinkedValueUtils":305,"./ReactDOMComponentTree":325,"./ReactUpdates":378,"./reactProdInvariant":422,"_process":154,"fbjs/lib/invariant":446,"fbjs/lib/warning":455,"object-assign":152}],332:[function(require,module,exports){
-(function (process){
+},{"./DOMPropertyOperations":301,"./DisabledInputUtils":304,"./LinkedValueUtils":314,"./ReactDOMComponentTree":333,"./ReactUpdates":384,"./reactProdInvariant":428,"_process":155,"fbjs/lib/invariant":452,"fbjs/lib/warning":462,"object-assign":153}],341:[function(require,module,exports){
 /**
  * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -39958,43 +41936,15 @@ module.exports = ReactDOMInput;
  * LICENSE file in the root directory of this source tree. An additional grant
  * of patent rights can be found in the PATENTS file in the same directory.
  *
- * @providesModule ReactDOMNullInputValuePropHook
+ * @providesModule ReactDOMInstrumentation
  */
 
 'use strict';
 
-var ReactComponentTreeHook = require('./ReactComponentTreeHook');
+var ReactDOMDebugTool = require('./ReactDOMDebugTool');
 
-var warning = require('fbjs/lib/warning');
-
-var didWarnValueNull = false;
-
-function handleElement(debugID, element) {
-  if (element == null) {
-    return;
-  }
-  if (element.type !== 'input' && element.type !== 'textarea' && element.type !== 'select') {
-    return;
-  }
-  if (element.props != null && element.props.value === null && !didWarnValueNull) {
-    process.env.NODE_ENV !== 'production' ? warning(false, '`value` prop on `%s` should not be null. ' + 'Consider using the empty string to clear the component or `undefined` ' + 'for uncontrolled components.%s', element.type, ReactComponentTreeHook.getStackAddendumByID(debugID)) : void 0;
-
-    didWarnValueNull = true;
-  }
-}
-
-var ReactDOMNullInputValuePropHook = {
-  onBeforeMountComponent: function (debugID, element) {
-    handleElement(debugID, element);
-  },
-  onBeforeUpdateComponent: function (debugID, element) {
-    handleElement(debugID, element);
-  }
-};
-
-module.exports = ReactDOMNullInputValuePropHook;
-}).call(this,require('_process'))
-},{"./ReactComponentTreeHook":318,"_process":154,"fbjs/lib/warning":455}],333:[function(require,module,exports){
+module.exports = { debugTool: ReactDOMDebugTool };
+},{"./ReactDOMDebugTool":335}],342:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-present, Facebook, Inc.
@@ -40120,7 +42070,7 @@ var ReactDOMOption = {
 
 module.exports = ReactDOMOption;
 }).call(this,require('_process'))
-},{"./ReactChildren":312,"./ReactDOMComponentTree":325,"./ReactDOMSelect":334,"_process":154,"fbjs/lib/warning":455,"object-assign":152}],334:[function(require,module,exports){
+},{"./ReactChildren":321,"./ReactDOMComponentTree":333,"./ReactDOMSelect":343,"_process":155,"fbjs/lib/warning":462,"object-assign":153}],343:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-present, Facebook, Inc.
@@ -40145,6 +42095,7 @@ var ReactUpdates = require('./ReactUpdates');
 var warning = require('fbjs/lib/warning');
 
 var didWarnValueLink = false;
+var didWarnValueNull = false;
 var didWarnValueDefaultValue = false;
 
 function updateOptionsIfPendingUpdateAndMounted() {
@@ -40170,6 +42121,14 @@ function getDeclarationErrorAddendum(owner) {
   return '';
 }
 
+function warnIfValueIsNull(props) {
+  if (props != null && props.value === null && !didWarnValueNull) {
+    process.env.NODE_ENV !== 'production' ? warning(false, '`value` prop on `select` should not be null. ' + 'Consider using the empty string to clear the component or `undefined` ' + 'for uncontrolled components.') : void 0;
+
+    didWarnValueNull = true;
+  }
+}
+
 var valuePropNames = ['value', 'defaultValue'];
 
 /**
@@ -40190,11 +42149,10 @@ function checkSelectPropTypes(inst, props) {
     if (props[propName] == null) {
       continue;
     }
-    var isArray = Array.isArray(props[propName]);
-    if (props.multiple && !isArray) {
-      process.env.NODE_ENV !== 'production' ? warning(false, 'The `%s` prop supplied to <select> must be an array if ' + '`multiple` is true.%s', propName, getDeclarationErrorAddendum(owner)) : void 0;
-    } else if (!props.multiple && isArray) {
-      process.env.NODE_ENV !== 'production' ? warning(false, 'The `%s` prop supplied to <select> must be a scalar ' + 'value if `multiple` is false.%s', propName, getDeclarationErrorAddendum(owner)) : void 0;
+    if (props.multiple) {
+      process.env.NODE_ENV !== 'production' ? warning(Array.isArray(props[propName]), 'The `%s` prop supplied to <select> must be an array if ' + '`multiple` is true.%s', propName, getDeclarationErrorAddendum(owner)) : void 0;
+    } else {
+      process.env.NODE_ENV !== 'production' ? warning(!Array.isArray(props[propName]), 'The `%s` prop supplied to <select> must be a scalar ' + 'value if `multiple` is false.%s', propName, getDeclarationErrorAddendum(owner)) : void 0;
     }
   }
 }
@@ -40262,6 +42220,7 @@ var ReactDOMSelect = {
   mountWrapper: function (inst, props) {
     if (process.env.NODE_ENV !== 'production') {
       checkSelectPropTypes(inst, props);
+      warnIfValueIsNull(props);
     }
 
     var value = LinkedValueUtils.getValue(props);
@@ -40287,6 +42246,9 @@ var ReactDOMSelect = {
 
   postUpdateWrapper: function (inst) {
     var props = inst._currentElement.props;
+    if (process.env.NODE_ENV !== 'production') {
+      warnIfValueIsNull(props);
+    }
 
     // After the initial mount, we control selected-ness manually so don't pass
     // this value down
@@ -40324,7 +42286,7 @@ function _handleChange(event) {
 
 module.exports = ReactDOMSelect;
 }).call(this,require('_process'))
-},{"./DisabledInputUtils":295,"./LinkedValueUtils":305,"./ReactDOMComponentTree":325,"./ReactUpdates":378,"_process":154,"fbjs/lib/warning":455,"object-assign":152}],335:[function(require,module,exports){
+},{"./DisabledInputUtils":304,"./LinkedValueUtils":314,"./ReactDOMComponentTree":333,"./ReactUpdates":384,"_process":155,"fbjs/lib/warning":462,"object-assign":153}],344:[function(require,module,exports){
 /**
  * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -40537,7 +42499,7 @@ var ReactDOMSelection = {
 };
 
 module.exports = ReactDOMSelection;
-},{"./getNodeForCharacterOffset":414,"./getTextContentAccessor":415,"fbjs/lib/ExecutionEnvironment":432}],336:[function(require,module,exports){
+},{"./getNodeForCharacterOffset":420,"./getTextContentAccessor":421,"fbjs/lib/ExecutionEnvironment":438}],345:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-present, Facebook, Inc.
@@ -40558,6 +42520,7 @@ var _prodInvariant = require('./reactProdInvariant'),
 var DOMChildrenOperations = require('./DOMChildrenOperations');
 var DOMLazyTree = require('./DOMLazyTree');
 var ReactDOMComponentTree = require('./ReactDOMComponentTree');
+var ReactInstrumentation = require('./ReactInstrumentation');
 
 var escapeTextContentForBrowser = require('./escapeTextContentForBrowser');
 var invariant = require('fbjs/lib/invariant');
@@ -40587,7 +42550,7 @@ var ReactDOMTextComponent = function (text) {
   this._hostParent = null;
 
   // Properties
-  this._domID = 0;
+  this._domID = null;
   this._mountIndex = 0;
   this._closingComment = null;
   this._commentNodes = null;
@@ -40605,6 +42568,8 @@ _assign(ReactDOMTextComponent.prototype, {
    */
   mountComponent: function (transaction, hostParent, hostContainerInfo, context) {
     if (process.env.NODE_ENV !== 'production') {
+      ReactInstrumentation.debugTool.onSetText(this._debugID, this._stringText);
+
       var parentInfo;
       if (hostParent != null) {
         parentInfo = hostParent._ancestorInfo;
@@ -40614,7 +42579,7 @@ _assign(ReactDOMTextComponent.prototype, {
       if (parentInfo) {
         // parentInfo should always be present except for the top-level
         // component when server rendering
-        validateDOMNesting(null, this._stringText, this, parentInfo);
+        validateDOMNesting('#text', this, parentInfo);
       }
     }
 
@@ -40668,6 +42633,10 @@ _assign(ReactDOMTextComponent.prototype, {
         this._stringText = nextStringText;
         var commentNodes = this.getHostNode();
         DOMChildrenOperations.replaceDelimitedText(commentNodes[0], commentNodes[1], nextStringText);
+
+        if (process.env.NODE_ENV !== 'production') {
+          ReactInstrumentation.debugTool.onSetText(this._debugID, nextStringText);
+        }
       }
     }
   },
@@ -40704,7 +42673,7 @@ _assign(ReactDOMTextComponent.prototype, {
 
 module.exports = ReactDOMTextComponent;
 }).call(this,require('_process'))
-},{"./DOMChildrenOperations":288,"./DOMLazyTree":289,"./ReactDOMComponentTree":325,"./escapeTextContentForBrowser":404,"./reactProdInvariant":422,"./validateDOMNesting":429,"_process":154,"fbjs/lib/invariant":446,"object-assign":152}],337:[function(require,module,exports){
+},{"./DOMChildrenOperations":297,"./DOMLazyTree":298,"./ReactDOMComponentTree":333,"./ReactInstrumentation":364,"./escapeTextContentForBrowser":410,"./reactProdInvariant":428,"./validateDOMNesting":435,"_process":155,"fbjs/lib/invariant":452,"object-assign":153}],346:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-present, Facebook, Inc.
@@ -40731,12 +42700,21 @@ var invariant = require('fbjs/lib/invariant');
 var warning = require('fbjs/lib/warning');
 
 var didWarnValueLink = false;
+var didWarnValueNull = false;
 var didWarnValDefaultVal = false;
 
 function forceUpdateIfMounted() {
   if (this._rootNodeID) {
     // DOM component is still mounted; update
     ReactDOMTextarea.updateWrapper(this);
+  }
+}
+
+function warnIfValueIsNull(props) {
+  if (props != null && props.value === null && !didWarnValueNull) {
+    process.env.NODE_ENV !== 'production' ? warning(false, '`value` prop on `textarea` should not be null. ' + 'Consider using the empty string to clear the component or `undefined` ' + 'for uncontrolled components.') : void 0;
+
+    didWarnValueNull = true;
   }
 }
 
@@ -40785,6 +42763,7 @@ var ReactDOMTextarea = {
         process.env.NODE_ENV !== 'production' ? warning(false, 'Textarea elements must be either controlled or uncontrolled ' + '(specify either the value prop, or the defaultValue prop, but not ' + 'both). Decide between using a controlled or uncontrolled textarea ' + 'and remove one of these props. More info: ' + 'https://fb.me/react-controlled-components') : void 0;
         didWarnValDefaultVal = true;
       }
+      warnIfValueIsNull(props);
     }
 
     var value = LinkedValueUtils.getValue(props);
@@ -40822,6 +42801,10 @@ var ReactDOMTextarea = {
 
   updateWrapper: function (inst) {
     var props = inst._currentElement.props;
+
+    if (process.env.NODE_ENV !== 'production') {
+      warnIfValueIsNull(props);
+    }
 
     var node = ReactDOMComponentTree.getNodeFromInstance(inst);
     var value = LinkedValueUtils.getValue(props);
@@ -40862,7 +42845,7 @@ function _handleChange(event) {
 
 module.exports = ReactDOMTextarea;
 }).call(this,require('_process'))
-},{"./DisabledInputUtils":295,"./LinkedValueUtils":305,"./ReactDOMComponentTree":325,"./ReactUpdates":378,"./reactProdInvariant":422,"_process":154,"fbjs/lib/invariant":446,"fbjs/lib/warning":455,"object-assign":152}],338:[function(require,module,exports){
+},{"./DisabledInputUtils":304,"./LinkedValueUtils":314,"./ReactDOMComponentTree":333,"./ReactUpdates":384,"./reactProdInvariant":428,"_process":155,"fbjs/lib/invariant":452,"fbjs/lib/warning":462,"object-assign":153}],347:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2015-present, Facebook, Inc.
@@ -41001,7 +42984,7 @@ module.exports = {
   traverseEnterLeave: traverseEnterLeave
 };
 }).call(this,require('_process'))
-},{"./reactProdInvariant":422,"_process":154,"fbjs/lib/invariant":446}],339:[function(require,module,exports){
+},{"./reactProdInvariant":428,"_process":155,"fbjs/lib/invariant":452}],348:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-present, Facebook, Inc.
@@ -41011,14 +42994,14 @@ module.exports = {
  * LICENSE file in the root directory of this source tree. An additional grant
  * of patent rights can be found in the PATENTS file in the same directory.
  *
- * @providesModule ReactDOMUnknownPropertyHook
+ * @providesModule ReactDOMUnknownPropertyDevtool
  */
 
 'use strict';
 
 var DOMProperty = require('./DOMProperty');
 var EventPluginRegistry = require('./EventPluginRegistry');
-var ReactComponentTreeHook = require('./ReactComponentTreeHook');
+var ReactComponentTreeDevtool = require('./ReactComponentTreeDevtool');
 
 var warning = require('fbjs/lib/warning');
 
@@ -41060,10 +43043,10 @@ if (process.env.NODE_ENV !== 'production') {
     var registrationName = EventPluginRegistry.possibleRegistrationNames.hasOwnProperty(lowerCasedName) ? EventPluginRegistry.possibleRegistrationNames[lowerCasedName] : null;
 
     if (standardName != null) {
-      process.env.NODE_ENV !== 'production' ? warning(false, 'Unknown DOM property %s. Did you mean %s?%s', name, standardName, ReactComponentTreeHook.getStackAddendumByID(debugID)) : void 0;
+      process.env.NODE_ENV !== 'production' ? warning(standardName == null, 'Unknown DOM property %s. Did you mean %s?%s', name, standardName, ReactComponentTreeDevtool.getStackAddendumByID(debugID)) : void 0;
       return true;
     } else if (registrationName != null) {
-      process.env.NODE_ENV !== 'production' ? warning(false, 'Unknown event handler property %s. Did you mean `%s`?%s', name, registrationName, ReactComponentTreeHook.getStackAddendumByID(debugID)) : void 0;
+      process.env.NODE_ENV !== 'production' ? warning(registrationName == null, 'Unknown event handler property %s. Did you mean `%s`?%s', name, registrationName, ReactComponentTreeDevtool.getStackAddendumByID(debugID)) : void 0;
       return true;
     } else {
       // We were unable to guess which prop the user intended.
@@ -41089,9 +43072,9 @@ var warnUnknownProperties = function (debugID, element) {
   }).join(', ');
 
   if (unknownProps.length === 1) {
-    process.env.NODE_ENV !== 'production' ? warning(false, 'Unknown prop %s on <%s> tag. Remove this prop from the element. ' + 'For details, see https://fb.me/react-unknown-prop%s', unknownPropString, element.type, ReactComponentTreeHook.getStackAddendumByID(debugID)) : void 0;
+    process.env.NODE_ENV !== 'production' ? warning(false, 'Unknown prop %s on <%s> tag. Remove this prop from the element. ' + 'For details, see https://fb.me/react-unknown-prop%s', unknownPropString, element.type, ReactComponentTreeDevtool.getStackAddendumByID(debugID)) : void 0;
   } else if (unknownProps.length > 1) {
-    process.env.NODE_ENV !== 'production' ? warning(false, 'Unknown props %s on <%s> tag. Remove these props from the element. ' + 'For details, see https://fb.me/react-unknown-prop%s', unknownPropString, element.type, ReactComponentTreeHook.getStackAddendumByID(debugID)) : void 0;
+    process.env.NODE_ENV !== 'production' ? warning(false, 'Unknown props %s on <%s> tag. Remove these props from the element. ' + 'For details, see https://fb.me/react-unknown-prop%s', unknownPropString, element.type, ReactComponentTreeDevtool.getStackAddendumByID(debugID)) : void 0;
   }
 };
 
@@ -41105,7 +43088,7 @@ function handleElement(debugID, element) {
   warnUnknownProperties(debugID, element);
 }
 
-var ReactDOMUnknownPropertyHook = {
+var ReactDOMUnknownPropertyDevtool = {
   onBeforeMountComponent: function (debugID, element) {
     handleElement(debugID, element);
   },
@@ -41114,9 +43097,9 @@ var ReactDOMUnknownPropertyHook = {
   }
 };
 
-module.exports = ReactDOMUnknownPropertyHook;
+module.exports = ReactDOMUnknownPropertyDevtool;
 }).call(this,require('_process'))
-},{"./DOMProperty":291,"./EventPluginRegistry":299,"./ReactComponentTreeHook":318,"_process":154,"fbjs/lib/warning":455}],340:[function(require,module,exports){
+},{"./DOMProperty":300,"./EventPluginRegistry":308,"./ReactComponentTreeDevtool":326,"_process":155,"fbjs/lib/warning":462}],349:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2016-present, Facebook, Inc.
@@ -41131,34 +43114,26 @@ module.exports = ReactDOMUnknownPropertyHook;
 
 'use strict';
 
-var ReactInvalidSetStateWarningHook = require('./ReactInvalidSetStateWarningHook');
-var ReactHostOperationHistoryHook = require('./ReactHostOperationHistoryHook');
-var ReactComponentTreeHook = require('./ReactComponentTreeHook');
-var ReactChildrenMutationWarningHook = require('./ReactChildrenMutationWarningHook');
 var ExecutionEnvironment = require('fbjs/lib/ExecutionEnvironment');
 
 var performanceNow = require('fbjs/lib/performanceNow');
 var warning = require('fbjs/lib/warning');
 
-var hooks = [];
-var didHookThrowForEvent = {};
+var eventHandlers = [];
+var handlerDoesThrowForEvent = {};
 
-function callHook(event, fn, context, arg1, arg2, arg3, arg4, arg5) {
-  try {
-    fn.call(context, arg1, arg2, arg3, arg4, arg5);
-  } catch (e) {
-    process.env.NODE_ENV !== 'production' ? warning(didHookThrowForEvent[event], 'Exception thrown by hook while handling %s: %s', event, e + '\n' + e.stack) : void 0;
-    didHookThrowForEvent[event] = true;
-  }
-}
-
-function emitEvent(event, arg1, arg2, arg3, arg4, arg5) {
-  for (var i = 0; i < hooks.length; i++) {
-    var hook = hooks[i];
-    var fn = hook[event];
-    if (fn) {
-      callHook(event, fn, hook, arg1, arg2, arg3, arg4, arg5);
-    }
+function emitEvent(handlerFunctionName, arg1, arg2, arg3, arg4, arg5) {
+  if (process.env.NODE_ENV !== 'production') {
+    eventHandlers.forEach(function (handler) {
+      try {
+        if (handler[handlerFunctionName]) {
+          handler[handlerFunctionName](arg1, arg2, arg3, arg4, arg5);
+        }
+      } catch (e) {
+        process.env.NODE_ENV !== 'production' ? warning(handlerDoesThrowForEvent[handlerFunctionName], 'exception thrown by devtool while handling %s: %s', handlerFunctionName, e + '\n' + e.stack) : void 0;
+        handlerDoesThrowForEvent[handlerFunctionName] = true;
+      }
+    });
   }
 }
 
@@ -41173,24 +43148,22 @@ var currentTimerStartTime = null;
 var currentTimerNestedFlushDuration = null;
 var currentTimerType = null;
 
-var lifeCycleTimerHasWarned = false;
-
 function clearHistory() {
-  ReactComponentTreeHook.purgeUnmountedComponents();
-  ReactHostOperationHistoryHook.clearHistory();
+  ReactComponentTreeDevtool.purgeUnmountedComponents();
+  ReactHostOperationHistoryDevtool.clearHistory();
 }
 
 function getTreeSnapshot(registeredIDs) {
   return registeredIDs.reduce(function (tree, id) {
-    var ownerID = ReactComponentTreeHook.getOwnerID(id);
-    var parentID = ReactComponentTreeHook.getParentID(id);
+    var ownerID = ReactComponentTreeDevtool.getOwnerID(id);
+    var parentID = ReactComponentTreeDevtool.getParentID(id);
     tree[id] = {
-      displayName: ReactComponentTreeHook.getDisplayName(id),
-      text: ReactComponentTreeHook.getText(id),
-      updateCount: ReactComponentTreeHook.getUpdateCount(id),
-      childIDs: ReactComponentTreeHook.getChildIDs(id),
+      displayName: ReactComponentTreeDevtool.getDisplayName(id),
+      text: ReactComponentTreeDevtool.getText(id),
+      updateCount: ReactComponentTreeDevtool.getUpdateCount(id),
+      childIDs: ReactComponentTreeDevtool.getChildIDs(id),
       // Text nodes don't have owners but this is close enough.
-      ownerID: ownerID || ReactComponentTreeHook.getOwnerID(parentID),
+      ownerID: ownerID || ReactComponentTreeDevtool.getOwnerID(parentID),
       parentID: parentID
     };
     return tree;
@@ -41198,51 +43171,43 @@ function getTreeSnapshot(registeredIDs) {
 }
 
 function resetMeasurements() {
-  var previousStartTime = currentFlushStartTime;
-  var previousMeasurements = currentFlushMeasurements || [];
-  var previousOperations = ReactHostOperationHistoryHook.getHistory();
+  if (process.env.NODE_ENV !== 'production') {
+    var previousStartTime = currentFlushStartTime;
+    var previousMeasurements = currentFlushMeasurements || [];
+    var previousOperations = ReactHostOperationHistoryDevtool.getHistory();
 
-  if (currentFlushNesting === 0) {
-    currentFlushStartTime = null;
-    currentFlushMeasurements = null;
+    if (!isProfiling || currentFlushNesting === 0) {
+      currentFlushStartTime = null;
+      currentFlushMeasurements = null;
+      clearHistory();
+      return;
+    }
+
+    if (previousMeasurements.length || previousOperations.length) {
+      var registeredIDs = ReactComponentTreeDevtool.getRegisteredIDs();
+      flushHistory.push({
+        duration: performanceNow() - previousStartTime,
+        measurements: previousMeasurements || [],
+        operations: previousOperations || [],
+        treeSnapshot: getTreeSnapshot(registeredIDs)
+      });
+    }
+
     clearHistory();
-    return;
+    currentFlushStartTime = performanceNow();
+    currentFlushMeasurements = [];
   }
-
-  if (previousMeasurements.length || previousOperations.length) {
-    var registeredIDs = ReactComponentTreeHook.getRegisteredIDs();
-    flushHistory.push({
-      duration: performanceNow() - previousStartTime,
-      measurements: previousMeasurements || [],
-      operations: previousOperations || [],
-      treeSnapshot: getTreeSnapshot(registeredIDs)
-    });
-  }
-
-  clearHistory();
-  currentFlushStartTime = performanceNow();
-  currentFlushMeasurements = [];
 }
 
 function checkDebugID(debugID) {
-  var allowRoot = arguments.length <= 1 || arguments[1] === undefined ? false : arguments[1];
-
-  if (allowRoot && debugID === 0) {
-    return;
-  }
-  if (!debugID) {
-    process.env.NODE_ENV !== 'production' ? warning(false, 'ReactDebugTool: debugID may not be empty.') : void 0;
-  }
+  process.env.NODE_ENV !== 'production' ? warning(debugID, 'ReactDebugTool: debugID may not be empty.') : void 0;
 }
 
 function beginLifeCycleTimer(debugID, timerType) {
-  if (currentFlushNesting === 0) {
+  if (!isProfiling || currentFlushNesting === 0) {
     return;
   }
-  if (currentTimerType && !lifeCycleTimerHasWarned) {
-    process.env.NODE_ENV !== 'production' ? warning(false, 'There is an internal error in the React performance measurement code. ' + 'Did not expect %s timer to start while %s timer is still in ' + 'progress for %s instance.', timerType, currentTimerType || 'no', debugID === currentTimerDebugID ? 'the same' : 'another') : void 0;
-    lifeCycleTimerHasWarned = true;
-  }
+  process.env.NODE_ENV !== 'production' ? warning(!currentTimerType, 'There is an internal error in the React performance measurement code. ' + 'Did not expect %s timer to start while %s timer is still in ' + 'progress for %s instance.', timerType, currentTimerType || 'no', debugID === currentTimerDebugID ? 'the same' : 'another') : void 0;
   currentTimerStartTime = performanceNow();
   currentTimerNestedFlushDuration = 0;
   currentTimerDebugID = debugID;
@@ -41250,20 +43215,15 @@ function beginLifeCycleTimer(debugID, timerType) {
 }
 
 function endLifeCycleTimer(debugID, timerType) {
-  if (currentFlushNesting === 0) {
+  if (!isProfiling || currentFlushNesting === 0) {
     return;
   }
-  if (currentTimerType !== timerType && !lifeCycleTimerHasWarned) {
-    process.env.NODE_ENV !== 'production' ? warning(false, 'There is an internal error in the React performance measurement code. ' + 'We did not expect %s timer to stop while %s timer is still in ' + 'progress for %s instance. Please report this as a bug in React.', timerType, currentTimerType || 'no', debugID === currentTimerDebugID ? 'the same' : 'another') : void 0;
-    lifeCycleTimerHasWarned = true;
-  }
-  if (isProfiling) {
-    currentFlushMeasurements.push({
-      timerType: timerType,
-      instanceID: debugID,
-      duration: performanceNow() - currentTimerStartTime - currentTimerNestedFlushDuration
-    });
-  }
+  process.env.NODE_ENV !== 'production' ? warning(currentTimerType === timerType, 'There is an internal error in the React performance measurement code. ' + 'We did not expect %s timer to stop while %s timer is still in ' + 'progress for %s instance. Please report this as a bug in React.', timerType, currentTimerType || 'no', debugID === currentTimerDebugID ? 'the same' : 'another') : void 0;
+  currentFlushMeasurements.push({
+    timerType: timerType,
+    instanceID: debugID,
+    duration: performanceNow() - currentTimerStartTime - currentTimerNestedFlushDuration
+  });
   currentTimerStartTime = null;
   currentTimerNestedFlushDuration = null;
   currentTimerDebugID = null;
@@ -41300,13 +43260,13 @@ function resumeCurrentLifeCycleTimer() {
 }
 
 var ReactDebugTool = {
-  addHook: function (hook) {
-    hooks.push(hook);
+  addDevtool: function (devtool) {
+    eventHandlers.push(devtool);
   },
-  removeHook: function (hook) {
-    for (var i = 0; i < hooks.length; i++) {
-      if (hooks[i] === hook) {
-        hooks.splice(i, 1);
+  removeDevtool: function (devtool) {
+    for (var i = 0; i < eventHandlers.length; i++) {
+      if (eventHandlers[i] === devtool) {
+        eventHandlers.splice(i, 1);
         i--;
       }
     }
@@ -41315,48 +43275,66 @@ var ReactDebugTool = {
     return isProfiling;
   },
   beginProfiling: function () {
-    if (isProfiling) {
-      return;
-    }
+    if (process.env.NODE_ENV !== 'production') {
+      if (isProfiling) {
+        return;
+      }
 
-    isProfiling = true;
-    flushHistory.length = 0;
-    resetMeasurements();
-    ReactDebugTool.addHook(ReactHostOperationHistoryHook);
+      isProfiling = true;
+      flushHistory.length = 0;
+      resetMeasurements();
+    }
   },
   endProfiling: function () {
-    if (!isProfiling) {
-      return;
-    }
+    if (process.env.NODE_ENV !== 'production') {
+      if (!isProfiling) {
+        return;
+      }
 
-    isProfiling = false;
-    resetMeasurements();
-    ReactDebugTool.removeHook(ReactHostOperationHistoryHook);
+      isProfiling = false;
+      resetMeasurements();
+    }
   },
   getFlushHistory: function () {
     return flushHistory;
   },
   onBeginFlush: function () {
-    currentFlushNesting++;
-    resetMeasurements();
-    pauseCurrentLifeCycleTimer();
+    if (process.env.NODE_ENV !== 'production') {
+      currentFlushNesting++;
+      resetMeasurements();
+      pauseCurrentLifeCycleTimer();
+    }
     emitEvent('onBeginFlush');
   },
   onEndFlush: function () {
-    resetMeasurements();
-    currentFlushNesting--;
-    resumeCurrentLifeCycleTimer();
+    if (process.env.NODE_ENV !== 'production') {
+      resetMeasurements();
+      currentFlushNesting--;
+      resumeCurrentLifeCycleTimer();
+    }
     emitEvent('onEndFlush');
   },
   onBeginLifeCycleTimer: function (debugID, timerType) {
     checkDebugID(debugID);
     emitEvent('onBeginLifeCycleTimer', debugID, timerType);
-    beginLifeCycleTimer(debugID, timerType);
+    if (process.env.NODE_ENV !== 'production') {
+      beginLifeCycleTimer(debugID, timerType);
+    }
   },
   onEndLifeCycleTimer: function (debugID, timerType) {
     checkDebugID(debugID);
-    endLifeCycleTimer(debugID, timerType);
+    if (process.env.NODE_ENV !== 'production') {
+      endLifeCycleTimer(debugID, timerType);
+    }
     emitEvent('onEndLifeCycleTimer', debugID, timerType);
+  },
+  onBeginReconcilerTimer: function (debugID, timerType) {
+    checkDebugID(debugID);
+    emitEvent('onBeginReconcilerTimer', debugID, timerType);
+  },
+  onEndReconcilerTimer: function (debugID, timerType) {
+    checkDebugID(debugID);
+    emitEvent('onEndReconcilerTimer', debugID, timerType);
   },
   onBeginProcessingChildContext: function () {
     emitEvent('onBeginProcessingChildContext');
@@ -41371,15 +43349,33 @@ var ReactDebugTool = {
   onSetState: function () {
     emitEvent('onSetState');
   },
+  onSetDisplayName: function (debugID, displayName) {
+    checkDebugID(debugID);
+    emitEvent('onSetDisplayName', debugID, displayName);
+  },
   onSetChildren: function (debugID, childDebugIDs) {
     checkDebugID(debugID);
-    childDebugIDs.forEach(checkDebugID);
     emitEvent('onSetChildren', debugID, childDebugIDs);
   },
-  onBeforeMountComponent: function (debugID, element, parentDebugID) {
+  onSetOwner: function (debugID, ownerDebugID) {
     checkDebugID(debugID);
-    checkDebugID(parentDebugID, true);
-    emitEvent('onBeforeMountComponent', debugID, element, parentDebugID);
+    emitEvent('onSetOwner', debugID, ownerDebugID);
+  },
+  onSetParent: function (debugID, parentDebugID) {
+    checkDebugID(debugID);
+    emitEvent('onSetParent', debugID, parentDebugID);
+  },
+  onSetText: function (debugID, text) {
+    checkDebugID(debugID);
+    emitEvent('onSetText', debugID, text);
+  },
+  onMountRootComponent: function (debugID) {
+    checkDebugID(debugID);
+    emitEvent('onMountRootComponent', debugID);
+  },
+  onBeforeMountComponent: function (debugID, element) {
+    checkDebugID(debugID);
+    emitEvent('onBeforeMountComponent', debugID, element);
   },
   onMountComponent: function (debugID) {
     checkDebugID(debugID);
@@ -41393,10 +43389,6 @@ var ReactDebugTool = {
     checkDebugID(debugID);
     emitEvent('onUpdateComponent', debugID);
   },
-  onBeforeUnmountComponent: function (debugID) {
-    checkDebugID(debugID);
-    emitEvent('onBeforeUnmountComponent', debugID);
-  },
   onUnmountComponent: function (debugID) {
     checkDebugID(debugID);
     emitEvent('onUnmountComponent', debugID);
@@ -41406,21 +43398,22 @@ var ReactDebugTool = {
   }
 };
 
-// TODO remove these when RN/www gets updated
-ReactDebugTool.addDevtool = ReactDebugTool.addHook;
-ReactDebugTool.removeDevtool = ReactDebugTool.removeHook;
-
-ReactDebugTool.addHook(ReactInvalidSetStateWarningHook);
-ReactDebugTool.addHook(ReactComponentTreeHook);
-ReactDebugTool.addHook(ReactChildrenMutationWarningHook);
-var url = ExecutionEnvironment.canUseDOM && window.location.href || '';
-if (/[?&]react_perf\b/.test(url)) {
-  ReactDebugTool.beginProfiling();
+if (process.env.NODE_ENV !== 'production') {
+  var ReactInvalidSetStateWarningDevTool = require('./ReactInvalidSetStateWarningDevTool');
+  var ReactHostOperationHistoryDevtool = require('./ReactHostOperationHistoryDevtool');
+  var ReactComponentTreeDevtool = require('./ReactComponentTreeDevtool');
+  ReactDebugTool.addDevtool(ReactInvalidSetStateWarningDevTool);
+  ReactDebugTool.addDevtool(ReactComponentTreeDevtool);
+  ReactDebugTool.addDevtool(ReactHostOperationHistoryDevtool);
+  var url = ExecutionEnvironment.canUseDOM && window.location.href || '';
+  if (/[?&]react_perf\b/.test(url)) {
+    ReactDebugTool.beginProfiling();
+  }
 }
 
 module.exports = ReactDebugTool;
 }).call(this,require('_process'))
-},{"./ReactChildrenMutationWarningHook":313,"./ReactComponentTreeHook":318,"./ReactHostOperationHistoryHook":351,"./ReactInvalidSetStateWarningHook":356,"_process":154,"fbjs/lib/ExecutionEnvironment":432,"fbjs/lib/performanceNow":453,"fbjs/lib/warning":455}],341:[function(require,module,exports){
+},{"./ReactComponentTreeDevtool":326,"./ReactHostOperationHistoryDevtool":360,"./ReactInvalidSetStateWarningDevTool":365,"_process":155,"fbjs/lib/ExecutionEnvironment":438,"fbjs/lib/performanceNow":460,"fbjs/lib/warning":462}],350:[function(require,module,exports){
 /**
  * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -41489,7 +43482,7 @@ var ReactDefaultBatchingStrategy = {
 };
 
 module.exports = ReactDefaultBatchingStrategy;
-},{"./ReactUpdates":378,"./Transaction":396,"fbjs/lib/emptyFunction":438,"object-assign":152}],342:[function(require,module,exports){
+},{"./ReactUpdates":384,"./Transaction":402,"fbjs/lib/emptyFunction":444,"object-assign":153}],351:[function(require,module,exports){
 /**
  * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -41574,7 +43567,7 @@ function inject() {
 module.exports = {
   inject: inject
 };
-},{"./BeforeInputEventPlugin":283,"./ChangeEventPlugin":287,"./DefaultEventPluginOrder":294,"./EnterLeaveEventPlugin":296,"./HTMLDOMPropertyConfig":303,"./ReactComponentBrowserEnvironment":316,"./ReactDOMComponent":323,"./ReactDOMComponentTree":325,"./ReactDOMEmptyComponent":327,"./ReactDOMTextComponent":336,"./ReactDOMTreeTraversal":338,"./ReactDefaultBatchingStrategy":341,"./ReactEventListener":348,"./ReactInjection":352,"./ReactReconcileTransaction":369,"./SVGDOMPropertyConfig":380,"./SelectEventPlugin":381,"./SimpleEventPlugin":382}],343:[function(require,module,exports){
+},{"./BeforeInputEventPlugin":292,"./ChangeEventPlugin":296,"./DefaultEventPluginOrder":303,"./EnterLeaveEventPlugin":305,"./HTMLDOMPropertyConfig":312,"./ReactComponentBrowserEnvironment":324,"./ReactDOMComponent":331,"./ReactDOMComponentTree":333,"./ReactDOMEmptyComponent":336,"./ReactDOMTextComponent":345,"./ReactDOMTreeTraversal":347,"./ReactDefaultBatchingStrategy":350,"./ReactEventListener":357,"./ReactInjection":361,"./ReactReconcileTransaction":376,"./SVGDOMPropertyConfig":386,"./SelectEventPlugin":387,"./SimpleEventPlugin":388}],352:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2014-present, Facebook, Inc.
@@ -41634,34 +43627,6 @@ function hasValidKey(config) {
   return config.key !== undefined;
 }
 
-function defineKeyPropWarningGetter(props, displayName) {
-  var warnAboutAccessingKey = function () {
-    if (!specialPropKeyWarningShown) {
-      specialPropKeyWarningShown = true;
-      process.env.NODE_ENV !== 'production' ? warning(false, '%s: `key` is not a prop. Trying to access it will result ' + 'in `undefined` being returned. If you need to access the same ' + 'value within the child component, you should pass it as a different ' + 'prop. (https://fb.me/react-special-props)', displayName) : void 0;
-    }
-  };
-  warnAboutAccessingKey.isReactWarning = true;
-  Object.defineProperty(props, 'key', {
-    get: warnAboutAccessingKey,
-    configurable: true
-  });
-}
-
-function defineRefPropWarningGetter(props, displayName) {
-  var warnAboutAccessingRef = function () {
-    if (!specialPropRefWarningShown) {
-      specialPropRefWarningShown = true;
-      process.env.NODE_ENV !== 'production' ? warning(false, '%s: `ref` is not a prop. Trying to access it will result ' + 'in `undefined` being returned. If you need to access the same ' + 'value within the child component, you should pass it as a different ' + 'prop. (https://fb.me/react-special-props)', displayName) : void 0;
-    }
-  };
-  warnAboutAccessingRef.isReactWarning = true;
-  Object.defineProperty(props, 'ref', {
-    get: warnAboutAccessingRef,
-    configurable: true
-  });
-}
-
 /**
  * Factory method to create a new React element. This no longer adheres to
  * the class pattern, so do not use new to call it. Also, no instanceof check
@@ -41703,7 +43668,6 @@ var ReactElement = function (type, key, ref, self, source, owner, props) {
     // This can be replaced with a WeakMap once they are implemented in
     // commonly used development environments.
     element._store = {};
-    var shadowChildren = Array.isArray(props.children) ? props.children.slice(0) : props.children;
 
     // To make comparing ReactElements easier for testing purposes, we make
     // the validation flag non-enumerable (where possible, which should
@@ -41723,12 +43687,6 @@ var ReactElement = function (type, key, ref, self, source, owner, props) {
         writable: false,
         value: self
       });
-      Object.defineProperty(element, '_shadowChildren', {
-        configurable: false,
-        enumerable: false,
-        writable: false,
-        value: shadowChildren
-      });
       // Two elements created in two different places should be considered
       // equal for testing purposes and therefore we hide it from enumeration.
       Object.defineProperty(element, '_source', {
@@ -41740,7 +43698,6 @@ var ReactElement = function (type, key, ref, self, source, owner, props) {
     } else {
       element._store.validated = false;
       element._self = self;
-      element._shadowChildren = shadowChildren;
       element._source = source;
     }
     if (Object.freeze) {
@@ -41768,6 +43725,14 @@ ReactElement.createElement = function (type, config, children) {
   var source = null;
 
   if (config != null) {
+    if (process.env.NODE_ENV !== 'production') {
+      process.env.NODE_ENV !== 'production' ? warning(
+      /* eslint-disable no-proto */
+      config.__proto__ == null || config.__proto__ === Object.prototype,
+      /* eslint-enable no-proto */
+      'React.createElement(...): Expected props argument to be a plain object. ' + 'Properties defined in its prototype chain will be ignored.') : void 0;
+    }
+
     if (hasValidRef(config)) {
       ref = config.ref;
     }
@@ -41808,15 +43773,39 @@ ReactElement.createElement = function (type, config, children) {
     }
   }
   if (process.env.NODE_ENV !== 'production') {
-    if (key || ref) {
-      if (typeof props.$$typeof === 'undefined' || props.$$typeof !== REACT_ELEMENT_TYPE) {
-        var displayName = typeof type === 'function' ? type.displayName || type.name || 'Unknown' : type;
-        if (key) {
-          defineKeyPropWarningGetter(props, displayName);
-        }
-        if (ref) {
-          defineRefPropWarningGetter(props, displayName);
-        }
+    var displayName = typeof type === 'function' ? type.displayName || type.name || 'Unknown' : type;
+
+    // Create dummy `key` and `ref` property to `props` to warn users against its use
+    var warnAboutAccessingKey = function () {
+      if (!specialPropKeyWarningShown) {
+        specialPropKeyWarningShown = true;
+        process.env.NODE_ENV !== 'production' ? warning(false, '%s: `key` is not a prop. Trying to access it will result ' + 'in `undefined` being returned. If you need to access the same ' + 'value within the child component, you should pass it as a different ' + 'prop. (https://fb.me/react-special-props)', displayName) : void 0;
+      }
+      return undefined;
+    };
+    warnAboutAccessingKey.isReactWarning = true;
+
+    var warnAboutAccessingRef = function () {
+      if (!specialPropRefWarningShown) {
+        specialPropRefWarningShown = true;
+        process.env.NODE_ENV !== 'production' ? warning(false, '%s: `ref` is not a prop. Trying to access it will result ' + 'in `undefined` being returned. If you need to access the same ' + 'value within the child component, you should pass it as a different ' + 'prop. (https://fb.me/react-special-props)', displayName) : void 0;
+      }
+      return undefined;
+    };
+    warnAboutAccessingRef.isReactWarning = true;
+
+    if (typeof props.$$typeof === 'undefined' || props.$$typeof !== REACT_ELEMENT_TYPE) {
+      if (!props.hasOwnProperty('key')) {
+        Object.defineProperty(props, 'key', {
+          get: warnAboutAccessingKey,
+          configurable: true
+        });
+      }
+      if (!props.hasOwnProperty('ref')) {
+        Object.defineProperty(props, 'ref', {
+          get: warnAboutAccessingRef,
+          configurable: true
+        });
       }
     }
   }
@@ -41868,6 +43857,14 @@ ReactElement.cloneElement = function (element, config, children) {
   var owner = element._owner;
 
   if (config != null) {
+    if (process.env.NODE_ENV !== 'production') {
+      process.env.NODE_ENV !== 'production' ? warning(
+      /* eslint-disable no-proto */
+      config.__proto__ == null || config.__proto__ === Object.prototype,
+      /* eslint-enable no-proto */
+      'React.cloneElement(...): Expected props argument to be a plain object. ' + 'Properties defined in its prototype chain will be ignored.') : void 0;
+    }
+
     if (hasValidRef(config)) {
       // Silently steal the ref from the parent.
       ref = config.ref;
@@ -41925,7 +43922,7 @@ ReactElement.REACT_ELEMENT_TYPE = REACT_ELEMENT_TYPE;
 
 module.exports = ReactElement;
 }).call(this,require('_process'))
-},{"./ReactCurrentOwner":320,"./canDefineProperty":400,"_process":154,"fbjs/lib/warning":455,"object-assign":152}],344:[function(require,module,exports){
+},{"./ReactCurrentOwner":328,"./canDefineProperty":406,"_process":155,"fbjs/lib/warning":462,"object-assign":153}],353:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2014-present, Facebook, Inc.
@@ -41948,7 +43945,7 @@ module.exports = ReactElement;
 'use strict';
 
 var ReactCurrentOwner = require('./ReactCurrentOwner');
-var ReactComponentTreeHook = require('./ReactComponentTreeHook');
+var ReactComponentTreeDevtool = require('./ReactComponentTreeDevtool');
 var ReactElement = require('./ReactElement');
 var ReactPropTypeLocations = require('./ReactPropTypeLocations');
 
@@ -42021,7 +44018,7 @@ function validateExplicitKey(element, parentType) {
     childOwner = ' It was passed a child from ' + element._owner.getName() + '.';
   }
 
-  process.env.NODE_ENV !== 'production' ? warning(false, 'Each child in an array or iterator should have a unique "key" prop.' + '%s%s See https://fb.me/react-warning-keys for more information.%s', currentComponentErrorInfo, childOwner, ReactComponentTreeHook.getCurrentStackAddendum(element)) : void 0;
+  process.env.NODE_ENV !== 'production' ? warning(false, 'Each child in an array or iterator should have a unique "key" prop.' + '%s%s See https://fb.me/react-warning-keys for more information.%s', currentComponentErrorInfo, childOwner, ReactComponentTreeDevtool.getCurrentStackAddendum(element)) : void 0;
 }
 
 /**
@@ -42092,9 +44089,7 @@ var ReactElementValidator = {
     var validType = typeof type === 'string' || typeof type === 'function';
     // We warn in this case but don't throw. We expect the element creation to
     // succeed and there will likely be errors in render.
-    if (!validType) {
-      process.env.NODE_ENV !== 'production' ? warning(false, 'React.createElement: type should not be null, undefined, boolean, or ' + 'number. It should be a string (for DOM elements) or a ReactClass ' + '(for composite components).%s', getDeclarationErrorAddendum()) : void 0;
-    }
+    process.env.NODE_ENV !== 'production' ? warning(validType, 'React.createElement: type should not be null, undefined, boolean, or ' + 'number. It should be a string (for DOM elements) or a ReactClass ' + '(for composite components).%s', getDeclarationErrorAddendum()) : void 0;
 
     var element = ReactElement.createElement.apply(this, arguments);
 
@@ -42156,7 +44151,7 @@ var ReactElementValidator = {
 
 module.exports = ReactElementValidator;
 }).call(this,require('_process'))
-},{"./ReactComponentTreeHook":318,"./ReactCurrentOwner":320,"./ReactElement":343,"./ReactPropTypeLocations":365,"./canDefineProperty":400,"./checkReactTypeSpec":401,"./getIteratorFn":413,"_process":154,"fbjs/lib/warning":455}],345:[function(require,module,exports){
+},{"./ReactComponentTreeDevtool":326,"./ReactCurrentOwner":328,"./ReactElement":352,"./ReactPropTypeLocations":374,"./canDefineProperty":406,"./checkReactTypeSpec":407,"./getIteratorFn":419,"_process":155,"fbjs/lib/warning":462}],354:[function(require,module,exports){
 /**
  * Copyright 2014-present, Facebook, Inc.
  * All rights reserved.
@@ -42187,7 +44182,7 @@ var ReactEmptyComponent = {
 ReactEmptyComponent.injection = ReactEmptyComponentInjection;
 
 module.exports = ReactEmptyComponent;
-},{}],346:[function(require,module,exports){
+},{}],355:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-present, Facebook, Inc.
@@ -42266,7 +44261,7 @@ if (process.env.NODE_ENV !== 'production') {
 
 module.exports = ReactErrorUtils;
 }).call(this,require('_process'))
-},{"_process":154}],347:[function(require,module,exports){
+},{"_process":155}],356:[function(require,module,exports){
 /**
  * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -42300,7 +44295,7 @@ var ReactEventEmitterMixin = {
 };
 
 module.exports = ReactEventEmitterMixin;
-},{"./EventPluginHub":298}],348:[function(require,module,exports){
+},{"./EventPluginHub":307}],357:[function(require,module,exports){
 /**
  * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -42458,7 +44453,7 @@ var ReactEventListener = {
 };
 
 module.exports = ReactEventListener;
-},{"./PooledClass":306,"./ReactDOMComponentTree":325,"./ReactUpdates":378,"./getEventTarget":411,"fbjs/lib/EventListener":431,"fbjs/lib/ExecutionEnvironment":432,"fbjs/lib/getUnboundedScrollPosition":443,"object-assign":152}],349:[function(require,module,exports){
+},{"./PooledClass":315,"./ReactDOMComponentTree":333,"./ReactUpdates":384,"./getEventTarget":417,"fbjs/lib/EventListener":437,"fbjs/lib/ExecutionEnvironment":438,"fbjs/lib/getUnboundedScrollPosition":449,"object-assign":153}],358:[function(require,module,exports){
 /**
  * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -42468,7 +44463,6 @@ module.exports = ReactEventListener;
  * of patent rights can be found in the PATENTS file in the same directory.
  *
  * @providesModule ReactFeatureFlags
- * 
  */
 
 'use strict';
@@ -42481,7 +44475,7 @@ var ReactFeatureFlags = {
 };
 
 module.exports = ReactFeatureFlags;
-},{}],350:[function(require,module,exports){
+},{}],359:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2014-present, Facebook, Inc.
@@ -42560,7 +44554,7 @@ var ReactHostComponent = {
 
 module.exports = ReactHostComponent;
 }).call(this,require('_process'))
-},{"./reactProdInvariant":422,"_process":154,"fbjs/lib/invariant":446,"object-assign":152}],351:[function(require,module,exports){
+},{"./reactProdInvariant":428,"_process":155,"fbjs/lib/invariant":452,"object-assign":153}],360:[function(require,module,exports){
 /**
  * Copyright 2016-present, Facebook, Inc.
  * All rights reserved.
@@ -42569,14 +44563,14 @@ module.exports = ReactHostComponent;
  * LICENSE file in the root directory of this source tree. An additional grant
  * of patent rights can be found in the PATENTS file in the same directory.
  *
- * @providesModule ReactHostOperationHistoryHook
+ * @providesModule ReactHostOperationHistoryDevtool
  */
 
 'use strict';
 
 var history = [];
 
-var ReactHostOperationHistoryHook = {
+var ReactHostOperationHistoryDevtool = {
   onHostOperation: function (debugID, type, payload) {
     history.push({
       instanceID: debugID,
@@ -42585,7 +44579,7 @@ var ReactHostOperationHistoryHook = {
     });
   },
   clearHistory: function () {
-    if (ReactHostOperationHistoryHook._preventClearing) {
+    if (ReactHostOperationHistoryDevtool._preventClearing) {
       // Should only be used for tests.
       return;
     }
@@ -42597,8 +44591,8 @@ var ReactHostOperationHistoryHook = {
   }
 };
 
-module.exports = ReactHostOperationHistoryHook;
-},{}],352:[function(require,module,exports){
+module.exports = ReactHostOperationHistoryDevtool;
+},{}],361:[function(require,module,exports){
 /**
  * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -42635,7 +44629,7 @@ var ReactInjection = {
 };
 
 module.exports = ReactInjection;
-},{"./DOMProperty":291,"./EventPluginHub":298,"./EventPluginUtils":300,"./ReactBrowserEventEmitter":308,"./ReactClass":314,"./ReactComponentEnvironment":317,"./ReactEmptyComponent":345,"./ReactHostComponent":350,"./ReactUpdates":378}],353:[function(require,module,exports){
+},{"./DOMProperty":300,"./EventPluginHub":307,"./EventPluginUtils":309,"./ReactBrowserEventEmitter":317,"./ReactClass":322,"./ReactComponentEnvironment":325,"./ReactEmptyComponent":354,"./ReactHostComponent":359,"./ReactUpdates":384}],362:[function(require,module,exports){
 /**
  * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -42760,7 +44754,7 @@ var ReactInputSelection = {
 };
 
 module.exports = ReactInputSelection;
-},{"./ReactDOMSelection":335,"fbjs/lib/containsNode":435,"fbjs/lib/focusNode":440,"fbjs/lib/getActiveElement":441}],354:[function(require,module,exports){
+},{"./ReactDOMSelection":344,"fbjs/lib/containsNode":441,"fbjs/lib/focusNode":446,"fbjs/lib/getActiveElement":447}],363:[function(require,module,exports){
 /**
  * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -42809,8 +44803,7 @@ var ReactInstanceMap = {
 };
 
 module.exports = ReactInstanceMap;
-},{}],355:[function(require,module,exports){
-(function (process){
+},{}],364:[function(require,module,exports){
 /**
  * Copyright 2016-present, Facebook, Inc.
  * All rights reserved.
@@ -42824,16 +44817,10 @@ module.exports = ReactInstanceMap;
 
 'use strict';
 
-var debugTool = null;
+var ReactDebugTool = require('./ReactDebugTool');
 
-if (process.env.NODE_ENV !== 'production') {
-  var ReactDebugTool = require('./ReactDebugTool');
-  debugTool = ReactDebugTool;
-}
-
-module.exports = { debugTool: debugTool };
-}).call(this,require('_process'))
-},{"./ReactDebugTool":340,"_process":154}],356:[function(require,module,exports){
+module.exports = { debugTool: ReactDebugTool };
+},{"./ReactDebugTool":349}],365:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2016-present, Facebook, Inc.
@@ -42843,7 +44830,7 @@ module.exports = { debugTool: debugTool };
  * LICENSE file in the root directory of this source tree. An additional grant
  * of patent rights can be found in the PATENTS file in the same directory.
  *
- * @providesModule ReactInvalidSetStateWarningHook
+ * @providesModule ReactInvalidSetStateWarningDevTool
  */
 
 'use strict';
@@ -42858,7 +44845,7 @@ if (process.env.NODE_ENV !== 'production') {
   };
 }
 
-var ReactInvalidSetStateWarningHook = {
+var ReactInvalidSetStateWarningDevTool = {
   onBeginProcessingChildContext: function () {
     processingChildContext = true;
   },
@@ -42870,9 +44857,9 @@ var ReactInvalidSetStateWarningHook = {
   }
 };
 
-module.exports = ReactInvalidSetStateWarningHook;
+module.exports = ReactInvalidSetStateWarningDevTool;
 }).call(this,require('_process'))
-},{"_process":154,"fbjs/lib/warning":455}],357:[function(require,module,exports){
+},{"_process":155,"fbjs/lib/warning":462}],366:[function(require,module,exports){
 /**
  * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -42923,7 +44910,7 @@ var ReactMarkupChecksum = {
 };
 
 module.exports = ReactMarkupChecksum;
-},{"./adler32":399}],358:[function(require,module,exports){
+},{"./adler32":405}],367:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-present, Facebook, Inc.
@@ -42949,7 +44936,6 @@ var ReactDOMContainerInfo = require('./ReactDOMContainerInfo');
 var ReactDOMFeatureFlags = require('./ReactDOMFeatureFlags');
 var ReactElement = require('./ReactElement');
 var ReactFeatureFlags = require('./ReactFeatureFlags');
-var ReactInstanceMap = require('./ReactInstanceMap');
 var ReactInstrumentation = require('./ReactInstrumentation');
 var ReactMarkupChecksum = require('./ReactMarkupChecksum');
 var ReactReconciler = require('./ReactReconciler');
@@ -43029,8 +45015,7 @@ function mountComponentIntoNode(wrapperInstance, container, transaction, shouldR
     console.time(markerName);
   }
 
-  var markup = ReactReconciler.mountComponent(wrapperInstance, transaction, null, ReactDOMContainerInfo(wrapperInstance, container), context, 0 /* parentDebugID */
-  );
+  var markup = ReactReconciler.mountComponent(wrapperInstance, transaction, null, ReactDOMContainerInfo(wrapperInstance, container), context);
 
   if (markerName) {
     console.timeEnd(markerName);
@@ -43099,41 +45084,6 @@ function hasNonRootReactChild(container) {
     var inst = ReactDOMComponentTree.getInstanceFromNode(rootEl);
     return !!(inst && inst._hostParent);
   }
-}
-
-/**
- * True if the supplied DOM node is a React DOM element and
- * it has been rendered by another copy of React.
- *
- * @param {?DOMElement} node The candidate DOM node.
- * @return {boolean} True if the DOM has been rendered by another copy of React
- * @internal
- */
-function nodeIsRenderedByOtherInstance(container) {
-  var rootEl = getReactRootElementInContainer(container);
-  return !!(rootEl && isReactNode(rootEl) && !ReactDOMComponentTree.getInstanceFromNode(rootEl));
-}
-
-/**
- * True if the supplied DOM node is a valid node element.
- *
- * @param {?DOMElement} node The candidate DOM node.
- * @return {boolean} True if the DOM is a valid DOM node.
- * @internal
- */
-function isValidContainer(node) {
-  return !!(node && (node.nodeType === ELEMENT_NODE_TYPE || node.nodeType === DOC_NODE_TYPE || node.nodeType === DOCUMENT_FRAGMENT_NODE_TYPE));
-}
-
-/**
- * True if the supplied DOM node is a valid React node element.
- *
- * @param {?DOMElement} node The candidate DOM node.
- * @return {boolean} True if the DOM is a valid React DOM node.
- * @internal
- */
-function isReactNode(node) {
-  return isValidContainer(node) && (node.hasAttribute(ROOT_ATTR_NAME) || node.hasAttribute(ATTR_NAME));
 }
 
 function getHostRootInstanceInContainer(container) {
@@ -43211,9 +45161,9 @@ var ReactMount = {
    * @param {DOMElement} container container to render into
    * @param {?function} callback function triggered on completion
    */
-  _updateRootComponent: function (prevComponent, nextElement, nextContext, container, callback) {
+  _updateRootComponent: function (prevComponent, nextElement, container, callback) {
     ReactMount.scrollMonitor(container, function () {
-      ReactUpdateQueue.enqueueElementInternal(prevComponent, nextElement, nextContext);
+      ReactUpdateQueue.enqueueElementInternal(prevComponent, nextElement);
       if (callback) {
         ReactUpdateQueue.enqueueCallbackInternal(prevComponent, callback);
       }
@@ -43223,7 +45173,7 @@ var ReactMount = {
   },
 
   /**
-   * Render a new component into the DOM. Hooked by hooks!
+   * Render a new component into the DOM. Hooked by devtools!
    *
    * @param {ReactElement} nextElement element to render
    * @param {DOMElement} container container to render into
@@ -43231,15 +45181,25 @@ var ReactMount = {
    * @return {ReactComponent} nextComponent
    */
   _renderNewRootComponent: function (nextElement, container, shouldReuseMarkup, context) {
+    if (process.env.NODE_ENV !== 'production') {
+      ReactInstrumentation.debugTool.onBeginFlush();
+    }
+
     // Various parts of our code (such as ReactCompositeComponent's
     // _renderValidatedComponent) assume that calls to render aren't nested;
     // verify that that's the case.
     process.env.NODE_ENV !== 'production' ? warning(ReactCurrentOwner.current == null, '_renderNewRootComponent(): Render methods should be a pure function ' + 'of props and state; triggering nested component updates from ' + 'render is not allowed. If necessary, trigger nested updates in ' + 'componentDidUpdate. Check the render method of %s.', ReactCurrentOwner.current && ReactCurrentOwner.current.getName() || 'ReactCompositeComponent') : void 0;
 
-    !isValidContainer(container) ? process.env.NODE_ENV !== 'production' ? invariant(false, '_registerComponent(...): Target container is not a DOM element.') : _prodInvariant('37') : void 0;
+    !(container && (container.nodeType === ELEMENT_NODE_TYPE || container.nodeType === DOC_NODE_TYPE || container.nodeType === DOCUMENT_FRAGMENT_NODE_TYPE)) ? process.env.NODE_ENV !== 'production' ? invariant(false, '_registerComponent(...): Target container is not a DOM element.') : _prodInvariant('37') : void 0;
 
     ReactBrowserEventEmitter.ensureScrollValueMonitoring();
-    var componentInstance = instantiateReactComponent(nextElement, false);
+    var componentInstance = instantiateReactComponent(nextElement);
+
+    if (process.env.NODE_ENV !== 'production') {
+      // Mute future events from the top level wrapper.
+      // It is an implementation detail that devtools should not know about.
+      componentInstance._debugID = 0;
+    }
 
     // The initial render is synchronous but any updates that happen during
     // rendering, in componentWillMount or componentDidMount, will be batched
@@ -43249,6 +45209,12 @@ var ReactMount = {
 
     var wrapperID = componentInstance._instance.rootID;
     instancesByReactRootID[wrapperID] = componentInstance;
+
+    if (process.env.NODE_ENV !== 'production') {
+      // The instance here is TopLevelWrapper so we report mount for its child.
+      ReactInstrumentation.debugTool.onMountRootComponent(componentInstance._renderedComponent._debugID);
+      ReactInstrumentation.debugTool.onEndFlush();
+    }
 
     return componentInstance;
   },
@@ -43267,7 +45233,7 @@ var ReactMount = {
    * @return {ReactComponent} Component instance rendered in `container`.
    */
   renderSubtreeIntoContainer: function (parentComponent, nextElement, container, callback) {
-    !(parentComponent != null && ReactInstanceMap.has(parentComponent)) ? process.env.NODE_ENV !== 'production' ? invariant(false, 'parentComponent must be a valid React Component') : _prodInvariant('38') : void 0;
+    !(parentComponent != null && parentComponent._reactInternalInstance != null) ? process.env.NODE_ENV !== 'production' ? invariant(false, 'parentComponent must be a valid React Component') : _prodInvariant('38') : void 0;
     return ReactMount._renderSubtreeIntoContainer(parentComponent, nextElement, container, callback);
   },
 
@@ -43281,14 +45247,6 @@ var ReactMount = {
 
     var nextWrappedElement = ReactElement(TopLevelWrapper, null, null, null, null, null, nextElement);
 
-    var nextContext;
-    if (parentComponent) {
-      var parentInst = ReactInstanceMap.get(parentComponent);
-      nextContext = parentInst._processChildContext(parentInst._context);
-    } else {
-      nextContext = emptyObject;
-    }
-
     var prevComponent = getTopLevelWrapperInContainer(container);
 
     if (prevComponent) {
@@ -43299,7 +45257,7 @@ var ReactMount = {
         var updatedCallback = callback && function () {
           callback.call(publicInst);
         };
-        ReactMount._updateRootComponent(prevComponent, nextWrappedElement, nextContext, container, updatedCallback);
+        ReactMount._updateRootComponent(prevComponent, nextWrappedElement, container, updatedCallback);
         return publicInst;
       } else {
         ReactMount.unmountComponentAtNode(container);
@@ -43326,7 +45284,7 @@ var ReactMount = {
     }
 
     var shouldReuseMarkup = containerHasReactMarkup && !prevComponent && !containerHasNonRootReactChild;
-    var component = ReactMount._renderNewRootComponent(nextWrappedElement, container, shouldReuseMarkup, nextContext)._renderedComponent.getPublicInstance();
+    var component = ReactMount._renderNewRootComponent(nextWrappedElement, container, shouldReuseMarkup, parentComponent != null ? parentComponent._reactInternalInstance._processChildContext(parentComponent._reactInternalInstance._context) : emptyObject)._renderedComponent.getPublicInstance();
     if (callback) {
       callback.call(component);
     }
@@ -43365,11 +45323,7 @@ var ReactMount = {
     // render but we still don't expect to be in a render call here.)
     process.env.NODE_ENV !== 'production' ? warning(ReactCurrentOwner.current == null, 'unmountComponentAtNode(): Render methods should be a pure function ' + 'of props and state; triggering nested component updates from render ' + 'is not allowed. If necessary, trigger nested updates in ' + 'componentDidUpdate. Check the render method of %s.', ReactCurrentOwner.current && ReactCurrentOwner.current.getName() || 'ReactCompositeComponent') : void 0;
 
-    !isValidContainer(container) ? process.env.NODE_ENV !== 'production' ? invariant(false, 'unmountComponentAtNode(...): Target container is not a DOM element.') : _prodInvariant('40') : void 0;
-
-    if (process.env.NODE_ENV !== 'production') {
-      process.env.NODE_ENV !== 'production' ? warning(!nodeIsRenderedByOtherInstance(container), 'unmountComponentAtNode(): The node you\'re attempting to unmount ' + 'was rendered by another copy of React.') : void 0;
-    }
+    !(container && (container.nodeType === ELEMENT_NODE_TYPE || container.nodeType === DOC_NODE_TYPE || container.nodeType === DOCUMENT_FRAGMENT_NODE_TYPE)) ? process.env.NODE_ENV !== 'production' ? invariant(false, 'unmountComponentAtNode(...): Target container is not a DOM element.') : _prodInvariant('40') : void 0;
 
     var prevComponent = getTopLevelWrapperInContainer(container);
     if (!prevComponent) {
@@ -43392,7 +45346,7 @@ var ReactMount = {
   },
 
   _mountImageIntoNode: function (markup, container, instance, shouldReuseMarkup, transaction) {
-    !isValidContainer(container) ? process.env.NODE_ENV !== 'production' ? invariant(false, 'mountComponentIntoNode(...): Target container is not valid.') : _prodInvariant('41') : void 0;
+    !(container && (container.nodeType === ELEMENT_NODE_TYPE || container.nodeType === DOC_NODE_TYPE || container.nodeType === DOCUMENT_FRAGMENT_NODE_TYPE)) ? process.env.NODE_ENV !== 'production' ? invariant(false, 'mountComponentIntoNode(...): Target container is not valid.') : _prodInvariant('41') : void 0;
 
     if (shouldReuseMarkup) {
       var rootElement = getReactRootElementInContainer(container);
@@ -43460,7 +45414,7 @@ var ReactMount = {
 
 module.exports = ReactMount;
 }).call(this,require('_process'))
-},{"./DOMLazyTree":289,"./DOMProperty":291,"./ReactBrowserEventEmitter":308,"./ReactCurrentOwner":320,"./ReactDOMComponentTree":325,"./ReactDOMContainerInfo":326,"./ReactDOMFeatureFlags":329,"./ReactElement":343,"./ReactFeatureFlags":349,"./ReactInstanceMap":354,"./ReactInstrumentation":355,"./ReactMarkupChecksum":357,"./ReactReconciler":370,"./ReactUpdateQueue":377,"./ReactUpdates":378,"./instantiateReactComponent":417,"./reactProdInvariant":422,"./setInnerHTML":424,"./shouldUpdateReactComponent":426,"_process":154,"fbjs/lib/emptyObject":439,"fbjs/lib/invariant":446,"fbjs/lib/warning":455}],359:[function(require,module,exports){
+},{"./DOMLazyTree":298,"./DOMProperty":300,"./ReactBrowserEventEmitter":317,"./ReactCurrentOwner":328,"./ReactDOMComponentTree":333,"./ReactDOMContainerInfo":334,"./ReactDOMFeatureFlags":338,"./ReactElement":352,"./ReactFeatureFlags":358,"./ReactInstrumentation":364,"./ReactMarkupChecksum":366,"./ReactReconciler":377,"./ReactUpdateQueue":383,"./ReactUpdates":384,"./instantiateReactComponent":423,"./reactProdInvariant":428,"./setInnerHTML":430,"./shouldUpdateReactComponent":432,"_process":155,"fbjs/lib/emptyObject":445,"fbjs/lib/invariant":452,"fbjs/lib/warning":462}],368:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-present, Facebook, Inc.
@@ -43603,6 +45557,7 @@ function processQueue(inst, updateQueue) {
   ReactComponentEnvironment.processChildrenUpdates(inst, updateQueue);
 }
 
+var setParentForInstrumentation = emptyFunction;
 var setChildrenForInstrumentation = emptyFunction;
 if (process.env.NODE_ENV !== 'production') {
   var getDebugID = function (inst) {
@@ -43615,15 +45570,15 @@ if (process.env.NODE_ENV !== 'production') {
     }
     return inst._debugID;
   };
-  setChildrenForInstrumentation = function (children) {
-    var debugID = getDebugID(this);
-    // TODO: React Native empty components are also multichild.
-    // This means they still get into this method but don't have _debugID.
-    if (debugID !== 0) {
-      ReactInstrumentation.debugTool.onSetChildren(debugID, children ? Object.keys(children).map(function (key) {
-        return children[key]._debugID;
-      }) : []);
+  setParentForInstrumentation = function (child) {
+    if (child._debugID !== 0) {
+      ReactInstrumentation.debugTool.onSetParent(child._debugID, getDebugID(this));
     }
+  };
+  setChildrenForInstrumentation = function (children) {
+    ReactInstrumentation.debugTool.onSetChildren(getDebugID(this), children ? Object.keys(children).map(function (key) {
+      return children[key]._debugID;
+    }) : []);
   };
 }
 
@@ -43646,11 +45601,10 @@ var ReactMultiChild = {
 
     _reconcilerInstantiateChildren: function (nestedChildren, transaction, context) {
       if (process.env.NODE_ENV !== 'production') {
-        var selfDebugID = getDebugID(this);
         if (this._currentElement) {
           try {
             ReactCurrentOwner.current = this._currentElement._owner;
-            return ReactChildReconciler.instantiateChildren(nestedChildren, transaction, context, selfDebugID);
+            return ReactChildReconciler.instantiateChildren(nestedChildren, transaction, context, this._debugID);
           } finally {
             ReactCurrentOwner.current = null;
           }
@@ -43659,24 +45613,22 @@ var ReactMultiChild = {
       return ReactChildReconciler.instantiateChildren(nestedChildren, transaction, context);
     },
 
-    _reconcilerUpdateChildren: function (prevChildren, nextNestedChildrenElements, mountImages, removedNodes, transaction, context) {
+    _reconcilerUpdateChildren: function (prevChildren, nextNestedChildrenElements, removedNodes, transaction, context) {
       var nextChildren;
-      var selfDebugID = 0;
       if (process.env.NODE_ENV !== 'production') {
-        selfDebugID = getDebugID(this);
         if (this._currentElement) {
           try {
             ReactCurrentOwner.current = this._currentElement._owner;
-            nextChildren = flattenChildren(nextNestedChildrenElements, selfDebugID);
+            nextChildren = flattenChildren(nextNestedChildrenElements, this._debugID);
           } finally {
             ReactCurrentOwner.current = null;
           }
-          ReactChildReconciler.updateChildren(prevChildren, nextChildren, mountImages, removedNodes, transaction, this, this._hostContainerInfo, context, selfDebugID);
+          ReactChildReconciler.updateChildren(prevChildren, nextChildren, removedNodes, transaction, context);
           return nextChildren;
         }
       }
-      nextChildren = flattenChildren(nextNestedChildrenElements, selfDebugID);
-      ReactChildReconciler.updateChildren(prevChildren, nextChildren, mountImages, removedNodes, transaction, this, this._hostContainerInfo, context, selfDebugID);
+      nextChildren = flattenChildren(nextNestedChildrenElements);
+      ReactChildReconciler.updateChildren(prevChildren, nextChildren, removedNodes, transaction, context);
       return nextChildren;
     },
 
@@ -43697,11 +45649,10 @@ var ReactMultiChild = {
       for (var name in children) {
         if (children.hasOwnProperty(name)) {
           var child = children[name];
-          var selfDebugID = 0;
           if (process.env.NODE_ENV !== 'production') {
-            selfDebugID = getDebugID(this);
+            setParentForInstrumentation.call(this, child);
           }
-          var mountImage = ReactReconciler.mountComponent(child, transaction, this, this._hostContainerInfo, context, selfDebugID);
+          var mountImage = ReactReconciler.mountComponent(child, transaction, this, this._hostContainerInfo, context);
           child._mountIndex = index++;
           mountImages.push(mountImage);
         }
@@ -43774,8 +45725,7 @@ var ReactMultiChild = {
     _updateChildren: function (nextNestedChildrenElements, transaction, context) {
       var prevChildren = this._renderedChildren;
       var removedNodes = {};
-      var mountImages = [];
-      var nextChildren = this._reconcilerUpdateChildren(prevChildren, nextNestedChildrenElements, mountImages, removedNodes, transaction, context);
+      var nextChildren = this._reconcilerUpdateChildren(prevChildren, nextNestedChildrenElements, removedNodes, transaction, context);
       if (!nextChildren && !prevChildren) {
         return;
       }
@@ -43783,10 +45733,8 @@ var ReactMultiChild = {
       var name;
       // `nextIndex` will increment for each child in `nextChildren`, but
       // `lastIndex` will be the last index visited in `prevChildren`.
-      var nextIndex = 0;
       var lastIndex = 0;
-      // `nextMountIndex` will increment for each newly mounted child.
-      var nextMountIndex = 0;
+      var nextIndex = 0;
       var lastPlacedNode = null;
       for (name in nextChildren) {
         if (!nextChildren.hasOwnProperty(name)) {
@@ -43805,8 +45753,7 @@ var ReactMultiChild = {
             // The `removedNodes` loop below will actually remove the child.
           }
           // The child must be instantiated before it's mounted.
-          updates = enqueue(updates, this._mountChildAtIndex(nextChild, mountImages[nextMountIndex], lastPlacedNode, nextIndex, transaction, context));
-          nextMountIndex++;
+          updates = enqueue(updates, this._mountChildAtIndex(nextChild, lastPlacedNode, nextIndex, transaction, context));
         }
         nextIndex++;
         lastPlacedNode = ReactReconciler.getHostNode(nextChild);
@@ -43889,7 +45836,8 @@ var ReactMultiChild = {
      * @param {ReactReconcileTransaction} transaction
      * @private
      */
-    _mountChildAtIndex: function (child, mountImage, afterNode, index, transaction, context) {
+    _mountChildAtIndex: function (child, afterNode, index, transaction, context) {
+      var mountImage = ReactReconciler.mountComponent(child, transaction, this, this._hostContainerInfo, context);
       child._mountIndex = index;
       return this.createChild(child, afterNode, mountImage);
     },
@@ -43914,7 +45862,7 @@ var ReactMultiChild = {
 
 module.exports = ReactMultiChild;
 }).call(this,require('_process'))
-},{"./ReactChildReconciler":311,"./ReactComponentEnvironment":317,"./ReactCurrentOwner":320,"./ReactInstanceMap":354,"./ReactInstrumentation":355,"./ReactMultiChildUpdateTypes":360,"./ReactReconciler":370,"./flattenChildren":406,"./reactProdInvariant":422,"_process":154,"fbjs/lib/emptyFunction":438,"fbjs/lib/invariant":446}],360:[function(require,module,exports){
+},{"./ReactChildReconciler":320,"./ReactComponentEnvironment":325,"./ReactCurrentOwner":328,"./ReactInstanceMap":363,"./ReactInstrumentation":364,"./ReactMultiChildUpdateTypes":369,"./ReactReconciler":377,"./flattenChildren":412,"./reactProdInvariant":428,"_process":155,"fbjs/lib/emptyFunction":444,"fbjs/lib/invariant":452}],369:[function(require,module,exports){
 /**
  * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -43947,7 +45895,7 @@ var ReactMultiChildUpdateTypes = keyMirror({
 });
 
 module.exports = ReactMultiChildUpdateTypes;
-},{"fbjs/lib/keyMirror":449}],361:[function(require,module,exports){
+},{"fbjs/lib/keyMirror":455}],370:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-present, Facebook, Inc.
@@ -43958,7 +45906,6 @@ module.exports = ReactMultiChildUpdateTypes;
  * of patent rights can be found in the PATENTS file in the same directory.
  *
  * @providesModule ReactNodeTypes
- * 
  */
 
 'use strict';
@@ -43990,7 +45937,7 @@ var ReactNodeTypes = {
 
 module.exports = ReactNodeTypes;
 }).call(this,require('_process'))
-},{"./ReactElement":343,"./reactProdInvariant":422,"_process":154,"fbjs/lib/invariant":446}],362:[function(require,module,exports){
+},{"./ReactElement":352,"./reactProdInvariant":428,"_process":155,"fbjs/lib/invariant":452}],371:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2015-present, Facebook, Inc.
@@ -44007,10 +45954,9 @@ module.exports = ReactNodeTypes;
 
 var warning = require('fbjs/lib/warning');
 
-function warnNoop(publicInstance, callerName) {
+function warnTDZ(publicInstance, callerName) {
   if (process.env.NODE_ENV !== 'production') {
-    var constructor = publicInstance.constructor;
-    process.env.NODE_ENV !== 'production' ? warning(false, '%s(...): Can only update a mounted or mounting component. ' + 'This usually means you called %s() on an unmounted component. ' + 'This is a no-op. Please check the code for the %s component.', callerName, callerName, constructor && (constructor.displayName || constructor.name) || 'ReactClass') : void 0;
+    process.env.NODE_ENV !== 'production' ? warning(false, '%s(...): Can only update a mounted or mounting component. ' + 'This usually means you called %s() on an unmounted component. ' + 'This is a no-op. Please check the code for the %s component.', callerName, callerName, publicInstance.constructor && publicInstance.constructor.displayName || '') : void 0;
   }
 }
 
@@ -44054,7 +46000,7 @@ var ReactNoopUpdateQueue = {
    * @internal
    */
   enqueueForceUpdate: function (publicInstance) {
-    warnNoop(publicInstance, 'forceUpdate');
+    warnTDZ(publicInstance, 'forceUpdate');
   },
 
   /**
@@ -44069,7 +46015,7 @@ var ReactNoopUpdateQueue = {
    * @internal
    */
   enqueueReplaceState: function (publicInstance, completeState) {
-    warnNoop(publicInstance, 'replaceState');
+    warnTDZ(publicInstance, 'replaceState');
   },
 
   /**
@@ -44083,13 +46029,13 @@ var ReactNoopUpdateQueue = {
    * @internal
    */
   enqueueSetState: function (publicInstance, partialState) {
-    warnNoop(publicInstance, 'setState');
+    warnTDZ(publicInstance, 'setState');
   }
 };
 
 module.exports = ReactNoopUpdateQueue;
 }).call(this,require('_process'))
-},{"_process":154,"fbjs/lib/warning":455}],363:[function(require,module,exports){
+},{"_process":155,"fbjs/lib/warning":462}],372:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-present, Facebook, Inc.
@@ -44186,7 +46132,7 @@ var ReactOwner = {
 
 module.exports = ReactOwner;
 }).call(this,require('_process'))
-},{"./reactProdInvariant":422,"_process":154,"fbjs/lib/invariant":446}],364:[function(require,module,exports){
+},{"./reactProdInvariant":428,"_process":155,"fbjs/lib/invariant":452}],373:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-present, Facebook, Inc.
@@ -44213,7 +46159,7 @@ if (process.env.NODE_ENV !== 'production') {
 
 module.exports = ReactPropTypeLocationNames;
 }).call(this,require('_process'))
-},{"_process":154}],365:[function(require,module,exports){
+},{"_process":155}],374:[function(require,module,exports){
 /**
  * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -44236,8 +46182,7 @@ var ReactPropTypeLocations = keyMirror({
 });
 
 module.exports = ReactPropTypeLocations;
-},{"fbjs/lib/keyMirror":449}],366:[function(require,module,exports){
-(function (process){
+},{"fbjs/lib/keyMirror":455}],375:[function(require,module,exports){
 /**
  * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -44253,11 +46198,9 @@ module.exports = ReactPropTypeLocations;
 
 var ReactElement = require('./ReactElement');
 var ReactPropTypeLocationNames = require('./ReactPropTypeLocationNames');
-var ReactPropTypesSecret = require('./ReactPropTypesSecret');
 
 var emptyFunction = require('fbjs/lib/emptyFunction');
 var getIteratorFn = require('./getIteratorFn');
-var warning = require('fbjs/lib/warning');
 
 /**
  * Collection of methods that allow declaration and validation of props that are
@@ -44346,40 +46289,14 @@ function is(x, y) {
 }
 /*eslint-enable no-self-compare*/
 
-/**
- * We use an Error-like object for backward compatibility as people may call
- * PropTypes directly and inspect their output. However we don't use real
- * Errors anymore. We don't inspect their stack anyway, and creating them
- * is prohibitively expensive if they are created too often, such as what
- * happens in oneOfType() for any type before the one that matched.
- */
-function PropTypeError(message) {
-  this.message = message;
-  this.stack = '';
-}
-// Make `instanceof Error` still work for returned errors.
-PropTypeError.prototype = Error.prototype;
-
 function createChainableTypeChecker(validate) {
-  if (process.env.NODE_ENV !== 'production') {
-    var manualPropTypeCallCache = {};
-  }
-  function checkType(isRequired, props, propName, componentName, location, propFullName, secret) {
+  function checkType(isRequired, props, propName, componentName, location, propFullName) {
     componentName = componentName || ANONYMOUS;
     propFullName = propFullName || propName;
-    if (process.env.NODE_ENV !== 'production') {
-      if (secret !== ReactPropTypesSecret && typeof console !== 'undefined') {
-        var cacheKey = componentName + ':' + propName;
-        if (!manualPropTypeCallCache[cacheKey]) {
-          process.env.NODE_ENV !== 'production' ? warning(false, 'You are manually calling a React.PropTypes validation ' + 'function for the `%s` prop on `%s`. This is deprecated ' + 'and will not work in the next major version. You may be ' + 'seeing this warning due to a third-party PropTypes library. ' + 'See https://fb.me/react-warning-dont-call-proptypes for details.', propFullName, componentName) : void 0;
-          manualPropTypeCallCache[cacheKey] = true;
-        }
-      }
-    }
     if (props[propName] == null) {
       var locationName = ReactPropTypeLocationNames[location];
       if (isRequired) {
-        return new PropTypeError('Required ' + locationName + ' `' + propFullName + '` was not specified in ' + ('`' + componentName + '`.'));
+        return new Error('Required ' + locationName + ' `' + propFullName + '` was not specified in ' + ('`' + componentName + '`.'));
       }
       return null;
     } else {
@@ -44394,7 +46311,7 @@ function createChainableTypeChecker(validate) {
 }
 
 function createPrimitiveTypeChecker(expectedType) {
-  function validate(props, propName, componentName, location, propFullName, secret) {
+  function validate(props, propName, componentName, location, propFullName) {
     var propValue = props[propName];
     var propType = getPropType(propValue);
     if (propType !== expectedType) {
@@ -44404,7 +46321,7 @@ function createPrimitiveTypeChecker(expectedType) {
       // 'of type `object`'.
       var preciseType = getPreciseType(propValue);
 
-      return new PropTypeError('Invalid ' + locationName + ' `' + propFullName + '` of type ' + ('`' + preciseType + '` supplied to `' + componentName + '`, expected ') + ('`' + expectedType + '`.'));
+      return new Error('Invalid ' + locationName + ' `' + propFullName + '` of type ' + ('`' + preciseType + '` supplied to `' + componentName + '`, expected ') + ('`' + expectedType + '`.'));
     }
     return null;
   }
@@ -44418,16 +46335,16 @@ function createAnyTypeChecker() {
 function createArrayOfTypeChecker(typeChecker) {
   function validate(props, propName, componentName, location, propFullName) {
     if (typeof typeChecker !== 'function') {
-      return new PropTypeError('Property `' + propFullName + '` of component `' + componentName + '` has invalid PropType notation inside arrayOf.');
+      return new Error('Property `' + propFullName + '` of component `' + componentName + '` has invalid PropType notation inside arrayOf.');
     }
     var propValue = props[propName];
     if (!Array.isArray(propValue)) {
       var locationName = ReactPropTypeLocationNames[location];
       var propType = getPropType(propValue);
-      return new PropTypeError('Invalid ' + locationName + ' `' + propFullName + '` of type ' + ('`' + propType + '` supplied to `' + componentName + '`, expected an array.'));
+      return new Error('Invalid ' + locationName + ' `' + propFullName + '` of type ' + ('`' + propType + '` supplied to `' + componentName + '`, expected an array.'));
     }
     for (var i = 0; i < propValue.length; i++) {
-      var error = typeChecker(propValue, i, componentName, location, propFullName + '[' + i + ']', ReactPropTypesSecret);
+      var error = typeChecker(propValue, i, componentName, location, propFullName + '[' + i + ']');
       if (error instanceof Error) {
         return error;
       }
@@ -44439,11 +46356,9 @@ function createArrayOfTypeChecker(typeChecker) {
 
 function createElementTypeChecker() {
   function validate(props, propName, componentName, location, propFullName) {
-    var propValue = props[propName];
-    if (!ReactElement.isValidElement(propValue)) {
+    if (!ReactElement.isValidElement(props[propName])) {
       var locationName = ReactPropTypeLocationNames[location];
-      var propType = getPropType(propValue);
-      return new PropTypeError('Invalid ' + locationName + ' `' + propFullName + '` of type ' + ('`' + propType + '` supplied to `' + componentName + '`, expected a single ReactElement.'));
+      return new Error('Invalid ' + locationName + ' `' + propFullName + '` supplied to ' + ('`' + componentName + '`, expected a single ReactElement.'));
     }
     return null;
   }
@@ -44456,7 +46371,7 @@ function createInstanceTypeChecker(expectedClass) {
       var locationName = ReactPropTypeLocationNames[location];
       var expectedClassName = expectedClass.name || ANONYMOUS;
       var actualClassName = getClassName(props[propName]);
-      return new PropTypeError('Invalid ' + locationName + ' `' + propFullName + '` of type ' + ('`' + actualClassName + '` supplied to `' + componentName + '`, expected ') + ('instance of `' + expectedClassName + '`.'));
+      return new Error('Invalid ' + locationName + ' `' + propFullName + '` of type ' + ('`' + actualClassName + '` supplied to `' + componentName + '`, expected ') + ('instance of `' + expectedClassName + '`.'));
     }
     return null;
   }
@@ -44465,8 +46380,9 @@ function createInstanceTypeChecker(expectedClass) {
 
 function createEnumTypeChecker(expectedValues) {
   if (!Array.isArray(expectedValues)) {
-    process.env.NODE_ENV !== 'production' ? warning(false, 'Invalid argument supplied to oneOf, expected an instance of array.') : void 0;
-    return emptyFunction.thatReturnsNull;
+    return createChainableTypeChecker(function () {
+      return new Error('Invalid argument supplied to oneOf, expected an instance of array.');
+    });
   }
 
   function validate(props, propName, componentName, location, propFullName) {
@@ -44479,7 +46395,7 @@ function createEnumTypeChecker(expectedValues) {
 
     var locationName = ReactPropTypeLocationNames[location];
     var valuesString = JSON.stringify(expectedValues);
-    return new PropTypeError('Invalid ' + locationName + ' `' + propFullName + '` of value `' + propValue + '` ' + ('supplied to `' + componentName + '`, expected one of ' + valuesString + '.'));
+    return new Error('Invalid ' + locationName + ' `' + propFullName + '` of value `' + propValue + '` ' + ('supplied to `' + componentName + '`, expected one of ' + valuesString + '.'));
   }
   return createChainableTypeChecker(validate);
 }
@@ -44487,17 +46403,17 @@ function createEnumTypeChecker(expectedValues) {
 function createObjectOfTypeChecker(typeChecker) {
   function validate(props, propName, componentName, location, propFullName) {
     if (typeof typeChecker !== 'function') {
-      return new PropTypeError('Property `' + propFullName + '` of component `' + componentName + '` has invalid PropType notation inside objectOf.');
+      return new Error('Property `' + propFullName + '` of component `' + componentName + '` has invalid PropType notation inside objectOf.');
     }
     var propValue = props[propName];
     var propType = getPropType(propValue);
     if (propType !== 'object') {
       var locationName = ReactPropTypeLocationNames[location];
-      return new PropTypeError('Invalid ' + locationName + ' `' + propFullName + '` of type ' + ('`' + propType + '` supplied to `' + componentName + '`, expected an object.'));
+      return new Error('Invalid ' + locationName + ' `' + propFullName + '` of type ' + ('`' + propType + '` supplied to `' + componentName + '`, expected an object.'));
     }
     for (var key in propValue) {
       if (propValue.hasOwnProperty(key)) {
-        var error = typeChecker(propValue, key, componentName, location, propFullName + '.' + key, ReactPropTypesSecret);
+        var error = typeChecker(propValue, key, componentName, location, propFullName + '.' + key);
         if (error instanceof Error) {
           return error;
         }
@@ -44510,20 +46426,21 @@ function createObjectOfTypeChecker(typeChecker) {
 
 function createUnionTypeChecker(arrayOfTypeCheckers) {
   if (!Array.isArray(arrayOfTypeCheckers)) {
-    process.env.NODE_ENV !== 'production' ? warning(false, 'Invalid argument supplied to oneOfType, expected an instance of array.') : void 0;
-    return emptyFunction.thatReturnsNull;
+    return createChainableTypeChecker(function () {
+      return new Error('Invalid argument supplied to oneOfType, expected an instance of array.');
+    });
   }
 
   function validate(props, propName, componentName, location, propFullName) {
     for (var i = 0; i < arrayOfTypeCheckers.length; i++) {
       var checker = arrayOfTypeCheckers[i];
-      if (checker(props, propName, componentName, location, propFullName, ReactPropTypesSecret) == null) {
+      if (checker(props, propName, componentName, location, propFullName) == null) {
         return null;
       }
     }
 
     var locationName = ReactPropTypeLocationNames[location];
-    return new PropTypeError('Invalid ' + locationName + ' `' + propFullName + '` supplied to ' + ('`' + componentName + '`.'));
+    return new Error('Invalid ' + locationName + ' `' + propFullName + '` supplied to ' + ('`' + componentName + '`.'));
   }
   return createChainableTypeChecker(validate);
 }
@@ -44532,7 +46449,7 @@ function createNodeChecker() {
   function validate(props, propName, componentName, location, propFullName) {
     if (!isNode(props[propName])) {
       var locationName = ReactPropTypeLocationNames[location];
-      return new PropTypeError('Invalid ' + locationName + ' `' + propFullName + '` supplied to ' + ('`' + componentName + '`, expected a ReactNode.'));
+      return new Error('Invalid ' + locationName + ' `' + propFullName + '` supplied to ' + ('`' + componentName + '`, expected a ReactNode.'));
     }
     return null;
   }
@@ -44545,14 +46462,14 @@ function createShapeTypeChecker(shapeTypes) {
     var propType = getPropType(propValue);
     if (propType !== 'object') {
       var locationName = ReactPropTypeLocationNames[location];
-      return new PropTypeError('Invalid ' + locationName + ' `' + propFullName + '` of type `' + propType + '` ' + ('supplied to `' + componentName + '`, expected `object`.'));
+      return new Error('Invalid ' + locationName + ' `' + propFullName + '` of type `' + propType + '` ' + ('supplied to `' + componentName + '`, expected `object`.'));
     }
     for (var key in shapeTypes) {
       var checker = shapeTypes[key];
       if (!checker) {
         continue;
       }
-      var error = checker(propValue, key, componentName, location, propFullName + '.' + key, ReactPropTypesSecret);
+      var error = checker(propValue, key, componentName, location, propFullName + '.' + key);
       if (error) {
         return error;
       }
@@ -44669,69 +46586,7 @@ function getClassName(propValue) {
 }
 
 module.exports = ReactPropTypes;
-}).call(this,require('_process'))
-},{"./ReactElement":343,"./ReactPropTypeLocationNames":364,"./ReactPropTypesSecret":367,"./getIteratorFn":413,"_process":154,"fbjs/lib/emptyFunction":438,"fbjs/lib/warning":455}],367:[function(require,module,exports){
-/**
- * Copyright 2013-present, Facebook, Inc.
- * All rights reserved.
- *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
- *
- * @providesModule ReactPropTypesSecret
- */
-
-'use strict';
-
-var ReactPropTypesSecret = 'SECRET_DO_NOT_PASS_THIS_OR_YOU_WILL_BE_FIRED';
-
-module.exports = ReactPropTypesSecret;
-},{}],368:[function(require,module,exports){
-/**
- * Copyright 2013-present, Facebook, Inc.
- * All rights reserved.
- *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
- *
- * @providesModule ReactPureComponent
- */
-
-'use strict';
-
-var _assign = require('object-assign');
-
-var ReactComponent = require('./ReactComponent');
-var ReactNoopUpdateQueue = require('./ReactNoopUpdateQueue');
-
-var emptyObject = require('fbjs/lib/emptyObject');
-
-/**
- * Base class helpers for the updating state of a component.
- */
-function ReactPureComponent(props, context, updater) {
-  // Duplicated from ReactComponent.
-  this.props = props;
-  this.context = context;
-  this.refs = emptyObject;
-  // We initialize the default updater but the real one gets injected by the
-  // renderer.
-  this.updater = updater || ReactNoopUpdateQueue;
-}
-
-function ComponentDummy() {}
-ComponentDummy.prototype = ReactComponent.prototype;
-ReactPureComponent.prototype = new ComponentDummy();
-ReactPureComponent.prototype.constructor = ReactPureComponent;
-// Avoid an extra prototype jump for these methods.
-_assign(ReactPureComponent.prototype, ReactComponent.prototype);
-ReactPureComponent.prototype.isPureReactComponent = true;
-
-module.exports = ReactPureComponent;
-},{"./ReactComponent":315,"./ReactNoopUpdateQueue":362,"fbjs/lib/emptyObject":439,"object-assign":152}],369:[function(require,module,exports){
-(function (process){
+},{"./ReactElement":352,"./ReactPropTypeLocationNames":373,"./getIteratorFn":419,"fbjs/lib/emptyFunction":444}],376:[function(require,module,exports){
 /**
  * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -44751,9 +46606,7 @@ var CallbackQueue = require('./CallbackQueue');
 var PooledClass = require('./PooledClass');
 var ReactBrowserEventEmitter = require('./ReactBrowserEventEmitter');
 var ReactInputSelection = require('./ReactInputSelection');
-var ReactInstrumentation = require('./ReactInstrumentation');
 var Transaction = require('./Transaction');
-var ReactUpdateQueue = require('./ReactUpdateQueue');
 
 /**
  * Ensures that, when possible, the selection range (currently selected text
@@ -44823,13 +46676,6 @@ var ON_DOM_READY_QUEUEING = {
  */
 var TRANSACTION_WRAPPERS = [SELECTION_RESTORATION, EVENT_SUPPRESSION, ON_DOM_READY_QUEUEING];
 
-if (process.env.NODE_ENV !== 'production') {
-  TRANSACTION_WRAPPERS.push({
-    initialize: ReactInstrumentation.debugTool.onBeginFlush,
-    close: ReactInstrumentation.debugTool.onEndFlush
-  });
-}
-
 /**
  * Currently:
  * - The order that these are listed in the transaction is critical:
@@ -44876,13 +46722,6 @@ var Mixin = {
   },
 
   /**
-   * @return {object} The queue to collect React async events.
-   */
-  getUpdateQueue: function () {
-    return ReactUpdateQueue;
-  },
-
-  /**
    * Save current transaction state -- if the return value from this method is
    * passed to `rollback`, the transaction will be reset to that state.
    */
@@ -44910,8 +46749,7 @@ _assign(ReactReconcileTransaction.prototype, Transaction.Mixin, Mixin);
 PooledClass.addPoolingTo(ReactReconcileTransaction);
 
 module.exports = ReactReconcileTransaction;
-}).call(this,require('_process'))
-},{"./CallbackQueue":286,"./PooledClass":306,"./ReactBrowserEventEmitter":308,"./ReactInputSelection":353,"./ReactInstrumentation":355,"./ReactUpdateQueue":377,"./Transaction":396,"_process":154,"object-assign":152}],370:[function(require,module,exports){
+},{"./CallbackQueue":295,"./PooledClass":315,"./ReactBrowserEventEmitter":317,"./ReactInputSelection":362,"./Transaction":402,"object-assign":153}],377:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-present, Facebook, Inc.
@@ -44926,10 +46764,12 @@ module.exports = ReactReconcileTransaction;
 
 'use strict';
 
+var _prodInvariant = require('./reactProdInvariant');
+
 var ReactRef = require('./ReactRef');
 var ReactInstrumentation = require('./ReactInstrumentation');
 
-var warning = require('fbjs/lib/warning');
+var invariant = require('fbjs/lib/invariant');
 
 /**
  * Helper to call ReactRef.attachRefs with this composite component, split out
@@ -44952,19 +46792,20 @@ var ReactReconciler = {
    * @final
    * @internal
    */
-  mountComponent: function (internalInstance, transaction, hostParent, hostContainerInfo, context, parentDebugID // 0 in production and for roots
-  ) {
+  mountComponent: function (internalInstance, transaction, hostParent, hostContainerInfo, context) {
     if (process.env.NODE_ENV !== 'production') {
       if (internalInstance._debugID !== 0) {
-        ReactInstrumentation.debugTool.onBeforeMountComponent(internalInstance._debugID, internalInstance._currentElement, parentDebugID);
+        ReactInstrumentation.debugTool.onBeforeMountComponent(internalInstance._debugID, internalInstance._currentElement);
+        ReactInstrumentation.debugTool.onBeginReconcilerTimer(internalInstance._debugID, 'mountComponent');
       }
     }
-    var markup = internalInstance.mountComponent(transaction, hostParent, hostContainerInfo, context, parentDebugID);
+    var markup = internalInstance.mountComponent(transaction, hostParent, hostContainerInfo, context);
     if (internalInstance._currentElement && internalInstance._currentElement.ref != null) {
       transaction.getReactMountReady().enqueue(attachRefs, internalInstance);
     }
     if (process.env.NODE_ENV !== 'production') {
       if (internalInstance._debugID !== 0) {
+        ReactInstrumentation.debugTool.onEndReconcilerTimer(internalInstance._debugID, 'mountComponent');
         ReactInstrumentation.debugTool.onMountComponent(internalInstance._debugID);
       }
     }
@@ -44988,13 +46829,14 @@ var ReactReconciler = {
   unmountComponent: function (internalInstance, safely) {
     if (process.env.NODE_ENV !== 'production') {
       if (internalInstance._debugID !== 0) {
-        ReactInstrumentation.debugTool.onBeforeUnmountComponent(internalInstance._debugID);
+        ReactInstrumentation.debugTool.onBeginReconcilerTimer(internalInstance._debugID, 'unmountComponent');
       }
     }
     ReactRef.detachRefs(internalInstance, internalInstance._currentElement);
     internalInstance.unmountComponent(safely);
     if (process.env.NODE_ENV !== 'production') {
       if (internalInstance._debugID !== 0) {
+        ReactInstrumentation.debugTool.onEndReconcilerTimer(internalInstance._debugID, 'unmountComponent');
         ReactInstrumentation.debugTool.onUnmountComponent(internalInstance._debugID);
       }
     }
@@ -45029,6 +46871,7 @@ var ReactReconciler = {
     if (process.env.NODE_ENV !== 'production') {
       if (internalInstance._debugID !== 0) {
         ReactInstrumentation.debugTool.onBeforeUpdateComponent(internalInstance._debugID, nextElement);
+        ReactInstrumentation.debugTool.onBeginReconcilerTimer(internalInstance._debugID, 'receiveComponent');
       }
     }
 
@@ -45046,6 +46889,7 @@ var ReactReconciler = {
 
     if (process.env.NODE_ENV !== 'production') {
       if (internalInstance._debugID !== 0) {
+        ReactInstrumentation.debugTool.onEndReconcilerTimer(internalInstance._debugID, 'receiveComponent');
         ReactInstrumentation.debugTool.onUpdateComponent(internalInstance._debugID);
       }
     }
@@ -45062,17 +46906,19 @@ var ReactReconciler = {
     if (internalInstance._updateBatchNumber !== updateBatchNumber) {
       // The component's enqueued batch number should always be the current
       // batch or the following one.
-      process.env.NODE_ENV !== 'production' ? warning(internalInstance._updateBatchNumber == null || internalInstance._updateBatchNumber === updateBatchNumber + 1, 'performUpdateIfNecessary: Unexpected batch number (current %s, ' + 'pending %s)', updateBatchNumber, internalInstance._updateBatchNumber) : void 0;
+      !(internalInstance._updateBatchNumber == null || internalInstance._updateBatchNumber === updateBatchNumber + 1) ? process.env.NODE_ENV !== 'production' ? invariant(false, 'performUpdateIfNecessary: Unexpected batch number (current %s, pending %s)', updateBatchNumber, internalInstance._updateBatchNumber) : _prodInvariant('121', updateBatchNumber, internalInstance._updateBatchNumber) : void 0;
       return;
     }
     if (process.env.NODE_ENV !== 'production') {
       if (internalInstance._debugID !== 0) {
+        ReactInstrumentation.debugTool.onBeginReconcilerTimer(internalInstance._debugID, 'performUpdateIfNecessary');
         ReactInstrumentation.debugTool.onBeforeUpdateComponent(internalInstance._debugID, internalInstance._currentElement);
       }
     }
     internalInstance.performUpdateIfNecessary(transaction);
     if (process.env.NODE_ENV !== 'production') {
       if (internalInstance._debugID !== 0) {
+        ReactInstrumentation.debugTool.onEndReconcilerTimer(internalInstance._debugID, 'performUpdateIfNecessary');
         ReactInstrumentation.debugTool.onUpdateComponent(internalInstance._debugID);
       }
     }
@@ -45082,7 +46928,7 @@ var ReactReconciler = {
 
 module.exports = ReactReconciler;
 }).call(this,require('_process'))
-},{"./ReactInstrumentation":355,"./ReactRef":371,"_process":154,"fbjs/lib/warning":455}],371:[function(require,module,exports){
+},{"./ReactInstrumentation":364,"./ReactRef":378,"./reactProdInvariant":428,"_process":155,"fbjs/lib/invariant":452}],378:[function(require,module,exports){
 /**
  * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -45144,11 +46990,9 @@ ReactRef.shouldUpdateRefs = function (prevElement, nextElement) {
   var prevEmpty = prevElement === null || prevElement === false;
   var nextEmpty = nextElement === null || nextElement === false;
 
-  return (
+  return(
     // This has a few false positives w/r/t empty components.
-    prevEmpty || nextEmpty || nextElement.ref !== prevElement.ref ||
-    // If owner changes but we have an unchanged function ref, don't update refs
-    typeof nextElement.ref === 'string' && nextElement._owner !== prevElement._owner
+    prevEmpty || nextEmpty || nextElement._owner !== prevElement._owner || nextElement.ref !== prevElement.ref
   );
 };
 
@@ -45163,8 +47007,7 @@ ReactRef.detachRefs = function (instance, element) {
 };
 
 module.exports = ReactRef;
-},{"./ReactOwner":363}],372:[function(require,module,exports){
-(function (process){
+},{"./ReactOwner":372}],379:[function(require,module,exports){
 /**
  * Copyright 2014-present, Facebook, Inc.
  * All rights reserved.
@@ -45182,8 +47025,6 @@ var _assign = require('object-assign');
 
 var PooledClass = require('./PooledClass');
 var Transaction = require('./Transaction');
-var ReactInstrumentation = require('./ReactInstrumentation');
-var ReactServerUpdateQueue = require('./ReactServerUpdateQueue');
 
 /**
  * Executed within the scope of the `Transaction` instance. Consider these as
@@ -45191,13 +47032,6 @@ var ReactServerUpdateQueue = require('./ReactServerUpdateQueue');
  * each other.
  */
 var TRANSACTION_WRAPPERS = [];
-
-if (process.env.NODE_ENV !== 'production') {
-  TRANSACTION_WRAPPERS.push({
-    initialize: ReactInstrumentation.debugTool.onBeginFlush,
-    close: ReactInstrumentation.debugTool.onEndFlush
-  });
-}
 
 var noopCallbackQueue = {
   enqueue: function () {}
@@ -45211,7 +47045,6 @@ function ReactServerRenderingTransaction(renderToStaticMarkup) {
   this.reinitializeTransaction();
   this.renderToStaticMarkup = renderToStaticMarkup;
   this.useCreateElement = false;
-  this.updateQueue = new ReactServerUpdateQueue(this);
 }
 
 var Mixin = {
@@ -45233,13 +47066,6 @@ var Mixin = {
   },
 
   /**
-   * @return {object} The queue to collect React async events.
-   */
-  getUpdateQueue: function () {
-    return this.updateQueue;
-  },
-
-  /**
    * `PooledClass` looks for this, and will invoke this before allowing this
    * instance to be reused.
    */
@@ -45255,152 +47081,7 @@ _assign(ReactServerRenderingTransaction.prototype, Transaction.Mixin, Mixin);
 PooledClass.addPoolingTo(ReactServerRenderingTransaction);
 
 module.exports = ReactServerRenderingTransaction;
-}).call(this,require('_process'))
-},{"./PooledClass":306,"./ReactInstrumentation":355,"./ReactServerUpdateQueue":373,"./Transaction":396,"_process":154,"object-assign":152}],373:[function(require,module,exports){
-(function (process){
-/**
- * Copyright 2015-present, Facebook, Inc.
- * All rights reserved.
- *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
- *
- * @providesModule ReactServerUpdateQueue
- * 
- */
-
-'use strict';
-
-function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
-
-var ReactUpdateQueue = require('./ReactUpdateQueue');
-var Transaction = require('./Transaction');
-var warning = require('fbjs/lib/warning');
-
-function warnNoop(publicInstance, callerName) {
-  if (process.env.NODE_ENV !== 'production') {
-    var constructor = publicInstance.constructor;
-    process.env.NODE_ENV !== 'production' ? warning(false, '%s(...): Can only update a mounting component. ' + 'This usually means you called %s() outside componentWillMount() on the server. ' + 'This is a no-op. Please check the code for the %s component.', callerName, callerName, constructor && (constructor.displayName || constructor.name) || 'ReactClass') : void 0;
-  }
-}
-
-/**
- * This is the update queue used for server rendering.
- * It delegates to ReactUpdateQueue while server rendering is in progress and
- * switches to ReactNoopUpdateQueue after the transaction has completed.
- * @class ReactServerUpdateQueue
- * @param {Transaction} transaction
- */
-
-var ReactServerUpdateQueue = function () {
-  /* :: transaction: Transaction; */
-
-  function ReactServerUpdateQueue(transaction) {
-    _classCallCheck(this, ReactServerUpdateQueue);
-
-    this.transaction = transaction;
-  }
-
-  /**
-   * Checks whether or not this composite component is mounted.
-   * @param {ReactClass} publicInstance The instance we want to test.
-   * @return {boolean} True if mounted, false otherwise.
-   * @protected
-   * @final
-   */
-
-
-  ReactServerUpdateQueue.prototype.isMounted = function isMounted(publicInstance) {
-    return false;
-  };
-
-  /**
-   * Enqueue a callback that will be executed after all the pending updates
-   * have processed.
-   *
-   * @param {ReactClass} publicInstance The instance to use as `this` context.
-   * @param {?function} callback Called after state is updated.
-   * @internal
-   */
-
-
-  ReactServerUpdateQueue.prototype.enqueueCallback = function enqueueCallback(publicInstance, callback, callerName) {
-    if (this.transaction.isInTransaction()) {
-      ReactUpdateQueue.enqueueCallback(publicInstance, callback, callerName);
-    }
-  };
-
-  /**
-   * Forces an update. This should only be invoked when it is known with
-   * certainty that we are **not** in a DOM transaction.
-   *
-   * You may want to call this when you know that some deeper aspect of the
-   * component's state has changed but `setState` was not called.
-   *
-   * This will not invoke `shouldComponentUpdate`, but it will invoke
-   * `componentWillUpdate` and `componentDidUpdate`.
-   *
-   * @param {ReactClass} publicInstance The instance that should rerender.
-   * @internal
-   */
-
-
-  ReactServerUpdateQueue.prototype.enqueueForceUpdate = function enqueueForceUpdate(publicInstance) {
-    if (this.transaction.isInTransaction()) {
-      ReactUpdateQueue.enqueueForceUpdate(publicInstance);
-    } else {
-      warnNoop(publicInstance, 'forceUpdate');
-    }
-  };
-
-  /**
-   * Replaces all of the state. Always use this or `setState` to mutate state.
-   * You should treat `this.state` as immutable.
-   *
-   * There is no guarantee that `this.state` will be immediately updated, so
-   * accessing `this.state` after calling this method may return the old value.
-   *
-   * @param {ReactClass} publicInstance The instance that should rerender.
-   * @param {object|function} completeState Next state.
-   * @internal
-   */
-
-
-  ReactServerUpdateQueue.prototype.enqueueReplaceState = function enqueueReplaceState(publicInstance, completeState) {
-    if (this.transaction.isInTransaction()) {
-      ReactUpdateQueue.enqueueReplaceState(publicInstance, completeState);
-    } else {
-      warnNoop(publicInstance, 'replaceState');
-    }
-  };
-
-  /**
-   * Sets a subset of the state. This only exists because _pendingState is
-   * internal. This provides a merging strategy that is not available to deep
-   * properties which is confusing. TODO: Expose pendingState or don't use it
-   * during the merge.
-   *
-   * @param {ReactClass} publicInstance The instance that should rerender.
-   * @param {object|function} partialState Next partial state to be merged with state.
-   * @internal
-   */
-
-
-  ReactServerUpdateQueue.prototype.enqueueSetState = function enqueueSetState(publicInstance, partialState) {
-    if (this.transaction.isInTransaction()) {
-      ReactUpdateQueue.enqueueSetState(publicInstance, partialState);
-    } else {
-      warnNoop(publicInstance, 'setState');
-    }
-  };
-
-  return ReactServerUpdateQueue;
-}();
-
-module.exports = ReactServerUpdateQueue;
-}).call(this,require('_process'))
-},{"./ReactUpdateQueue":377,"./Transaction":396,"_process":154,"fbjs/lib/warning":455}],374:[function(require,module,exports){
+},{"./PooledClass":315,"./Transaction":402,"object-assign":153}],380:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-present, Facebook, Inc.
@@ -45506,7 +47187,7 @@ var ReactTransitionChildMapping = {
 
 module.exports = ReactTransitionChildMapping;
 }).call(this,require('_process'))
-},{"./flattenChildren":406,"_process":154}],375:[function(require,module,exports){
+},{"./flattenChildren":412,"_process":155}],381:[function(require,module,exports){
 /**
  * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -45580,7 +47261,7 @@ var ReactTransitionEvents = {
 };
 
 module.exports = ReactTransitionEvents;
-},{"./getVendorPrefixedEventName":416,"fbjs/lib/ExecutionEnvironment":432}],376:[function(require,module,exports){
+},{"./getVendorPrefixedEventName":422,"fbjs/lib/ExecutionEnvironment":438}],382:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-present, Facebook, Inc.
@@ -45820,7 +47501,6 @@ var ReactTransitionGroup = React.createClass({
     delete props.childFactory;
     delete props.transitionLeaveTimeout;
     delete props.transitionEnterTimeout;
-    delete props.transitionAppearTimeout;
     delete props.component;
 
     return React.createElement(this.props.component, props, childrenToRender);
@@ -45829,7 +47509,7 @@ var ReactTransitionGroup = React.createClass({
 
 module.exports = ReactTransitionGroup;
 }).call(this,require('_process'))
-},{"./React":307,"./ReactInstanceMap":354,"./ReactTransitionChildMapping":374,"_process":154,"fbjs/lib/emptyFunction":438,"object-assign":152}],377:[function(require,module,exports){
+},{"./React":316,"./ReactInstanceMap":363,"./ReactTransitionChildMapping":380,"_process":155,"fbjs/lib/emptyFunction":444,"object-assign":153}],383:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2015-present, Facebook, Inc.
@@ -45875,11 +47555,10 @@ function getInternalInstanceReadyForUpdate(publicInstance, callerName) {
   var internalInstance = ReactInstanceMap.get(publicInstance);
   if (!internalInstance) {
     if (process.env.NODE_ENV !== 'production') {
-      var ctor = publicInstance.constructor;
       // Only warn when we have a callerName. Otherwise we should be silent.
       // We're probably calling from enqueueCallback. We don't want to warn
       // there because we already warned for the corresponding lifecycle method.
-      process.env.NODE_ENV !== 'production' ? warning(!callerName, '%s(...): Can only update a mounted or mounting component. ' + 'This usually means you called %s() on an unmounted component. ' + 'This is a no-op. Please check the code for the %s component.', callerName, callerName, ctor && (ctor.displayName || ctor.name) || 'ReactClass') : void 0;
+      process.env.NODE_ENV !== 'production' ? warning(!callerName, '%s(...): Can only update a mounted or mounting component. ' + 'This usually means you called %s() on an unmounted component. ' + 'This is a no-op. Please check the code for the %s component.', callerName, callerName, publicInstance.constructor.displayName) : void 0;
     }
     return null;
   }
@@ -46043,10 +47722,8 @@ var ReactUpdateQueue = {
     enqueueUpdate(internalInstance);
   },
 
-  enqueueElementInternal: function (internalInstance, nextElement, nextContext) {
-    internalInstance._pendingElement = nextElement;
-    // TODO: introduce _pendingContext instead of setting it directly.
-    internalInstance._context = nextContext;
+  enqueueElementInternal: function (internalInstance, newElement) {
+    internalInstance._pendingElement = newElement;
     enqueueUpdate(internalInstance);
   },
 
@@ -46058,7 +47735,7 @@ var ReactUpdateQueue = {
 
 module.exports = ReactUpdateQueue;
 }).call(this,require('_process'))
-},{"./ReactCurrentOwner":320,"./ReactInstanceMap":354,"./ReactInstrumentation":355,"./ReactUpdates":378,"./reactProdInvariant":422,"_process":154,"fbjs/lib/invariant":446,"fbjs/lib/warning":455}],378:[function(require,module,exports){
+},{"./ReactCurrentOwner":328,"./ReactInstanceMap":363,"./ReactInstrumentation":364,"./ReactUpdates":384,"./reactProdInvariant":428,"_process":155,"fbjs/lib/invariant":452,"fbjs/lib/warning":462}],384:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-present, Facebook, Inc.
@@ -46079,6 +47756,7 @@ var _prodInvariant = require('./reactProdInvariant'),
 var CallbackQueue = require('./CallbackQueue');
 var PooledClass = require('./PooledClass');
 var ReactFeatureFlags = require('./ReactFeatureFlags');
+var ReactInstrumentation = require('./ReactInstrumentation');
 var ReactReconciler = require('./ReactReconciler');
 var Transaction = require('./Transaction');
 
@@ -46225,6 +47903,10 @@ function runBatchedUpdates(transaction) {
 }
 
 var flushBatchedUpdates = function () {
+  if (process.env.NODE_ENV !== 'production') {
+    ReactInstrumentation.debugTool.onBeginFlush();
+  }
+
   // ReactUpdatesFlushTransaction's wrappers will clear the dirtyComponents
   // array and perform any updates enqueued by mount-ready handlers (i.e.,
   // componentDidUpdate) but we need to check here too in order to catch
@@ -46244,6 +47926,10 @@ var flushBatchedUpdates = function () {
       CallbackQueue.release(queue);
     }
   }
+
+  if (process.env.NODE_ENV !== 'production') {
+    ReactInstrumentation.debugTool.onEndFlush();
+  }
 };
 
 /**
@@ -46256,7 +47942,7 @@ function enqueueUpdate(component) {
   // Various parts of our code (such as ReactCompositeComponent's
   // _renderValidatedComponent) assume that calls to render aren't nested;
   // verify that that's the case. (This is called by each top-level update
-  // function, like setState, forceUpdate, etc.; creation and
+  // function, like setProps, setState, forceUpdate, etc.; creation and
   // destruction of top-level components is guarded in ReactMount.)
 
   if (!batchingStrategy.isBatchingUpdates) {
@@ -46312,7 +47998,7 @@ var ReactUpdates = {
 
 module.exports = ReactUpdates;
 }).call(this,require('_process'))
-},{"./CallbackQueue":286,"./PooledClass":306,"./ReactFeatureFlags":349,"./ReactReconciler":370,"./Transaction":396,"./reactProdInvariant":422,"_process":154,"fbjs/lib/invariant":446,"object-assign":152}],379:[function(require,module,exports){
+},{"./CallbackQueue":295,"./PooledClass":315,"./ReactFeatureFlags":358,"./ReactInstrumentation":364,"./ReactReconciler":377,"./Transaction":402,"./reactProdInvariant":428,"_process":155,"fbjs/lib/invariant":452,"object-assign":153}],385:[function(require,module,exports){
 /**
  * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -46326,8 +48012,8 @@ module.exports = ReactUpdates;
 
 'use strict';
 
-module.exports = '15.3.2';
-},{}],380:[function(require,module,exports){
+module.exports = '15.2.0';
+},{}],386:[function(require,module,exports){
 /**
  * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -46593,8 +48279,6 @@ var ATTRS = {
   xlinkTitle: 'xlink:title',
   xlinkType: 'xlink:type',
   xmlBase: 'xml:base',
-  xmlns: 0,
-  xmlnsXlink: 'xmlns:xlink',
   xmlLang: 'xml:lang',
   xmlSpace: 'xml:space',
   y: 0,
@@ -46630,7 +48314,7 @@ Object.keys(ATTRS).forEach(function (key) {
 });
 
 module.exports = SVGDOMPropertyConfig;
-},{}],381:[function(require,module,exports){
+},{}],387:[function(require,module,exports){
 /**
  * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -46666,7 +48350,7 @@ var eventTypes = {
       bubbled: keyOf({ onSelect: null }),
       captured: keyOf({ onSelectCapture: null })
     },
-    dependencies: [topLevelTypes.topBlur, topLevelTypes.topContextMenu, topLevelTypes.topFocus, topLevelTypes.topKeyDown, topLevelTypes.topKeyUp, topLevelTypes.topMouseDown, topLevelTypes.topMouseUp, topLevelTypes.topSelectionChange]
+    dependencies: [topLevelTypes.topBlur, topLevelTypes.topContextMenu, topLevelTypes.topFocus, topLevelTypes.topKeyDown, topLevelTypes.topMouseDown, topLevelTypes.topMouseUp, topLevelTypes.topSelectionChange]
   }
 };
 
@@ -46827,7 +48511,7 @@ var SelectEventPlugin = {
 };
 
 module.exports = SelectEventPlugin;
-},{"./EventConstants":297,"./EventPropagators":301,"./ReactDOMComponentTree":325,"./ReactInputSelection":353,"./SyntheticEvent":387,"./isTextInputElement":419,"fbjs/lib/ExecutionEnvironment":432,"fbjs/lib/getActiveElement":441,"fbjs/lib/keyOf":450,"fbjs/lib/shallowEqual":454}],382:[function(require,module,exports){
+},{"./EventConstants":306,"./EventPropagators":310,"./ReactDOMComponentTree":333,"./ReactInputSelection":362,"./SyntheticEvent":393,"./isTextInputElement":425,"fbjs/lib/ExecutionEnvironment":438,"fbjs/lib/getActiveElement":447,"fbjs/lib/keyOf":456,"fbjs/lib/shallowEqual":461}],388:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-present, Facebook, Inc.
@@ -47316,12 +49000,6 @@ for (var type in topLevelEventsToDispatchConfig) {
 var ON_CLICK_KEY = keyOf({ onClick: null });
 var onClickListeners = {};
 
-function getDictionaryKey(inst) {
-  // Prevents V8 performance issue:
-  // https://github.com/facebook/react/pull/7232
-  return '.' + inst._rootNodeID;
-}
-
 var SimpleEventPlugin = {
 
   eventTypes: eventTypes,
@@ -47445,19 +49123,19 @@ var SimpleEventPlugin = {
     // fire. The workaround for this bug involves attaching an empty click
     // listener on the target node.
     if (registrationName === ON_CLICK_KEY) {
-      var key = getDictionaryKey(inst);
+      var id = inst._rootNodeID;
       var node = ReactDOMComponentTree.getNodeFromInstance(inst);
-      if (!onClickListeners[key]) {
-        onClickListeners[key] = EventListener.listen(node, 'click', emptyFunction);
+      if (!onClickListeners[id]) {
+        onClickListeners[id] = EventListener.listen(node, 'click', emptyFunction);
       }
     }
   },
 
   willDeleteListener: function (inst, registrationName) {
     if (registrationName === ON_CLICK_KEY) {
-      var key = getDictionaryKey(inst);
-      onClickListeners[key].remove();
-      delete onClickListeners[key];
+      var id = inst._rootNodeID;
+      onClickListeners[id].remove();
+      delete onClickListeners[id];
     }
   }
 
@@ -47465,7 +49143,7 @@ var SimpleEventPlugin = {
 
 module.exports = SimpleEventPlugin;
 }).call(this,require('_process'))
-},{"./EventConstants":297,"./EventPropagators":301,"./ReactDOMComponentTree":325,"./SyntheticAnimationEvent":383,"./SyntheticClipboardEvent":384,"./SyntheticDragEvent":386,"./SyntheticEvent":387,"./SyntheticFocusEvent":388,"./SyntheticKeyboardEvent":390,"./SyntheticMouseEvent":391,"./SyntheticTouchEvent":392,"./SyntheticTransitionEvent":393,"./SyntheticUIEvent":394,"./SyntheticWheelEvent":395,"./getEventCharCode":408,"./reactProdInvariant":422,"_process":154,"fbjs/lib/EventListener":431,"fbjs/lib/emptyFunction":438,"fbjs/lib/invariant":446,"fbjs/lib/keyOf":450}],383:[function(require,module,exports){
+},{"./EventConstants":306,"./EventPropagators":310,"./ReactDOMComponentTree":333,"./SyntheticAnimationEvent":389,"./SyntheticClipboardEvent":390,"./SyntheticDragEvent":392,"./SyntheticEvent":393,"./SyntheticFocusEvent":394,"./SyntheticKeyboardEvent":396,"./SyntheticMouseEvent":397,"./SyntheticTouchEvent":398,"./SyntheticTransitionEvent":399,"./SyntheticUIEvent":400,"./SyntheticWheelEvent":401,"./getEventCharCode":414,"./reactProdInvariant":428,"_process":155,"fbjs/lib/EventListener":437,"fbjs/lib/emptyFunction":444,"fbjs/lib/invariant":452,"fbjs/lib/keyOf":456}],389:[function(require,module,exports){
 /**
  * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -47505,7 +49183,7 @@ function SyntheticAnimationEvent(dispatchConfig, dispatchMarker, nativeEvent, na
 SyntheticEvent.augmentClass(SyntheticAnimationEvent, AnimationEventInterface);
 
 module.exports = SyntheticAnimationEvent;
-},{"./SyntheticEvent":387}],384:[function(require,module,exports){
+},{"./SyntheticEvent":393}],390:[function(require,module,exports){
 /**
  * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -47544,7 +49222,7 @@ function SyntheticClipboardEvent(dispatchConfig, dispatchMarker, nativeEvent, na
 SyntheticEvent.augmentClass(SyntheticClipboardEvent, ClipboardEventInterface);
 
 module.exports = SyntheticClipboardEvent;
-},{"./SyntheticEvent":387}],385:[function(require,module,exports){
+},{"./SyntheticEvent":393}],391:[function(require,module,exports){
 /**
  * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -47581,7 +49259,7 @@ function SyntheticCompositionEvent(dispatchConfig, dispatchMarker, nativeEvent, 
 SyntheticEvent.augmentClass(SyntheticCompositionEvent, CompositionEventInterface);
 
 module.exports = SyntheticCompositionEvent;
-},{"./SyntheticEvent":387}],386:[function(require,module,exports){
+},{"./SyntheticEvent":393}],392:[function(require,module,exports){
 /**
  * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -47618,7 +49296,7 @@ function SyntheticDragEvent(dispatchConfig, dispatchMarker, nativeEvent, nativeE
 SyntheticMouseEvent.augmentClass(SyntheticDragEvent, DragEventInterface);
 
 module.exports = SyntheticDragEvent;
-},{"./SyntheticMouseEvent":391}],387:[function(require,module,exports){
+},{"./SyntheticMouseEvent":397}],393:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-present, Facebook, Inc.
@@ -47735,8 +49413,7 @@ _assign(SyntheticEvent.prototype, {
 
     if (event.preventDefault) {
       event.preventDefault();
-    } else if (typeof event.returnValue !== 'unknown') {
-      // eslint-disable-line valid-typeof
+    } else {
       event.returnValue = false;
     }
     this.isDefaultPrevented = emptyFunction.thatReturnsTrue;
@@ -47750,16 +49427,9 @@ _assign(SyntheticEvent.prototype, {
 
     if (event.stopPropagation) {
       event.stopPropagation();
-    } else if (typeof event.cancelBubble !== 'unknown') {
-      // eslint-disable-line valid-typeof
-      // The ChangeEventPlugin registers a "propertychange" event for
-      // IE. This event does not support bubbling or cancelling, and
-      // any references to cancelBubble throw "Member not found".  A
-      // typeof check of "unknown" circumvents this issue (and is also
-      // IE specific).
+    } else {
       event.cancelBubble = true;
     }
-
     this.isPropagationStopped = emptyFunction.thatReturnsTrue;
   },
 
@@ -47889,7 +49559,7 @@ function getPooledWarningPropertyDefinition(propName, getVal) {
   }
 }
 }).call(this,require('_process'))
-},{"./PooledClass":306,"_process":154,"fbjs/lib/emptyFunction":438,"fbjs/lib/warning":455,"object-assign":152}],388:[function(require,module,exports){
+},{"./PooledClass":315,"_process":155,"fbjs/lib/emptyFunction":444,"fbjs/lib/warning":462,"object-assign":153}],394:[function(require,module,exports){
 /**
  * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -47926,7 +49596,7 @@ function SyntheticFocusEvent(dispatchConfig, dispatchMarker, nativeEvent, native
 SyntheticUIEvent.augmentClass(SyntheticFocusEvent, FocusEventInterface);
 
 module.exports = SyntheticFocusEvent;
-},{"./SyntheticUIEvent":394}],389:[function(require,module,exports){
+},{"./SyntheticUIEvent":400}],395:[function(require,module,exports){
 /**
  * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -47964,7 +49634,7 @@ function SyntheticInputEvent(dispatchConfig, dispatchMarker, nativeEvent, native
 SyntheticEvent.augmentClass(SyntheticInputEvent, InputEventInterface);
 
 module.exports = SyntheticInputEvent;
-},{"./SyntheticEvent":387}],390:[function(require,module,exports){
+},{"./SyntheticEvent":393}],396:[function(require,module,exports){
 /**
  * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -48049,7 +49719,7 @@ function SyntheticKeyboardEvent(dispatchConfig, dispatchMarker, nativeEvent, nat
 SyntheticUIEvent.augmentClass(SyntheticKeyboardEvent, KeyboardEventInterface);
 
 module.exports = SyntheticKeyboardEvent;
-},{"./SyntheticUIEvent":394,"./getEventCharCode":408,"./getEventKey":409,"./getEventModifierState":410}],391:[function(require,module,exports){
+},{"./SyntheticUIEvent":400,"./getEventCharCode":414,"./getEventKey":415,"./getEventModifierState":416}],397:[function(require,module,exports){
 /**
  * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -48122,7 +49792,7 @@ function SyntheticMouseEvent(dispatchConfig, dispatchMarker, nativeEvent, native
 SyntheticUIEvent.augmentClass(SyntheticMouseEvent, MouseEventInterface);
 
 module.exports = SyntheticMouseEvent;
-},{"./SyntheticUIEvent":394,"./ViewportMetrics":397,"./getEventModifierState":410}],392:[function(require,module,exports){
+},{"./SyntheticUIEvent":400,"./ViewportMetrics":403,"./getEventModifierState":416}],398:[function(require,module,exports){
 /**
  * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -48168,7 +49838,7 @@ function SyntheticTouchEvent(dispatchConfig, dispatchMarker, nativeEvent, native
 SyntheticUIEvent.augmentClass(SyntheticTouchEvent, TouchEventInterface);
 
 module.exports = SyntheticTouchEvent;
-},{"./SyntheticUIEvent":394,"./getEventModifierState":410}],393:[function(require,module,exports){
+},{"./SyntheticUIEvent":400,"./getEventModifierState":416}],399:[function(require,module,exports){
 /**
  * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -48208,7 +49878,7 @@ function SyntheticTransitionEvent(dispatchConfig, dispatchMarker, nativeEvent, n
 SyntheticEvent.augmentClass(SyntheticTransitionEvent, TransitionEventInterface);
 
 module.exports = SyntheticTransitionEvent;
-},{"./SyntheticEvent":387}],394:[function(require,module,exports){
+},{"./SyntheticEvent":393}],400:[function(require,module,exports){
 /**
  * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -48268,7 +49938,7 @@ function SyntheticUIEvent(dispatchConfig, dispatchMarker, nativeEvent, nativeEve
 SyntheticEvent.augmentClass(SyntheticUIEvent, UIEventInterface);
 
 module.exports = SyntheticUIEvent;
-},{"./SyntheticEvent":387,"./getEventTarget":411}],395:[function(require,module,exports){
+},{"./SyntheticEvent":393,"./getEventTarget":417}],401:[function(require,module,exports){
 /**
  * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -48323,7 +49993,7 @@ function SyntheticWheelEvent(dispatchConfig, dispatchMarker, nativeEvent, native
 SyntheticMouseEvent.augmentClass(SyntheticWheelEvent, WheelEventInterface);
 
 module.exports = SyntheticWheelEvent;
-},{"./SyntheticMouseEvent":391}],396:[function(require,module,exports){
+},{"./SyntheticMouseEvent":397}],402:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-present, Facebook, Inc.
@@ -48559,7 +50229,7 @@ var Transaction = {
 
 module.exports = Transaction;
 }).call(this,require('_process'))
-},{"./reactProdInvariant":422,"_process":154,"fbjs/lib/invariant":446}],397:[function(require,module,exports){
+},{"./reactProdInvariant":428,"_process":155,"fbjs/lib/invariant":452}],403:[function(require,module,exports){
 /**
  * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -48587,7 +50257,7 @@ var ViewportMetrics = {
 };
 
 module.exports = ViewportMetrics;
-},{}],398:[function(require,module,exports){
+},{}],404:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2014-present, Facebook, Inc.
@@ -48598,7 +50268,6 @@ module.exports = ViewportMetrics;
  * of patent rights can be found in the PATENTS file in the same directory.
  *
  * @providesModule accumulateInto
- * 
  */
 
 'use strict';
@@ -48608,6 +50277,7 @@ var _prodInvariant = require('./reactProdInvariant');
 var invariant = require('fbjs/lib/invariant');
 
 /**
+ *
  * Accumulates items that must not be null or undefined into the first one. This
  * is used to conserve memory by avoiding array allocations, and thus sacrifices
  * API cleanness. Since `current` can be null before being passed in and not
@@ -48622,23 +50292,26 @@ var invariant = require('fbjs/lib/invariant');
 
 function accumulateInto(current, next) {
   !(next != null) ? process.env.NODE_ENV !== 'production' ? invariant(false, 'accumulateInto(...): Accumulated items must not be null or undefined.') : _prodInvariant('30') : void 0;
-
   if (current == null) {
     return next;
   }
 
   // Both are not empty. Warning: Never call x.concat(y) when you are not
   // certain that x is an Array (x could be a string with concat method).
-  if (Array.isArray(current)) {
-    if (Array.isArray(next)) {
-      current.push.apply(current, next);
-      return current;
-    }
+  var currentIsArray = Array.isArray(current);
+  var nextIsArray = Array.isArray(next);
+
+  if (currentIsArray && nextIsArray) {
+    current.push.apply(current, next);
+    return current;
+  }
+
+  if (currentIsArray) {
     current.push(next);
     return current;
   }
 
-  if (Array.isArray(next)) {
+  if (nextIsArray) {
     // A bit too dangerous to mutate `next`.
     return [current].concat(next);
   }
@@ -48648,7 +50321,7 @@ function accumulateInto(current, next) {
 
 module.exports = accumulateInto;
 }).call(this,require('_process'))
-},{"./reactProdInvariant":422,"_process":154,"fbjs/lib/invariant":446}],399:[function(require,module,exports){
+},{"./reactProdInvariant":428,"_process":155,"fbjs/lib/invariant":452}],405:[function(require,module,exports){
 /**
  * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -48658,7 +50331,6 @@ module.exports = accumulateInto;
  * of patent rights can be found in the PATENTS file in the same directory.
  *
  * @providesModule adler32
- * 
  */
 
 'use strict';
@@ -48693,7 +50365,7 @@ function adler32(data) {
 }
 
 module.exports = adler32;
-},{}],400:[function(require,module,exports){
+},{}],406:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-present, Facebook, Inc.
@@ -48720,7 +50392,7 @@ if (process.env.NODE_ENV !== 'production') {
 
 module.exports = canDefineProperty;
 }).call(this,require('_process'))
-},{"_process":154}],401:[function(require,module,exports){
+},{"_process":155}],407:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-present, Facebook, Inc.
@@ -48737,22 +50409,11 @@ module.exports = canDefineProperty;
 
 var _prodInvariant = require('./reactProdInvariant');
 
+var ReactComponentTreeDevtool = require('./ReactComponentTreeDevtool');
 var ReactPropTypeLocationNames = require('./ReactPropTypeLocationNames');
-var ReactPropTypesSecret = require('./ReactPropTypesSecret');
 
 var invariant = require('fbjs/lib/invariant');
 var warning = require('fbjs/lib/warning');
-
-var ReactComponentTreeHook;
-
-if (typeof process !== 'undefined' && process.env && process.env.NODE_ENV === 'test') {
-  // Temporary hack.
-  // Inline requires don't work well with Jest:
-  // https://github.com/facebook/react/issues/7240
-  // Remove the inline requires when we don't need them anymore:
-  // https://github.com/facebook/react/pull/7178
-  ReactComponentTreeHook = require('./ReactComponentTreeHook');
-}
 
 var loggedTypeFailures = {};
 
@@ -48779,7 +50440,7 @@ function checkReactTypeSpec(typeSpecs, values, location, componentName, element,
         // This is intentionally an invariant that gets caught. It's the same
         // behavior as without this statement except with a better message.
         !(typeof typeSpecs[typeSpecName] === 'function') ? process.env.NODE_ENV !== 'production' ? invariant(false, '%s: %s type `%s` is invalid; it must be a function, usually from React.PropTypes.', componentName || 'React class', ReactPropTypeLocationNames[location], typeSpecName) : _prodInvariant('84', componentName || 'React class', ReactPropTypeLocationNames[location], typeSpecName) : void 0;
-        error = typeSpecs[typeSpecName](values, typeSpecName, componentName, location, null, ReactPropTypesSecret);
+        error = typeSpecs[typeSpecName](values, typeSpecName, componentName, location);
       } catch (ex) {
         error = ex;
       }
@@ -48791,15 +50452,10 @@ function checkReactTypeSpec(typeSpecs, values, location, componentName, element,
 
         var componentStackInfo = '';
 
-        if (process.env.NODE_ENV !== 'production') {
-          if (!ReactComponentTreeHook) {
-            ReactComponentTreeHook = require('./ReactComponentTreeHook');
-          }
-          if (debugID !== null) {
-            componentStackInfo = ReactComponentTreeHook.getStackAddendumByID(debugID);
-          } else if (element !== null) {
-            componentStackInfo = ReactComponentTreeHook.getCurrentStackAddendum(element);
-          }
+        if (debugID !== null) {
+          componentStackInfo = ReactComponentTreeDevtool.getStackAddendumByID(debugID);
+        } else if (element !== null) {
+          componentStackInfo = ReactComponentTreeDevtool.getCurrentStackAddendum(element);
         }
 
         process.env.NODE_ENV !== 'production' ? warning(false, 'Failed %s type: %s%s', location, error.message, componentStackInfo) : void 0;
@@ -48810,7 +50466,7 @@ function checkReactTypeSpec(typeSpecs, values, location, componentName, element,
 
 module.exports = checkReactTypeSpec;
 }).call(this,require('_process'))
-},{"./ReactComponentTreeHook":318,"./ReactPropTypeLocationNames":364,"./ReactPropTypesSecret":367,"./reactProdInvariant":422,"_process":154,"fbjs/lib/invariant":446,"fbjs/lib/warning":455}],402:[function(require,module,exports){
+},{"./ReactComponentTreeDevtool":326,"./ReactPropTypeLocationNames":373,"./reactProdInvariant":428,"_process":155,"fbjs/lib/invariant":452,"fbjs/lib/warning":462}],408:[function(require,module,exports){
 /**
  * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -48843,7 +50499,7 @@ var createMicrosoftUnsafeLocalFunction = function (func) {
 };
 
 module.exports = createMicrosoftUnsafeLocalFunction;
-},{}],403:[function(require,module,exports){
+},{}],409:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-present, Facebook, Inc.
@@ -48925,7 +50581,7 @@ function dangerousStyleValue(name, value, component) {
 
 module.exports = dangerousStyleValue;
 }).call(this,require('_process'))
-},{"./CSSProperty":284,"_process":154,"fbjs/lib/warning":455}],404:[function(require,module,exports){
+},{"./CSSProperty":293,"_process":155,"fbjs/lib/warning":462}],410:[function(require,module,exports){
 /**
  * Copyright 2016-present, Facebook, Inc.
  * All rights reserved.
@@ -49031,7 +50687,6 @@ function escapeHtml(string) {
 }
 // end code copied and modified from escape-html
 
-
 /**
  * Escapes text to prevent scripting attacks.
  *
@@ -49049,7 +50704,7 @@ function escapeTextContentForBrowser(text) {
 }
 
 module.exports = escapeTextContentForBrowser;
-},{}],405:[function(require,module,exports){
+},{}],411:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-present, Facebook, Inc.
@@ -49112,7 +50767,7 @@ function findDOMNode(componentOrElement) {
 
 module.exports = findDOMNode;
 }).call(this,require('_process'))
-},{"./ReactCurrentOwner":320,"./ReactDOMComponentTree":325,"./ReactInstanceMap":354,"./getHostComponentFromComposite":412,"./reactProdInvariant":422,"_process":154,"fbjs/lib/invariant":446,"fbjs/lib/warning":455}],406:[function(require,module,exports){
+},{"./ReactCurrentOwner":328,"./ReactDOMComponentTree":333,"./ReactInstanceMap":363,"./getHostComponentFromComposite":418,"./reactProdInvariant":428,"_process":155,"fbjs/lib/invariant":452,"fbjs/lib/warning":462}],412:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-present, Facebook, Inc.
@@ -49123,25 +50778,14 @@ module.exports = findDOMNode;
  * of patent rights can be found in the PATENTS file in the same directory.
  *
  * @providesModule flattenChildren
- * 
  */
 
 'use strict';
 
+var ReactComponentTreeDevtool = require('./ReactComponentTreeDevtool');
 var KeyEscapeUtils = require('./KeyEscapeUtils');
 var traverseAllChildren = require('./traverseAllChildren');
 var warning = require('fbjs/lib/warning');
-
-var ReactComponentTreeHook;
-
-if (typeof process !== 'undefined' && process.env && process.env.NODE_ENV === 'test') {
-  // Temporary hack.
-  // Inline requires don't work well with Jest:
-  // https://github.com/facebook/react/issues/7240
-  // Remove the inline requires when we don't need them anymore:
-  // https://github.com/facebook/react/pull/7178
-  ReactComponentTreeHook = require('./ReactComponentTreeHook');
-}
 
 /**
  * @param {function} traverseContext Context passed through traversal.
@@ -49151,20 +50795,13 @@ if (typeof process !== 'undefined' && process.env && process.env.NODE_ENV === 't
  */
 function flattenSingleChildIntoContext(traverseContext, child, name, selfDebugID) {
   // We found a component instance.
-  if (traverseContext && typeof traverseContext === 'object') {
-    var result = traverseContext;
-    var keyUnique = result[name] === undefined;
-    if (process.env.NODE_ENV !== 'production') {
-      if (!ReactComponentTreeHook) {
-        ReactComponentTreeHook = require('./ReactComponentTreeHook');
-      }
-      if (!keyUnique) {
-        process.env.NODE_ENV !== 'production' ? warning(false, 'flattenChildren(...): Encountered two children with the same key, ' + '`%s`. Child keys must be unique; when two children share a key, only ' + 'the first child will be used.%s', KeyEscapeUtils.unescape(name), ReactComponentTreeHook.getStackAddendumByID(selfDebugID)) : void 0;
-      }
-    }
-    if (keyUnique && child != null) {
-      result[name] = child;
-    }
+  var result = traverseContext;
+  var keyUnique = result[name] === undefined;
+  if (process.env.NODE_ENV !== 'production') {
+    process.env.NODE_ENV !== 'production' ? warning(keyUnique, 'flattenChildren(...): Encountered two children with the same key, ' + '`%s`. Child keys must be unique; when two children share a key, only ' + 'the first child will be used.%s', KeyEscapeUtils.unescape(name), ReactComponentTreeDevtool.getStackAddendumByID(selfDebugID)) : void 0;
+  }
+  if (keyUnique && child != null) {
+    result[name] = child;
   }
 }
 
@@ -49191,7 +50828,7 @@ function flattenChildren(children, selfDebugID) {
 
 module.exports = flattenChildren;
 }).call(this,require('_process'))
-},{"./KeyEscapeUtils":304,"./ReactComponentTreeHook":318,"./traverseAllChildren":427,"_process":154,"fbjs/lib/warning":455}],407:[function(require,module,exports){
+},{"./KeyEscapeUtils":313,"./ReactComponentTreeDevtool":326,"./traverseAllChildren":433,"_process":155,"fbjs/lib/warning":462}],413:[function(require,module,exports){
 /**
  * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -49201,7 +50838,6 @@ module.exports = flattenChildren;
  * of patent rights can be found in the PATENTS file in the same directory.
  *
  * @providesModule forEachAccumulated
- * 
  */
 
 'use strict';
@@ -49214,16 +50850,16 @@ module.exports = flattenChildren;
  * allocate an array).
  */
 
-function forEachAccumulated(arr, cb, scope) {
+var forEachAccumulated = function (arr, cb, scope) {
   if (Array.isArray(arr)) {
     arr.forEach(cb, scope);
   } else if (arr) {
     cb.call(scope, arr);
   }
-}
+};
 
 module.exports = forEachAccumulated;
-},{}],408:[function(require,module,exports){
+},{}],414:[function(require,module,exports){
 /**
  * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -49274,7 +50910,7 @@ function getEventCharCode(nativeEvent) {
 }
 
 module.exports = getEventCharCode;
-},{}],409:[function(require,module,exports){
+},{}],415:[function(require,module,exports){
 /**
  * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -49377,7 +51013,7 @@ function getEventKey(nativeEvent) {
 }
 
 module.exports = getEventKey;
-},{"./getEventCharCode":408}],410:[function(require,module,exports){
+},{"./getEventCharCode":414}],416:[function(require,module,exports){
 /**
  * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -49421,7 +51057,7 @@ function getEventModifierState(nativeEvent) {
 }
 
 module.exports = getEventModifierState;
-},{}],411:[function(require,module,exports){
+},{}],417:[function(require,module,exports){
 /**
  * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -49457,7 +51093,7 @@ function getEventTarget(nativeEvent) {
 }
 
 module.exports = getEventTarget;
-},{}],412:[function(require,module,exports){
+},{}],418:[function(require,module,exports){
 /**
  * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -49488,7 +51124,7 @@ function getHostComponentFromComposite(inst) {
 }
 
 module.exports = getHostComponentFromComposite;
-},{"./ReactNodeTypes":361}],413:[function(require,module,exports){
+},{"./ReactNodeTypes":370}],419:[function(require,module,exports){
 /**
  * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -49498,7 +51134,6 @@ module.exports = getHostComponentFromComposite;
  * of patent rights can be found in the PATENTS file in the same directory.
  *
  * @providesModule getIteratorFn
- * 
  */
 
 'use strict';
@@ -49530,7 +51165,7 @@ function getIteratorFn(maybeIterable) {
 }
 
 module.exports = getIteratorFn;
-},{}],414:[function(require,module,exports){
+},{}],420:[function(require,module,exports){
 /**
  * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -49605,7 +51240,7 @@ function getNodeForCharacterOffset(root, offset) {
 }
 
 module.exports = getNodeForCharacterOffset;
-},{}],415:[function(require,module,exports){
+},{}],421:[function(require,module,exports){
 /**
  * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -49639,7 +51274,7 @@ function getTextContentAccessor() {
 }
 
 module.exports = getTextContentAccessor;
-},{"fbjs/lib/ExecutionEnvironment":432}],416:[function(require,module,exports){
+},{"fbjs/lib/ExecutionEnvironment":438}],422:[function(require,module,exports){
 /**
  * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -49741,7 +51376,7 @@ function getVendorPrefixedEventName(eventName) {
 }
 
 module.exports = getVendorPrefixedEventName;
-},{"fbjs/lib/ExecutionEnvironment":432}],417:[function(require,module,exports){
+},{"fbjs/lib/ExecutionEnvironment":438}],423:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-present, Facebook, Inc.
@@ -49762,6 +51397,7 @@ var _prodInvariant = require('./reactProdInvariant'),
 var ReactCompositeComponent = require('./ReactCompositeComponent');
 var ReactEmptyComponent = require('./ReactEmptyComponent');
 var ReactHostComponent = require('./ReactHostComponent');
+var ReactInstrumentation = require('./ReactInstrumentation');
 
 var invariant = require('fbjs/lib/invariant');
 var warning = require('fbjs/lib/warning');
@@ -49784,6 +51420,21 @@ function getDeclarationErrorAddendum(owner) {
   return '';
 }
 
+function getDisplayName(instance) {
+  var element = instance._currentElement;
+  if (element == null) {
+    return '#empty';
+  } else if (typeof element === 'string' || typeof element === 'number') {
+    return '#text';
+  } else if (typeof element.type === 'string') {
+    return element.type;
+  } else if (instance.getName) {
+    return instance.getName() || 'Unknown';
+  } else {
+    return element.type.displayName || element.type.name || 'Unknown';
+  }
+}
+
 /**
  * Check if the type reference is a known internal type. I.e. not a user
  * provided composite type.
@@ -49801,14 +51452,14 @@ var nextDebugID = 1;
  * Given a ReactNode, create an instance that will actually be mounted.
  *
  * @param {ReactNode} node
- * @param {boolean} shouldHaveDebugID
  * @return {object} A new instance of the element's constructor.
  * @protected
  */
-function instantiateReactComponent(node, shouldHaveDebugID) {
+function instantiateReactComponent(node) {
   var instance;
 
-  if (node === null || node === false) {
+  var isEmpty = node === null || node === false;
+  if (isEmpty) {
     instance = ReactEmptyComponent.create(instantiateReactComponent);
   } else if (typeof node === 'object') {
     var element = node;
@@ -49847,7 +51498,17 @@ function instantiateReactComponent(node, shouldHaveDebugID) {
   instance._mountImage = null;
 
   if (process.env.NODE_ENV !== 'production') {
-    instance._debugID = shouldHaveDebugID ? nextDebugID++ : 0;
+    var debugID = isEmpty ? 0 : nextDebugID++;
+    instance._debugID = debugID;
+
+    if (debugID !== 0) {
+      var displayName = getDisplayName(instance);
+      ReactInstrumentation.debugTool.onSetDisplayName(debugID, displayName);
+      var owner = node && node._owner;
+      if (owner) {
+        ReactInstrumentation.debugTool.onSetOwner(debugID, owner._debugID);
+      }
+    }
   }
 
   // Internal instances should fully constructed at this point, so they should
@@ -49863,7 +51524,7 @@ function instantiateReactComponent(node, shouldHaveDebugID) {
 
 module.exports = instantiateReactComponent;
 }).call(this,require('_process'))
-},{"./ReactCompositeComponent":319,"./ReactEmptyComponent":345,"./ReactHostComponent":350,"./reactProdInvariant":422,"_process":154,"fbjs/lib/invariant":446,"fbjs/lib/warning":455,"object-assign":152}],418:[function(require,module,exports){
+},{"./ReactCompositeComponent":327,"./ReactEmptyComponent":354,"./ReactHostComponent":359,"./ReactInstrumentation":364,"./reactProdInvariant":428,"_process":155,"fbjs/lib/invariant":452,"fbjs/lib/warning":462,"object-assign":153}],424:[function(require,module,exports){
 /**
  * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -49924,7 +51585,7 @@ function isEventSupported(eventNameSuffix, capture) {
 }
 
 module.exports = isEventSupported;
-},{"fbjs/lib/ExecutionEnvironment":432}],419:[function(require,module,exports){
+},{"fbjs/lib/ExecutionEnvironment":438}],425:[function(require,module,exports){
 /**
  * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -49934,7 +51595,6 @@ module.exports = isEventSupported;
  * of patent rights can be found in the PATENTS file in the same directory.
  *
  * @providesModule isTextInputElement
- * 
  */
 
 'use strict';
@@ -49963,20 +51623,11 @@ var supportedInputTypes = {
 
 function isTextInputElement(elem) {
   var nodeName = elem && elem.nodeName && elem.nodeName.toLowerCase();
-
-  if (nodeName === 'input') {
-    return !!supportedInputTypes[elem.type];
-  }
-
-  if (nodeName === 'textarea') {
-    return true;
-  }
-
-  return false;
+  return nodeName && (nodeName === 'input' && supportedInputTypes[elem.type] || nodeName === 'textarea');
 }
 
 module.exports = isTextInputElement;
-},{}],420:[function(require,module,exports){
+},{}],426:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-present, Facebook, Inc.
@@ -50011,13 +51662,13 @@ var invariant = require('fbjs/lib/invariant');
  * structure.
  */
 function onlyChild(children) {
-  !ReactElement.isValidElement(children) ? process.env.NODE_ENV !== 'production' ? invariant(false, 'React.Children.only expected to receive a single React element child.') : _prodInvariant('143') : void 0;
+  !ReactElement.isValidElement(children) ? process.env.NODE_ENV !== 'production' ? invariant(false, 'onlyChild must be passed a children with exactly one child.') : _prodInvariant('23') : void 0;
   return children;
 }
 
 module.exports = onlyChild;
 }).call(this,require('_process'))
-},{"./ReactElement":343,"./reactProdInvariant":422,"_process":154,"fbjs/lib/invariant":446}],421:[function(require,module,exports){
+},{"./ReactElement":352,"./reactProdInvariant":428,"_process":155,"fbjs/lib/invariant":452}],427:[function(require,module,exports){
 /**
  * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -50044,7 +51695,7 @@ function quoteAttributeValueForBrowser(value) {
 }
 
 module.exports = quoteAttributeValueForBrowser;
-},{"./escapeTextContentForBrowser":404}],422:[function(require,module,exports){
+},{"./escapeTextContentForBrowser":410}],428:[function(require,module,exports){
 /**
  * Copyright (c) 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -50054,7 +51705,6 @@ module.exports = quoteAttributeValueForBrowser;
  * of patent rights can be found in the PATENTS file in the same directory.
  *
  * @providesModule reactProdInvariant
- * 
  */
 'use strict';
 
@@ -50084,7 +51734,7 @@ function reactProdInvariant(code) {
 }
 
 module.exports = reactProdInvariant;
-},{}],423:[function(require,module,exports){
+},{}],429:[function(require,module,exports){
 /**
  * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -50101,7 +51751,7 @@ module.exports = reactProdInvariant;
 var ReactMount = require('./ReactMount');
 
 module.exports = ReactMount.renderSubtreeIntoContainer;
-},{"./ReactMount":358}],424:[function(require,module,exports){
+},{"./ReactMount":367}],430:[function(require,module,exports){
 /**
  * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -50141,9 +51791,9 @@ var setInnerHTML = createMicrosoftUnsafeLocalFunction(function (node, html) {
   if (node.namespaceURI === DOMNamespaces.svg && !('innerHTML' in node)) {
     reusableSVGContainer = reusableSVGContainer || document.createElement('div');
     reusableSVGContainer.innerHTML = '<svg>' + html + '</svg>';
-    var svgNode = reusableSVGContainer.firstChild;
-    while (svgNode.firstChild) {
-      node.appendChild(svgNode.firstChild);
+    var newNodes = reusableSVGContainer.firstChild.childNodes;
+    for (var i = 0; i < newNodes.length; i++) {
+      node.appendChild(newNodes[i]);
     }
   } else {
     node.innerHTML = html;
@@ -50200,7 +51850,7 @@ if (ExecutionEnvironment.canUseDOM) {
 }
 
 module.exports = setInnerHTML;
-},{"./DOMNamespaces":290,"./createMicrosoftUnsafeLocalFunction":402,"fbjs/lib/ExecutionEnvironment":432}],425:[function(require,module,exports){
+},{"./DOMNamespaces":299,"./createMicrosoftUnsafeLocalFunction":408,"fbjs/lib/ExecutionEnvironment":438}],431:[function(require,module,exports){
 /**
  * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -50249,7 +51899,7 @@ if (ExecutionEnvironment.canUseDOM) {
 }
 
 module.exports = setTextContent;
-},{"./escapeTextContentForBrowser":404,"./setInnerHTML":424,"fbjs/lib/ExecutionEnvironment":432}],426:[function(require,module,exports){
+},{"./escapeTextContentForBrowser":410,"./setInnerHTML":430,"fbjs/lib/ExecutionEnvironment":438}],432:[function(require,module,exports){
 /**
  * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -50292,7 +51942,7 @@ function shouldUpdateReactComponent(prevElement, nextElement) {
 }
 
 module.exports = shouldUpdateReactComponent;
-},{}],427:[function(require,module,exports){
+},{}],433:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-present, Facebook, Inc.
@@ -50394,14 +52044,7 @@ function traverseAllChildrenImpl(children, nameSoFar, callback, traverseContext)
         }
       } else {
         if (process.env.NODE_ENV !== 'production') {
-          var mapsAsChildrenAddendum = '';
-          if (ReactCurrentOwner.current) {
-            var mapsAsChildrenOwnerName = ReactCurrentOwner.current.getName();
-            if (mapsAsChildrenOwnerName) {
-              mapsAsChildrenAddendum = ' Check the render method of `' + mapsAsChildrenOwnerName + '`.';
-            }
-          }
-          process.env.NODE_ENV !== 'production' ? warning(didWarnAboutMaps, 'Using Maps as children is not yet fully supported. It is an ' + 'experimental feature that might be removed. Convert it to a ' + 'sequence / iterable of keyed ReactElements instead.%s', mapsAsChildrenAddendum) : void 0;
+          process.env.NODE_ENV !== 'production' ? warning(didWarnAboutMaps, 'Using Maps as children is not yet fully supported. It is an ' + 'experimental feature that might be removed. Convert it to a ' + 'sequence / iterable of keyed ReactElements instead.') : void 0;
           didWarnAboutMaps = true;
         }
         // Iterator will provide entry [k,v] tuples rather than values.
@@ -50462,7 +52105,7 @@ function traverseAllChildren(children, callback, traverseContext) {
 
 module.exports = traverseAllChildren;
 }).call(this,require('_process'))
-},{"./KeyEscapeUtils":304,"./ReactCurrentOwner":320,"./ReactElement":343,"./getIteratorFn":413,"./reactProdInvariant":422,"_process":154,"fbjs/lib/invariant":446,"fbjs/lib/warning":455}],428:[function(require,module,exports){
+},{"./KeyEscapeUtils":313,"./ReactCurrentOwner":328,"./ReactElement":352,"./getIteratorFn":419,"./reactProdInvariant":428,"_process":155,"fbjs/lib/invariant":452,"fbjs/lib/warning":462}],434:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-present, Facebook, Inc.
@@ -50578,7 +52221,7 @@ function update(value, spec) {
 
 module.exports = update;
 }).call(this,require('_process'))
-},{"./reactProdInvariant":422,"_process":154,"fbjs/lib/invariant":446,"fbjs/lib/keyOf":450,"object-assign":152}],429:[function(require,module,exports){
+},{"./reactProdInvariant":428,"_process":155,"fbjs/lib/invariant":452,"fbjs/lib/keyOf":456,"object-assign":153}],435:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2015-present, Facebook, Inc.
@@ -50869,15 +52512,10 @@ if (process.env.NODE_ENV !== 'production') {
 
   var didWarn = {};
 
-  validateDOMNesting = function (childTag, childText, childInstance, ancestorInfo) {
+  validateDOMNesting = function (childTag, childInstance, ancestorInfo) {
     ancestorInfo = ancestorInfo || emptyAncestorInfo;
     var parentInfo = ancestorInfo.current;
     var parentTag = parentInfo && parentInfo.tag;
-
-    if (childText != null) {
-      process.env.NODE_ENV !== 'production' ? warning(childTag == null, 'validateDOMNesting: when childText is passed, childTag should be null') : void 0;
-      childTag = '#text';
-    }
 
     var invalidParent = isTagValidWithParent(childTag, parentTag) ? null : parentInfo;
     var invalidAncestor = invalidParent ? null : findInvalidAncestorForTag(childTag, ancestorInfo);
@@ -50926,15 +52564,7 @@ if (process.env.NODE_ENV !== 'production') {
       didWarn[warnKey] = true;
 
       var tagDisplayName = childTag;
-      var whitespaceInfo = '';
-      if (childTag === '#text') {
-        if (/\S/.test(childText)) {
-          tagDisplayName = 'Text nodes';
-        } else {
-          tagDisplayName = 'Whitespace text nodes';
-          whitespaceInfo = ' Make sure you don\'t have any extra whitespace between tags on ' + 'each line of your source code.';
-        }
-      } else {
+      if (childTag !== '#text') {
         tagDisplayName = '<' + childTag + '>';
       }
 
@@ -50943,7 +52573,7 @@ if (process.env.NODE_ENV !== 'production') {
         if (ancestorTag === 'table' && childTag === 'tr') {
           info += ' Add a <tbody> to your code to match the DOM tree generated by ' + 'the browser.';
         }
-        process.env.NODE_ENV !== 'production' ? warning(false, 'validateDOMNesting(...): %s cannot appear as a child of <%s>.%s ' + 'See %s.%s', tagDisplayName, ancestorTag, whitespaceInfo, ownerInfo, info) : void 0;
+        process.env.NODE_ENV !== 'production' ? warning(false, 'validateDOMNesting(...): %s cannot appear as a child of <%s>. ' + 'See %s.%s', tagDisplayName, ancestorTag, ownerInfo, info) : void 0;
       } else {
         process.env.NODE_ENV !== 'production' ? warning(false, 'validateDOMNesting(...): %s cannot appear as a descendant of ' + '<%s>. See %s.', tagDisplayName, ancestorTag, ownerInfo) : void 0;
       }
@@ -50963,7 +52593,7 @@ if (process.env.NODE_ENV !== 'production') {
 
 module.exports = validateDOMNesting;
 }).call(this,require('_process'))
-},{"_process":154,"fbjs/lib/emptyFunction":438,"fbjs/lib/warning":455,"object-assign":152}],430:[function(require,module,exports){
+},{"_process":155,"fbjs/lib/emptyFunction":444,"fbjs/lib/warning":462,"object-assign":153}],436:[function(require,module,exports){
 (function (process){
 'use strict';
 
@@ -51087,7 +52717,7 @@ var CSSCore = {
 
 module.exports = CSSCore;
 }).call(this,require('_process'))
-},{"./invariant":446,"_process":154}],431:[function(require,module,exports){
+},{"./invariant":452,"_process":155}],437:[function(require,module,exports){
 (function (process){
 'use strict';
 
@@ -51173,7 +52803,7 @@ var EventListener = {
 
 module.exports = EventListener;
 }).call(this,require('_process'))
-},{"./emptyFunction":438,"_process":154}],432:[function(require,module,exports){
+},{"./emptyFunction":444,"_process":155}],438:[function(require,module,exports){
 /**
  * Copyright (c) 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -51209,7 +52839,7 @@ var ExecutionEnvironment = {
 };
 
 module.exports = ExecutionEnvironment;
-},{}],433:[function(require,module,exports){
+},{}],439:[function(require,module,exports){
 "use strict";
 
 /**
@@ -51241,7 +52871,7 @@ function camelize(string) {
 }
 
 module.exports = camelize;
-},{}],434:[function(require,module,exports){
+},{}],440:[function(require,module,exports){
 /**
  * Copyright (c) 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -51281,7 +52911,7 @@ function camelizeStyleName(string) {
 }
 
 module.exports = camelizeStyleName;
-},{"./camelize":433}],435:[function(require,module,exports){
+},{"./camelize":439}],441:[function(require,module,exports){
 'use strict';
 
 /**
@@ -51321,7 +52951,7 @@ function containsNode(outerNode, innerNode) {
 }
 
 module.exports = containsNode;
-},{"./isTextNode":448}],436:[function(require,module,exports){
+},{"./isTextNode":454}],442:[function(require,module,exports){
 (function (process){
 'use strict';
 
@@ -51450,7 +53080,7 @@ function createArrayFromMixed(obj) {
 
 module.exports = createArrayFromMixed;
 }).call(this,require('_process'))
-},{"./invariant":446,"_process":154}],437:[function(require,module,exports){
+},{"./invariant":452,"_process":155}],443:[function(require,module,exports){
 (function (process){
 'use strict';
 
@@ -51536,46 +53166,9 @@ function createNodesFromMarkup(markup, handleScript) {
 
 module.exports = createNodesFromMarkup;
 }).call(this,require('_process'))
-},{"./ExecutionEnvironment":432,"./createArrayFromMixed":436,"./getMarkupWrap":442,"./invariant":446,"_process":154}],438:[function(require,module,exports){
-"use strict";
-
-/**
- * Copyright (c) 2013-present, Facebook, Inc.
- * All rights reserved.
- *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
- *
- * 
- */
-
-function makeEmptyFunction(arg) {
-  return function () {
-    return arg;
-  };
-}
-
-/**
- * This function accepts and discards inputs; it has no side effects. This is
- * primarily useful idiomatically for overridable function endpoints which
- * always need to be callable, since JS lacks a null-call idiom ala Cocoa.
- */
-var emptyFunction = function emptyFunction() {};
-
-emptyFunction.thatReturns = makeEmptyFunction;
-emptyFunction.thatReturnsFalse = makeEmptyFunction(false);
-emptyFunction.thatReturnsTrue = makeEmptyFunction(true);
-emptyFunction.thatReturnsNull = makeEmptyFunction(null);
-emptyFunction.thatReturnsThis = function () {
-  return this;
-};
-emptyFunction.thatReturnsArgument = function (arg) {
-  return arg;
-};
-
-module.exports = emptyFunction;
-},{}],439:[function(require,module,exports){
+},{"./ExecutionEnvironment":438,"./createArrayFromMixed":442,"./getMarkupWrap":448,"./invariant":452,"_process":155}],444:[function(require,module,exports){
+arguments[4][161][0].apply(exports,arguments)
+},{"dup":161}],445:[function(require,module,exports){
 (function (process){
 /**
  * Copyright (c) 2013-present, Facebook, Inc.
@@ -51597,7 +53190,7 @@ if (process.env.NODE_ENV !== 'production') {
 
 module.exports = emptyObject;
 }).call(this,require('_process'))
-},{"_process":154}],440:[function(require,module,exports){
+},{"_process":155}],446:[function(require,module,exports){
 /**
  * Copyright (c) 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -51624,7 +53217,7 @@ function focusNode(node) {
 }
 
 module.exports = focusNode;
-},{}],441:[function(require,module,exports){
+},{}],447:[function(require,module,exports){
 'use strict';
 
 /**
@@ -51646,20 +53239,24 @@ module.exports = focusNode;
  *
  * The activeElement will be null only if the document or document body is not
  * yet defined.
+ *
+ * @param {?DOMDocument} doc Defaults to current document.
+ * @return {?DOMElement}
  */
-function getActiveElement() /*?DOMElement*/{
-  if (typeof document === 'undefined') {
+function getActiveElement(doc) /*?DOMElement*/{
+  doc = doc || (typeof document !== 'undefined' ? document : undefined);
+  if (typeof doc === 'undefined') {
     return null;
   }
   try {
-    return document.activeElement || document.body;
+    return doc.activeElement || doc.body;
   } catch (e) {
-    return document.body;
+    return doc.body;
   }
 }
 
 module.exports = getActiveElement;
-},{}],442:[function(require,module,exports){
+},{}],448:[function(require,module,exports){
 (function (process){
 'use strict';
 
@@ -51756,7 +53353,7 @@ function getMarkupWrap(nodeName) {
 
 module.exports = getMarkupWrap;
 }).call(this,require('_process'))
-},{"./ExecutionEnvironment":432,"./invariant":446,"_process":154}],443:[function(require,module,exports){
+},{"./ExecutionEnvironment":438,"./invariant":452,"_process":155}],449:[function(require,module,exports){
 /**
  * Copyright (c) 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -51782,10 +53379,10 @@ module.exports = getMarkupWrap;
  */
 
 function getUnboundedScrollPosition(scrollable) {
-  if (scrollable === window) {
+  if (scrollable.Window && scrollable instanceof scrollable.Window) {
     return {
-      x: window.pageXOffset || document.documentElement.scrollLeft,
-      y: window.pageYOffset || document.documentElement.scrollTop
+      x: scrollable.pageXOffset || scrollable.document.documentElement.scrollLeft,
+      y: scrollable.pageYOffset || scrollable.document.documentElement.scrollTop
     };
   }
   return {
@@ -51795,7 +53392,7 @@ function getUnboundedScrollPosition(scrollable) {
 }
 
 module.exports = getUnboundedScrollPosition;
-},{}],444:[function(require,module,exports){
+},{}],450:[function(require,module,exports){
 'use strict';
 
 /**
@@ -51828,7 +53425,7 @@ function hyphenate(string) {
 }
 
 module.exports = hyphenate;
-},{}],445:[function(require,module,exports){
+},{}],451:[function(require,module,exports){
 /**
  * Copyright (c) 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -51867,59 +53464,9 @@ function hyphenateStyleName(string) {
 }
 
 module.exports = hyphenateStyleName;
-},{"./hyphenate":444}],446:[function(require,module,exports){
-(function (process){
-/**
- * Copyright (c) 2013-present, Facebook, Inc.
- * All rights reserved.
- *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
- *
- */
-
-'use strict';
-
-/**
- * Use invariant() to assert state which your program assumes to be true.
- *
- * Provide sprintf-style format (only %s is supported) and arguments
- * to provide information about what broke and what you were
- * expecting.
- *
- * The invariant message will be stripped in production, but the invariant
- * will remain to ensure logic does not differ in production.
- */
-
-function invariant(condition, format, a, b, c, d, e, f) {
-  if (process.env.NODE_ENV !== 'production') {
-    if (format === undefined) {
-      throw new Error('invariant requires an error message argument');
-    }
-  }
-
-  if (!condition) {
-    var error;
-    if (format === undefined) {
-      error = new Error('Minified exception occurred; use the non-minified dev environment ' + 'for the full error message and additional helpful warnings.');
-    } else {
-      var args = [a, b, c, d, e, f];
-      var argIndex = 0;
-      error = new Error(format.replace(/%s/g, function () {
-        return args[argIndex++];
-      }));
-      error.name = 'Invariant Violation';
-    }
-
-    error.framesToPop = 1; // we don't care about invariant's own frame
-    throw error;
-  }
-}
-
-module.exports = invariant;
-}).call(this,require('_process'))
-},{"_process":154}],447:[function(require,module,exports){
+},{"./hyphenate":450}],452:[function(require,module,exports){
+arguments[4][162][0].apply(exports,arguments)
+},{"_process":155,"dup":162}],453:[function(require,module,exports){
 'use strict';
 
 /**
@@ -51938,11 +53485,13 @@ module.exports = invariant;
  * @return {boolean} Whether or not the object is a DOM node.
  */
 function isNode(object) {
-  return !!(object && (typeof Node === 'function' ? object instanceof Node : typeof object === 'object' && typeof object.nodeType === 'number' && typeof object.nodeName === 'string'));
+  var doc = object ? object.ownerDocument || object : document;
+  var defaultView = doc.defaultView || window;
+  return !!(object && (typeof defaultView.Node === 'function' ? object instanceof defaultView.Node : typeof object === 'object' && typeof object.nodeType === 'number' && typeof object.nodeName === 'string'));
 }
 
 module.exports = isNode;
-},{}],448:[function(require,module,exports){
+},{}],454:[function(require,module,exports){
 'use strict';
 
 /**
@@ -51967,7 +53516,7 @@ function isTextNode(object) {
 }
 
 module.exports = isTextNode;
-},{"./isNode":447}],449:[function(require,module,exports){
+},{"./isNode":453}],455:[function(require,module,exports){
 (function (process){
 /**
  * Copyright (c) 2013-present, Facebook, Inc.
@@ -52017,7 +53566,7 @@ var keyMirror = function keyMirror(obj) {
 
 module.exports = keyMirror;
 }).call(this,require('_process'))
-},{"./invariant":446,"_process":154}],450:[function(require,module,exports){
+},{"./invariant":452,"_process":155}],456:[function(require,module,exports){
 "use strict";
 
 /**
@@ -52052,7 +53601,58 @@ var keyOf = function keyOf(oneKeyObj) {
 };
 
 module.exports = keyOf;
-},{}],451:[function(require,module,exports){
+},{}],457:[function(require,module,exports){
+/**
+ * Copyright (c) 2013-present, Facebook, Inc.
+ * All rights reserved.
+ *
+ * This source code is licensed under the BSD-style license found in the
+ * LICENSE file in the root directory of this source tree. An additional grant
+ * of patent rights can be found in the PATENTS file in the same directory.
+ *
+ */
+
+'use strict';
+
+var hasOwnProperty = Object.prototype.hasOwnProperty;
+
+/**
+ * Executes the provided `callback` once for each enumerable own property in the
+ * object and constructs a new object from the results. The `callback` is
+ * invoked with three arguments:
+ *
+ *  - the property value
+ *  - the property name
+ *  - the object being traversed
+ *
+ * Properties that are added after the call to `mapObject` will not be visited
+ * by `callback`. If the values of existing properties are changed, the value
+ * passed to `callback` will be the value at the time `mapObject` visits them.
+ * Properties that are deleted before being visited are not visited.
+ *
+ * @grep function objectMap()
+ * @grep function objMap()
+ *
+ * @param {?object} object
+ * @param {function} callback
+ * @param {*} context
+ * @return {?object}
+ */
+function mapObject(object, callback, context) {
+  if (!object) {
+    return null;
+  }
+  var result = {};
+  for (var name in object) {
+    if (hasOwnProperty.call(object, name)) {
+      result[name] = callback.call(context, object[name], name, object);
+    }
+  }
+  return result;
+}
+
+module.exports = mapObject;
+},{}],458:[function(require,module,exports){
 /**
  * Copyright (c) 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -52082,7 +53682,7 @@ function memoizeStringOnly(callback) {
 }
 
 module.exports = memoizeStringOnly;
-},{}],452:[function(require,module,exports){
+},{}],459:[function(require,module,exports){
 /**
  * Copyright (c) 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -52105,7 +53705,7 @@ if (ExecutionEnvironment.canUseDOM) {
 }
 
 module.exports = performance || {};
-},{"./ExecutionEnvironment":432}],453:[function(require,module,exports){
+},{"./ExecutionEnvironment":438}],460:[function(require,module,exports){
 'use strict';
 
 /**
@@ -52139,7 +53739,7 @@ if (performance.now) {
 }
 
 module.exports = performanceNow;
-},{"./performance":452}],454:[function(require,module,exports){
+},{"./performance":459}],461:[function(require,module,exports){
 /**
  * Copyright (c) 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -52207,81 +53807,14 @@ function shallowEqual(objA, objB) {
 }
 
 module.exports = shallowEqual;
-},{}],455:[function(require,module,exports){
-(function (process){
-/**
- * Copyright 2014-2015, Facebook, Inc.
- * All rights reserved.
- *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
- *
- */
-
-'use strict';
-
-var emptyFunction = require('./emptyFunction');
-
-/**
- * Similar to invariant but only logs a warning if the condition is not met.
- * This can be used to log issues in development environments in critical
- * paths. Removing the logging code for production environments will keep the
- * same logic and follow the same code paths.
- */
-
-var warning = emptyFunction;
-
-if (process.env.NODE_ENV !== 'production') {
-  (function () {
-    var printWarning = function printWarning(format) {
-      for (var _len = arguments.length, args = Array(_len > 1 ? _len - 1 : 0), _key = 1; _key < _len; _key++) {
-        args[_key - 1] = arguments[_key];
-      }
-
-      var argIndex = 0;
-      var message = 'Warning: ' + format.replace(/%s/g, function () {
-        return args[argIndex++];
-      });
-      if (typeof console !== 'undefined') {
-        console.error(message);
-      }
-      try {
-        // --- Welcome to debugging React ---
-        // This error was thrown as a convenience so that you can use this stack
-        // to find the callsite that caused this warning to fire.
-        throw new Error(message);
-      } catch (x) {}
-    };
-
-    warning = function warning(condition, format) {
-      if (format === undefined) {
-        throw new Error('`warning(condition, format, ...args)` requires a warning ' + 'message argument');
-      }
-
-      if (format.indexOf('Failed Composite propType: ') === 0) {
-        return; // Ignore CompositeComponent proptype check.
-      }
-
-      if (!condition) {
-        for (var _len2 = arguments.length, args = Array(_len2 > 2 ? _len2 - 2 : 0), _key2 = 2; _key2 < _len2; _key2++) {
-          args[_key2 - 2] = arguments[_key2];
-        }
-
-        printWarning.apply(undefined, [format].concat(args));
-      }
-    };
-  })();
-}
-
-module.exports = warning;
-}).call(this,require('_process'))
-},{"./emptyFunction":438,"_process":154}],456:[function(require,module,exports){
+},{}],462:[function(require,module,exports){
+arguments[4][163][0].apply(exports,arguments)
+},{"./emptyFunction":444,"_process":155,"dup":163}],463:[function(require,module,exports){
 'use strict';
 
 module.exports = require('./lib/React');
 
-},{"./lib/React":307}],457:[function(require,module,exports){
+},{"./lib/React":316}],464:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -52306,12 +53839,20 @@ function _interopRequireWildcard(obj) { if (obj && obj.__esModule) { return obj;
 
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
-function createUncontrollable(mixins, set) {
+function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
+
+function _possibleConstructorReturn(self, call) { if (!self) { throw new ReferenceError("this hasn't been initialised - super() hasn't been called"); } return call && (typeof call === "object" || typeof call === "function") ? call : self; }
+
+function _inherits(subClass, superClass) { if (typeof superClass !== "function" && superClass !== null) { throw new TypeError("Super expression must either be null or a function, not " + typeof superClass); } subClass.prototype = Object.create(superClass && superClass.prototype, { constructor: { value: subClass, enumerable: false, writable: true, configurable: true } }); if (superClass) Object.setPrototypeOf ? Object.setPrototypeOf(subClass, superClass) : subClass.__proto__ = superClass; }
+
+function createUncontrollable(mixin, set) {
 
   return uncontrollable;
 
   function uncontrollable(Component, controlledValues) {
-    var methods = arguments.length <= 2 || arguments[2] === undefined ? [] : arguments[2];
+    var _class, _temp;
+
+    var methods = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : [];
 
     var displayName = Component.displayName || Component.name || 'Component',
         basePropTypes = utils.getType(Component).propTypes,
@@ -52333,63 +53874,82 @@ function createUncontrollable(mixins, set) {
       };
     }, {});
 
-    var component = _react2.default.createClass(_extends({
+    var component = (_temp = _class = function (_React$Component) {
+      _inherits(component, _React$Component);
 
-      displayName: 'Uncontrolled(' + displayName + ')',
+      function component() {
+        _classCallCheck(this, component);
 
-      mixins: mixins,
+        return _possibleConstructorReturn(this, _React$Component.apply(this, arguments));
+      }
 
-      propTypes: propTypes
+      component.prototype.shouldComponentUpdate = function shouldComponentUpdate() {
+        for (var _len = arguments.length, args = Array(_len), _key = 0; _key < _len; _key++) {
+          args[_key] = arguments[_key];
+        }
 
-    }, methods, {
-      componentWillMount: function componentWillMount() {
-        var _this = this;
+        return !mixin.shouldComponentUpdate || mixin.shouldComponentUpdate.apply(this, args);
+      };
+
+      component.prototype.componentWillMount = function componentWillMount() {
+        var _this2 = this;
 
         var props = this.props;
 
         this._values = {};
 
         controlledProps.forEach(function (key) {
-          _this._values[key] = props[utils.defaultKey(key)];
+          _this2._values[key] = props[utils.defaultKey(key)];
         });
-      },
-
+      };
 
       /**
        * If a prop switches from controlled to Uncontrolled
        * reset its value to the defaultValue
        */
-      componentWillReceiveProps: function componentWillReceiveProps(nextProps) {
-        var _this2 = this;
+
+
+      component.prototype.componentWillReceiveProps = function componentWillReceiveProps(nextProps) {
+        var _this3 = this;
 
         var props = this.props;
 
+        if (mixin.componentWillReceiveProps) {
+          mixin.componentWillReceiveProps.call(this, nextProps);
+        }
+
         controlledProps.forEach(function (key) {
           if (utils.getValue(nextProps, key) === undefined && utils.getValue(props, key) !== undefined) {
-            _this2._values[key] = nextProps[utils.defaultKey(key)];
+            _this3._values[key] = nextProps[utils.defaultKey(key)];
           }
         });
-      },
-      getControlledInstance: function getControlledInstance() {
+      };
+
+      component.prototype.componentWillUnmount = function componentWillUnmount() {
+        this.unmounted = true;
+      };
+
+      component.prototype.getControlledInstance = function getControlledInstance() {
         return this.refs.inner;
-      },
-      render: function render() {
-        var _this3 = this;
+      };
+
+      component.prototype.render = function render() {
+        var _this4 = this;
 
         var newProps = {},
             props = omitProps(this.props);
 
         utils.each(controlledValues, function (handle, propName) {
           var linkPropName = utils.getLinkName(propName),
-              prop = _this3.props[propName];
+              prop = _this4.props[propName];
 
-          if (linkPropName && !isProp(_this3.props, propName) && isProp(_this3.props, linkPropName)) {
-            prop = _this3.props[linkPropName].value;
+          if (linkPropName && !isProp(_this4.props, propName) && isProp(_this4.props, linkPropName)) {
+            prop = _this4.props[linkPropName].value;
           }
 
-          newProps[propName] = prop !== undefined ? prop : _this3._values[propName];
+          newProps[propName] = prop !== undefined ? prop : _this4._values[propName];
 
-          newProps[handle] = setAndNotify.bind(_this3, propName);
+          newProps[handle] = setAndNotify.bind(_this4, propName);
         });
 
         newProps = _extends({}, props, newProps, {
@@ -52397,8 +53957,12 @@ function createUncontrollable(mixins, set) {
         });
 
         return _react2.default.createElement(Component, newProps);
-      }
-    }));
+      };
+
+      return component;
+    }(_react2.default.Component), _class.displayName = 'Uncontrolled(' + displayName + ')', _class.propTypes = propTypes, _temp);
+
+    _extends(component.prototype, methods);
 
     component.ControlledComponent = Component;
 
@@ -52407,7 +53971,7 @@ function createUncontrollable(mixins, set) {
      * everything
      */
     component.deferControlTo = function (newComponent) {
-      var additions = arguments.length <= 1 || arguments[1] === undefined ? {} : arguments[1];
+      var additions = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : {};
       var nextMethods = arguments[2];
 
       return uncontrollable(newComponent, _extends({}, controlledValues, additions), nextMethods);
@@ -52423,8 +53987,8 @@ function createUncontrollable(mixins, set) {
         handler = this.props[linkName].requestChange;
       }
 
-      for (var _len = arguments.length, args = Array(_len > 2 ? _len - 2 : 0), _key = 2; _key < _len; _key++) {
-        args[_key - 2] = arguments[_key];
+      for (var _len2 = arguments.length, args = Array(_len2 > 2 ? _len2 - 2 : 0), _key2 = 2; _key2 < _len2; _key2++) {
+        args[_key2 - 2] = arguments[_key2];
       }
 
       set(this, propName, handler, value, args);
@@ -52446,7 +54010,7 @@ function createUncontrollable(mixins, set) {
   }
 }
 module.exports = exports['default'];
-},{"./utils":459,"invariant":145,"react":456}],458:[function(require,module,exports){
+},{"./utils":466,"invariant":148,"react":463}],465:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -52473,12 +54037,12 @@ function set(component, propName, handler, value, args) {
 
   component._values[propName] = value;
 
-  if (component.isMounted()) component.forceUpdate();
+  if (!component.unmounted) component.forceUpdate();
 }
 
-exports.default = (0, _createUncontrollable2.default)([mixin], set);
+exports.default = (0, _createUncontrollable2.default)(mixin, set);
 module.exports = exports['default'];
-},{"./createUncontrollable":457}],459:[function(require,module,exports){
+},{"./createUncontrollable":464}],466:[function(require,module,exports){
 (function (process){
 'use strict';
 
@@ -52597,7 +54161,7 @@ function isReactComponent(component) {
   return !!(component && component.prototype && component.prototype.isReactComponent);
 }
 }).call(this,require('_process'))
-},{"_process":154,"invariant":145,"react":456}],460:[function(require,module,exports){
+},{"_process":155,"invariant":148,"react":463}],467:[function(require,module,exports){
 if (typeof Object.create === 'function') {
   // implementation from standard node.js 'util' module
   module.exports = function inherits(ctor, superCtor) {
@@ -52622,14 +54186,14 @@ if (typeof Object.create === 'function') {
   }
 }
 
-},{}],461:[function(require,module,exports){
+},{}],468:[function(require,module,exports){
 module.exports = function isBuffer(arg) {
   return arg && typeof arg === 'object'
     && typeof arg.copy === 'function'
     && typeof arg.fill === 'function'
     && typeof arg.readUInt8 === 'function';
 }
-},{}],462:[function(require,module,exports){
+},{}],469:[function(require,module,exports){
 (function (process,global){
 // Copyright Joyent, Inc. and other Node contributors.
 //
@@ -53219,7 +54783,7 @@ function hasOwnProperty(obj, prop) {
 }
 
 }).call(this,require('_process'),typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./support/isBuffer":461,"_process":154,"inherits":460}],463:[function(require,module,exports){
+},{"./support/isBuffer":468,"_process":155,"inherits":467}],470:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2014-2015, Facebook, Inc.
@@ -53283,7 +54847,7 @@ if (process.env.NODE_ENV !== 'production') {
 module.exports = warning;
 
 }).call(this,require('_process'))
-},{"_process":154}],464:[function(require,module,exports){
+},{"_process":155}],471:[function(require,module,exports){
 "use strict";
 
 var React = require('react');
@@ -53647,7 +55211,7 @@ var App = React.createClass(Object.assign({}, AppMain, calculateFunctions, foodL
 
 module.exports = App;
 
-},{"./footer":467,"./form/formMain":471,"./header":473,"./results":474,"react":456,"react-addons-update":156}],465:[function(require,module,exports){
+},{"./footer":474,"./form/formMain":478,"./header":480,"./results":481,"react":463,"react-addons-update":165}],472:[function(require,module,exports){
 "use strict";
 
 var React = require('react');
@@ -53703,7 +55267,7 @@ var Radio = React.createClass({
 
 module.exports = Radio;
 
-},{"react":456}],466:[function(require,module,exports){
+},{"react":463}],473:[function(require,module,exports){
 "use strict";
 
 var React = require('react');
@@ -53765,7 +55329,7 @@ var Input = React.createClass({
 
 module.exports = Input;
 
-},{"react":456}],467:[function(require,module,exports){
+},{"react":463}],474:[function(require,module,exports){
 "use strict";
 
 var React = require('react');
@@ -53911,7 +55475,7 @@ var Footer = React.createClass({
 
 module.exports = Footer;
 
-},{"react":456,"react-bootstrap":243}],468:[function(require,module,exports){
+},{"react":463,"react-bootstrap":252}],475:[function(require,module,exports){
 "use strict";
 
 var React = require('react');
@@ -54011,7 +55575,7 @@ var AboutFood = React.createClass({
 
 module.exports = AboutFood;
 
-},{"../common/textinput":466,"./foodList":470,"./searchList":472,"react":456,"react-addons-css-transition-group":155}],469:[function(require,module,exports){
+},{"../common/textinput":473,"./foodList":477,"./searchList":479,"react":463,"react-addons-css-transition-group":164}],476:[function(require,module,exports){
 "use strict";
 
 var React = require('react');
@@ -54141,7 +55705,7 @@ var AboutYou = React.createClass({
 
 module.exports = AboutYou;
 
-},{"../common/radioset":465,"../common/textinput":466,"react":456,"react-addons-css-transition-group":155}],470:[function(require,module,exports){
+},{"../common/radioset":472,"../common/textinput":473,"react":463,"react-addons-css-transition-group":164}],477:[function(require,module,exports){
 "use strict";
 
 var React = require('react');
@@ -54200,7 +55764,7 @@ var FoodList = React.createClass({
 
 module.exports = FoodList;
 
-},{"react":456,"react-addons-css-transition-group":155}],471:[function(require,module,exports){
+},{"react":463,"react-addons-css-transition-group":164}],478:[function(require,module,exports){
 "use strict";
 
 var React = require('react');
@@ -54252,7 +55816,7 @@ var Form = React.createClass({
 
 module.exports = Form;
 
-},{"./aboutFood":468,"./aboutYou":469,"react":456}],472:[function(require,module,exports){
+},{"./aboutFood":475,"./aboutYou":476,"react":463}],479:[function(require,module,exports){
 "use strict";
 
 var React = require('react');
@@ -54301,7 +55865,7 @@ var SearchList = React.createClass({
 
 module.exports = SearchList;
 
-},{"react":456}],473:[function(require,module,exports){
+},{"react":463}],480:[function(require,module,exports){
 "use strict";
 
 var React = require('react');
@@ -54333,7 +55897,7 @@ var Header = React.createClass({
 
 module.exports = Header;
 
-},{"react":456}],474:[function(require,module,exports){
+},{"react":463}],481:[function(require,module,exports){
 "use strict";
 
 var React = require('react');
@@ -54476,40 +56040,6 @@ var Results = React.createClass({
                   { className: 'btnstyle next', onClick: this.props.calculateResults },
                   'Gimme Another'
                 )
-              ),
-              React.createElement(
-                'div',
-                { className: 'share-div' },
-                React.createElement(
-                  'span',
-                  null,
-                  'Share your results'
-                ),
-                React.createElement(
-                  FacebookShareButton,
-                  { className: 'share-btn', title: 'hello', url: 'http://www.google.com', description: 'test' },
-                  React.createElement('img', { className: 'fb', src: 'images/sharing/fb.svg', alt: 'Share on Facebook' })
-                ),
-                React.createElement(
-                  GooglePlusShareButton,
-                  { className: 'share-btn', title: 'hello', url: 'http://www.google.com', description: 'test' },
-                  React.createElement('img', { className: 'gp', src: 'images/sharing/gp.svg', alt: 'Share on G+' })
-                ),
-                React.createElement(
-                  LinkedinShareButton,
-                  { className: 'share-btn', title: 'hello', url: 'http://www.google.com', description: 'test' },
-                  React.createElement('img', { className: 'li', src: 'images/sharing/li.svg', alt: 'Share on LinkedIn' })
-                ),
-                React.createElement(
-                  TwitterShareButton,
-                  { className: 'share-btn', title: 'hello', url: 'http://www.google.com', description: 'test' },
-                  React.createElement('img', { className: 'tw', src: 'images/sharing/tw.svg', alt: 'Share on Twitter' })
-                ),
-                React.createElement(
-                  'a',
-                  { href: 'mailto:?body=thebody&subject=Your%20Workout%20Results%20from%20WorkThatOff.com', target: '_blank' },
-                  React.createElement('img', { className: 'mail', src: 'images/sharing/mail.svg', alt: 'Email your results' })
-                )
               )
             )
           )
@@ -54521,7 +56051,30 @@ var Results = React.createClass({
 
 module.exports = Results;
 
-},{"react":456,"react-addons-css-transition-group":155,"react-bootstrap":243,"react-share":276}],475:[function(require,module,exports){
+//commenting out social media buttons until I can hook them all up.
+// <div className="share-div">
+//   <span>Share your results</span>
+//   <FacebookShareButton className="share-btn" title="hello" url="http://www.google.com" description="test">
+//     <img className="fb" src="images/sharing/fb.svg" alt="Share on Facebook" />
+//   </FacebookShareButton>
+
+//   <GooglePlusShareButton className="share-btn" title="hello" url="http://www.google.com" description="test">
+//     <img className="gp" src="images/sharing/gp.svg" alt="Share on G+" />
+//   </GooglePlusShareButton>
+
+//   <LinkedinShareButton className="share-btn" title="hello" url="http://www.google.com" description="test">
+//     <img className="li" src="images/sharing/li.svg" alt="Share on LinkedIn" />
+//   </LinkedinShareButton>
+
+//   <TwitterShareButton className="share-btn" title="hello" url="http://www.google.com" description="test">
+//     <img className="tw" src="images/sharing/tw.svg" alt="Share on Twitter" />
+//   </TwitterShareButton>
+//   <a href="mailto:?body=thebody&subject=Your%20Workout%20Results%20from%20WorkThatOff.com" target="_blank">
+//     <img className="mail" src="images/sharing/mail.svg" alt="Email your results" />
+//   </a>
+// </div>
+
+},{"react":463,"react-addons-css-transition-group":164,"react-bootstrap":252,"react-share":285}],482:[function(require,module,exports){
 $ = jQuery = require('jquery'); //requiring jquery in the global namespace for bootstrap
 var React = require('react');
 var ReactDOM = require('react-dom');
@@ -54529,4 +56082,4 @@ var App = require('./components/app');
 
 ReactDOM.render(React.createElement(App, null), document.getElementById('app'));
 
-},{"./components/app":464,"jquery":146,"react":456,"react-dom":254}]},{},[475]);
+},{"./components/app":471,"jquery":149,"react":463,"react-dom":263}]},{},[482]);
